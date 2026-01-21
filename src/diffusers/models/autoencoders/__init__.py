@@ -1,23 +1,20 @@
-from .autoencoder_asym_kl import AsymmetricAutoencoderKL
-from .autoencoder_dc import AutoencoderDC
+# Copyright 2025 The HuggingFace Team. All rights reserved.
+# 版权所有 2025 HuggingFace团队
+#
+# 自编码器模块 - 用于潜在扩散模型
+
+"""
+自编码器（AutoEncoder）模块
+包含变分自编码器（VAE）的实现
+
+主要模型：
+- AutoencoderKL: KL散度变分自编码器
+
+VAE在扩散模型中的作用：
+1. 编码器：将图像压缩到低维潜在空间
+2. 解码器：将潜在表示重建为图像
+3. 潜在扩散在压缩的潜在空间进行，大幅提升效率
+"""
+
 from .autoencoder_kl import AutoencoderKL
-from .autoencoder_kl_allegro import AutoencoderKLAllegro
-from .autoencoder_kl_cogvideox import AutoencoderKLCogVideoX
-from .autoencoder_kl_cosmos import AutoencoderKLCosmos
-from .autoencoder_kl_flux2 import AutoencoderKLFlux2
-from .autoencoder_kl_hunyuan_video import AutoencoderKLHunyuanVideo
-from .autoencoder_kl_hunyuanimage import AutoencoderKLHunyuanImage
-from .autoencoder_kl_hunyuanimage_refiner import AutoencoderKLHunyuanImageRefiner
-from .autoencoder_kl_hunyuanvideo15 import AutoencoderKLHunyuanVideo15
-from .autoencoder_kl_ltx import AutoencoderKLLTXVideo
-from .autoencoder_kl_ltx2 import AutoencoderKLLTX2Video
-from .autoencoder_kl_ltx2_audio import AutoencoderKLLTX2Audio
-from .autoencoder_kl_magvit import AutoencoderKLMagvit
-from .autoencoder_kl_mochi import AutoencoderKLMochi
-from .autoencoder_kl_qwenimage import AutoencoderKLQwenImage
-from .autoencoder_kl_temporal_decoder import AutoencoderKLTemporalDecoder
-from .autoencoder_kl_wan import AutoencoderKLWan
-from .autoencoder_oobleck import AutoencoderOobleck
-from .autoencoder_tiny import AutoencoderTiny
-from .consistency_decoder_vae import ConsistencyDecoderVAE
-from .vq_model import VQModel
+from .vae import DiagonalGaussianDistribution, Encoder, Decoder
