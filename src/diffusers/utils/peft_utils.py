@@ -1,19 +1,4 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""
 PEFT utilities: Utilities related to peft library
-"""
 
 import collections
 import importlib
@@ -25,17 +10,14 @@ from . import logging
 from .import_utils import is_peft_available, is_peft_version, is_torch_available
 from .torch_utils import empty_device_cache
 
-
 logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
 
-
 def recurse_remove_peft_layers(model):
-    r"""
-    Recursively replace all instances of `LoraLayer` with corresponding new layers in `model`.
-    """
+    
+    """r"""
     from peft.tuners.tuners_utils import BaseTunerLayer
 
     has_base_layer_pattern = False
@@ -102,17 +84,8 @@ def recurse_remove_peft_layers(model):
                 empty_device_cache()
     return model
 
-
 def scale_lora_layers(model, weight):
-    """
-    Adjust the weightage given to the LoRA layers of the model.
 
-    Args:
-        model (`torch.nn.Module`):
-            The model to scale.
-        weight (`float`):
-            The weight to be given to the LoRA layers.
-    """
     from peft.tuners.tuners_utils import BaseTunerLayer
 
     if weight == 1.0:
@@ -122,19 +95,8 @@ def scale_lora_layers(model, weight):
         if isinstance(module, BaseTunerLayer):
             module.scale_layer(weight)
 
-
 def unscale_lora_layers(model, weight: Optional[float] = None):
-    """
-    Removes the previously passed weight given to the LoRA layers of the model.
 
-    Args:
-        model (`torch.nn.Module`):
-            The model to scale.
-        weight (`float`, *optional*):
-            The weight to be given to the LoRA layers. If no scale is passed the scale of the lora layer will be
-            re-initialized to the correct value. If 0.0 is passed, we will re-initialize the scale with the correct
-            value.
-    """
     from peft.tuners.tuners_utils import BaseTunerLayer
 
     if weight is None or weight == 1.0:
@@ -148,7 +110,6 @@ def unscale_lora_layers(model, weight: Optional[float] = None):
                 for adapter_name in module.active_adapters:
                     # if weight == 0 unscale should re-set the scale to the original value.
                     module.set_scale(adapter_name, 1.0)
-
 
 def get_peft_kwargs(
     rank_dict, network_alpha_dict, peft_state_dict, is_unet=True, model_state_dict=None, adapter_name=None
@@ -170,7 +131,7 @@ def get_peft_kwargs(
             # get the alpha occurring the most number of times
             lora_alpha = collections.Counter(network_alpha_dict.values()).most_common()[0][0]
 
-            # for modules with alpha different from the most occurring alpha, add it to the `alpha_pattern`
+            # for modules with alpha different fro...
             alpha_pattern = dict(filter(lambda x: x[1] != lora_alpha, network_alpha_dict.items()))
             if is_unet:
                 alpha_pattern = {
@@ -199,7 +160,6 @@ def get_peft_kwargs(
 
     return lora_config_kwargs
 
-
 def get_adapter_name(model):
     from peft.tuners.tuners_utils import BaseTunerLayer
 
@@ -207,7 +167,6 @@ def get_adapter_name(model):
         if isinstance(module, BaseTunerLayer):
             return f"default_{len(module.r)}"
     return "default_0"
-
 
 def set_adapter_layers(model, enabled=True):
     from peft.tuners.tuners_utils import BaseTunerLayer
@@ -219,7 +178,6 @@ def set_adapter_layers(model, enabled=True):
                 module.enable_adapters(enabled=enabled)
             else:
                 module.disable_adapters = not enabled
-
 
 def delete_adapter_layers(model, adapter_name):
     from peft.tuners.tuners_utils import BaseTunerLayer
@@ -241,7 +199,6 @@ def delete_adapter_layers(model, adapter_name):
         if len(model.peft_config) == 0:
             del model.peft_config
             model._hf_peft_config_loaded = None
-
 
 def set_weights_and_activate_adapters(model, adapter_names, weights):
     from peft.tuners.tuners_utils import BaseTunerLayer
@@ -274,15 +231,9 @@ def set_weights_and_activate_adapters(model, adapter_names, weights):
             for adapter_name, weight in zip(adapter_names, weights):
                 module.set_scale(adapter_name, get_module_weight(weight, module_name))
 
-
 def check_peft_version(min_version: str) -> None:
-    r"""
-    Checks if the version of PEFT is compatible.
-
-    Args:
-        version (`str`):
-            The version of PEFT to check against.
-    """
+    
+    """r"""
     if not is_peft_available():
         raise ValueError("PEFT is not installed. Please install it with `pip install peft`")
 
@@ -293,7 +244,6 @@ def check_peft_version(min_version: str) -> None:
             f"The version of PEFT you are using is not compatible, please use a version that is greater"
             f" than {min_version}"
         )
-
 
 def _create_lora_config(
     state_dict, network_alphas, metadata, rank_pattern_dict, is_unet=True, model_state_dict=None, adapter_name=None
@@ -328,7 +278,6 @@ def _create_lora_config(
     except TypeError as e:
         raise TypeError("`LoraConfig` class could not be instantiated.") from e
 
-
 def _maybe_raise_error_for_ambiguous_keys(config):
     rank_pattern = config["rank_pattern"].copy()
     target_modules = config["target_modules"]
@@ -347,7 +296,6 @@ def _maybe_raise_error_for_ambiguous_keys(config):
                 raise ValueError(
                     "There are ambiguous keys present in this LoRA. To load it, please update your `peft` installation - `pip install -U peft`."
                 )
-
 
 def _maybe_warn_for_unhandled_keys(incompatible_keys, adapter_name):
     warn_msg = ""

@@ -27,7 +27,6 @@ from .pipeline_output import IFPipelineOutput
 from .safety_checker import IFSafetyChecker
 from .watermark import IFWatermarker
 
-
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
@@ -37,13 +36,11 @@ else:
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 if is_bs4_available():
     from bs4 import BeautifulSoup
 
 if is_ftfy_available():
     import ftfy
-
 
 def resize(images: PIL.Image.Image, img_size: int) -> PIL.Image.Image:
     w, h = images.size
@@ -61,60 +58,7 @@ def resize(images: PIL.Image.Image, img_size: int) -> PIL.Image.Image:
 
     return images
 
-
 EXAMPLE_DOC_STRING = """
-    Examples:
-        ```py
-        >>> from diffusers import IFImg2ImgPipeline, IFImg2ImgSuperResolutionPipeline, DiffusionPipeline
-        >>> from diffusers.utils import pt_to_pil
-        >>> import torch
-        >>> from PIL import Image
-        >>> import requests
-        >>> from io import BytesIO
-
-        >>> url = "https://raw.githubusercontent.com/CompVis/stable-diffusion/main/assets/stable-samples/img2img/sketch-mountains-input.jpg"
-        >>> response = requests.get(url)
-        >>> original_image = Image.open(BytesIO(response.content)).convert("RGB")
-        >>> original_image = original_image.resize((768, 512))
-
-        >>> pipe = IFImg2ImgPipeline.from_pretrained(
-        ...     "DeepFloyd/IF-I-XL-v1.0",
-        ...     variant="fp16",
-        ...     torch_dtype=torch.float16,
-        ... )
-        >>> pipe.enable_model_cpu_offload()
-
-        >>> prompt = "A fantasy landscape in style minecraft"
-        >>> prompt_embeds, negative_embeds = pipe.encode_prompt(prompt)
-
-        >>> image = pipe(
-        ...     image=original_image,
-        ...     prompt_embeds=prompt_embeds,
-        ...     negative_prompt_embeds=negative_embeds,
-        ...     output_type="pt",
-        ... ).images
-
-        >>> # save intermediate image
-        >>> pil_image = pt_to_pil(image)
-        >>> pil_image[0].save("./if_stage_I.png")
-
-        >>> super_res_1_pipe = IFImg2ImgSuperResolutionPipeline.from_pretrained(
-        ...     "DeepFloyd/IF-II-L-v1.0",
-        ...     text_encoder=None,
-        ...     variant="fp16",
-        ...     torch_dtype=torch.float16,
-        ... )
-        >>> super_res_1_pipe.enable_model_cpu_offload()
-
-        >>> image = super_res_1_pipe(
-        ...     image=image,
-        ...     original_image=original_image,
-        ...     prompt_embeds=prompt_embeds,
-        ...     negative_prompt_embeds=negative_embeds,
-        ... ).images
-        >>> image[0].save("./if_stage_II.png")
-        ```
-"""
 
 
 class IFImg2ImgPipeline(DiffusionPipeline, StableDiffusionLoraLoaderMixin):
@@ -196,37 +140,96 @@ class IFImg2ImgPipeline(DiffusionPipeline, StableDiffusionLoraLoaderMixin):
         do_classifier_free_guidance: bool = True,
         num_images_per_prompt: int = 1,
         device: Optional[torch.device] = None,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        negative_prompt: Optional[str] = None,
         prompt_embeds: Optional[torch.Tensor] = None,
         negative_prompt_embeds: Optional[torch.Tensor] = None,
         clean_caption: bool = False,
     ):
-        r"""
-        Encodes the prompt into text encoder hidden states.
+        class IFImg2ImgPipeline(DiffusionPipeline, StableDiffusionLoraLoaderMixin):
+    tokenizer: T5Tokenizer
+    text_encoder: T5EncoderModel
 
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                prompt to be encoded
-            do_classifier_free_guidance (`bool`, *optional*, defaults to `True`):
-                whether to use classifier free guidance or not
-            num_images_per_prompt (`int`, *optional*, defaults to 1):
-                number of images that should be generated per prompt
-            device: (`torch.device`, *optional*):
-                torch device to place the resulting embeddings on
-            negative_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts not to guide the image generation. If not defined, one has to pass
-                `negative_prompt_embeds`. instead. If not defined, one has to pass `negative_prompt_embeds`. instead.
-                Ignored when not using guidance (i.e., ignored if `guidance_scale` is less than `1`).
-            prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt weighting. If not
-                provided, text embeddings will be generated from `prompt` input argument.
-            negative_prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated negative text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt
-                weighting. If not provided, negative_prompt_embeds will be generated from `negative_prompt` input
-                argument.
-            clean_caption (bool, defaults to `False`):
-                If `True`, the function will preprocess and clean the provided caption before encoding.
-        """
+    unet: UNet2DConditionModel
+    scheduler: DDPMScheduler
+
+    feature_extractor: Optional[CLIPImageProcessor]
+    safety_checker: Optional[IFSafetyChecker]
+
+    watermarker: Optional[IFWatermarker]
+
+    bad_punct_regex = re.compile(
+        r"["
+        + "#®•©™&@·º½¾¿¡§~"
+        + r"\)"
+        + r"\("
+        + r"\]"
+        + r"\["
+        + r"\}"
+        + r"\{"
+        + r"\|"
+        + "\\"
+        + r"\/"
+        + r"\*"
+        + r"]{1,}"
+    )  # noqa
+
+    _optional_components = ["tokenizer", "text_encoder", "safety_checker", "feature_extractor", "watermarker"]
+    model_cpu_offload_seq = "text_encoder->unet"
+    _exclude_from_cpu_offload = ["watermarker"]
+
+    def __init__(
+        self,
+        tokenizer: T5Tokenizer,
+        text_encoder: T5EncoderModel,
+        unet: UNet2DConditionModel,
+        scheduler: DDPMScheduler,
+        safety_checker: Optional[IFSafetyChecker],
+        feature_extractor: Optional[CLIPImageProcessor],
+        watermarker: Optional[IFWatermarker],
+        requires_safety_checker: bool = True,
+    ):
+        super().__init__()
+
+        if safety_checker is None and requires_safety_checker:
+            logger.warning(
+                f"You have disabled the safety checker for {self.__class__} by passing `safety_checker=None`. Ensure"
+                " that you abide to the conditions of the IF license and do not expose unfiltered"
+                " results in services or applications open to the public. Both the diffusers team and Hugging Face"
+                " strongly recommend to keep the safety filter enabled in all public facing circumstances, disabling"
+                " it only for use-cases that involve analyzing network behavior or auditing its results. For more"
+                " information, please have a look at https://github.com/huggingface/diffusers/pull/254 ."
+            )
+
+        if safety_checker is not None and feature_extractor is None:
+            raise ValueError(
+                "Make sure to define a feature extractor when loading {self.__class__} if you want to use the safety"
+                " checker. If you do not want to use the safety checker, you can pass `'safety_checker=None'` instead."
+            )
+
+        self.register_modules(
+            tokenizer=tokenizer,
+            text_encoder=text_encoder,
+            unet=unet,
+            scheduler=scheduler,
+            safety_checker=safety_checker,
+            feature_extractor=feature_extractor,
+            watermarker=watermarker,
+        )
+        self.register_to_config(requires_safety_checker=requires_safety_checker)
+
+    @torch.no_grad()
+    def encode_prompt(
+        self,
+        prompt: Union[str, List[str]],
+        do_classifier_free_guidance: bool = True,
+        num_images_per_prompt: int = 1,
+        device: Optional[torch.device] = None,
+        negative_prompt: Optional[str] = None,
+        prompt_embeds: Optional[torch.Tensor] = None,
+        negative_prompt_embeds: Optional[torch.Tensor] = None,
+        clean_caption: bool = False,
+    ):
+
         if prompt is not None and negative_prompt is not None:
             if type(prompt) is not type(negative_prompt):
                 raise TypeError(
@@ -244,7 +247,7 @@ class IFImg2ImgPipeline(DiffusionPipeline, StableDiffusionLoraLoaderMixin):
         else:
             batch_size = prompt_embeds.shape[0]
 
-        # while T5 can handle much longer input sequences than 77, the text encoder was trained with a max length of 77 for IF
+        # while T5 can handle much longer input se...
         max_length = 77
 
         if prompt_embeds is None:
@@ -327,7 +330,7 @@ class IFImg2ImgPipeline(DiffusionPipeline, StableDiffusionLoraLoaderMixin):
             negative_prompt_embeds = negative_prompt_embeds[0]
 
         if do_classifier_free_guidance:
-            # duplicate unconditional embeddings for each generation per prompt, using mps friendly method
+            # duplicate unconditional embeddings f...
             seq_len = negative_prompt_embeds.shape[1]
 
             negative_prompt_embeds = negative_prompt_embeds.to(dtype=dtype, device=device)
@@ -359,7 +362,7 @@ class IFImg2ImgPipeline(DiffusionPipeline, StableDiffusionLoraLoaderMixin):
 
     # Copied from diffusers.pipelines.deepfloyd_if.pipeline_if.IFPipeline.prepare_extra_step_kwargs
     def prepare_extra_step_kwargs(self, generator, eta):
-        # prepare extra kwargs for the scheduler step, since not all schedulers have the same signature
+        # prepare extra kwargs for the scheduler s...
         # eta (η) is only used with the DDIMScheduler, it will be ignored for other schedulers.
         # eta corresponds to η in DDIM paper: https://huggingface.co/papers/2010.02502
         # and should be between [0, 1]
@@ -624,7 +627,7 @@ class IFImg2ImgPipeline(DiffusionPipeline, StableDiffusionLoraLoaderMixin):
 
         return image
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img.StableDiffusionImg2ImgPipeline.get_timesteps
+    # Copied from diffusers.pipelines.stable_diffu...
     def get_timesteps(self, num_inference_steps, strength):
         # get the original timestep using init_timestep
         init_timestep = min(int(num_inference_steps * strength), num_inference_steps)
@@ -670,10 +673,10 @@ class IFImg2ImgPipeline(DiffusionPipeline, StableDiffusionLoraLoaderMixin):
         num_inference_steps: int = 80,
         timesteps: List[int] = None,
         guidance_scale: float = 10.0,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        negative_prompt: Optional[str] = None,
         num_images_per_prompt: Optional[int] = 1,
         eta: float = 0.0,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+        generator: Optional[torch.Generator] = None,
         prompt_embeds: Optional[torch.Tensor] = None,
         negative_prompt_embeds: Optional[torch.Tensor] = None,
         output_type: Optional[str] = "pil",
@@ -683,14 +686,7 @@ class IFImg2ImgPipeline(DiffusionPipeline, StableDiffusionLoraLoaderMixin):
         clean_caption: bool = True,
         cross_attention_kwargs: Optional[Dict[str, Any]] = None,
     ):
-        """
         Function invoked when calling the pipeline for generation.
-
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to guide the image generation. If not defined, one has to pass `prompt_embeds`.
-                instead.
-            image (`torch.Tensor` or `PIL.Image.Image`):
                 `Image`, or tensor representing an image batch, that will be used as the starting point for the
                 process.
             strength (`float`, *optional*, defaults to 0.7):
@@ -751,157 +747,3 @@ class IFImg2ImgPipeline(DiffusionPipeline, StableDiffusionLoraLoaderMixin):
                 [diffusers.models.attention_processor](https://github.com/huggingface/diffusers/blob/main/src/diffusers/models/attention_processor.py).
 
         Examples:
-
-        Returns:
-            [`~pipelines.stable_diffusion.IFPipelineOutput`] or `tuple`:
-            [`~pipelines.stable_diffusion.IFPipelineOutput`] if `return_dict` is True, otherwise a `tuple. When
-            returning a tuple, the first element is a list with the generated images, and the second element is a list
-            of `bool`s denoting whether the corresponding generated image likely represents "not-safe-for-work" (nsfw)
-            or watermarked content, according to the `safety_checker`.
-        """
-        # 1. Check inputs. Raise error if not correct
-        if prompt is not None and isinstance(prompt, str):
-            batch_size = 1
-        elif prompt is not None and isinstance(prompt, list):
-            batch_size = len(prompt)
-        else:
-            batch_size = prompt_embeds.shape[0]
-
-        self.check_inputs(
-            prompt, image, batch_size, callback_steps, negative_prompt, prompt_embeds, negative_prompt_embeds
-        )
-
-        # 2. Define call parameters
-        device = self._execution_device
-
-        # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
-        # of the Imagen paper: https://huggingface.co/papers/2205.11487 . `guidance_scale = 1`
-        # corresponds to doing no classifier free guidance.
-        do_classifier_free_guidance = guidance_scale > 1.0
-
-        # 3. Encode input prompt
-        prompt_embeds, negative_prompt_embeds = self.encode_prompt(
-            prompt,
-            do_classifier_free_guidance,
-            num_images_per_prompt=num_images_per_prompt,
-            device=device,
-            negative_prompt=negative_prompt,
-            prompt_embeds=prompt_embeds,
-            negative_prompt_embeds=negative_prompt_embeds,
-            clean_caption=clean_caption,
-        )
-
-        if do_classifier_free_guidance:
-            prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
-
-        dtype = prompt_embeds.dtype
-
-        # 4. Prepare timesteps
-        if timesteps is not None:
-            self.scheduler.set_timesteps(timesteps=timesteps, device=device)
-            timesteps = self.scheduler.timesteps
-            num_inference_steps = len(timesteps)
-        else:
-            self.scheduler.set_timesteps(num_inference_steps, device=device)
-            timesteps = self.scheduler.timesteps
-
-        timesteps, num_inference_steps = self.get_timesteps(num_inference_steps, strength)
-
-        # 5. Prepare intermediate images
-        image = self.preprocess_image(image)
-        image = image.to(device=device, dtype=dtype)
-
-        noise_timestep = timesteps[0:1]
-        noise_timestep = noise_timestep.repeat(batch_size * num_images_per_prompt)
-
-        intermediate_images = self.prepare_intermediate_images(
-            image, noise_timestep, batch_size, num_images_per_prompt, dtype, device, generator
-        )
-
-        # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
-        extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
-
-        # HACK: see comment in `enable_model_cpu_offload`
-        if hasattr(self, "text_encoder_offload_hook") and self.text_encoder_offload_hook is not None:
-            self.text_encoder_offload_hook.offload()
-
-        # 7. Denoising loop
-        num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
-        with self.progress_bar(total=num_inference_steps) as progress_bar:
-            for i, t in enumerate(timesteps):
-                model_input = (
-                    torch.cat([intermediate_images] * 2) if do_classifier_free_guidance else intermediate_images
-                )
-                model_input = self.scheduler.scale_model_input(model_input, t)
-
-                # predict the noise residual
-                noise_pred = self.unet(
-                    model_input,
-                    t,
-                    encoder_hidden_states=prompt_embeds,
-                    cross_attention_kwargs=cross_attention_kwargs,
-                    return_dict=False,
-                )[0]
-
-                # perform guidance
-                if do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                    noise_pred_uncond, _ = noise_pred_uncond.split(model_input.shape[1], dim=1)
-                    noise_pred_text, predicted_variance = noise_pred_text.split(model_input.shape[1], dim=1)
-                    noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
-                    noise_pred = torch.cat([noise_pred, predicted_variance], dim=1)
-
-                if self.scheduler.config.variance_type not in ["learned", "learned_range"]:
-                    noise_pred, _ = noise_pred.split(model_input.shape[1], dim=1)
-
-                # compute the previous noisy sample x_t -> x_t-1
-                intermediate_images = self.scheduler.step(
-                    noise_pred, t, intermediate_images, **extra_step_kwargs, return_dict=False
-                )[0]
-
-                # call the callback, if provided
-                if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
-                    progress_bar.update()
-                    if callback is not None and i % callback_steps == 0:
-                        callback(i, t, intermediate_images)
-
-                if XLA_AVAILABLE:
-                    xm.mark_step()
-
-        image = intermediate_images
-
-        if output_type == "pil":
-            # 8. Post-processing
-            image = (image / 2 + 0.5).clamp(0, 1)
-            image = image.cpu().permute(0, 2, 3, 1).float().numpy()
-
-            # 9. Run safety checker
-            image, nsfw_detected, watermark_detected = self.run_safety_checker(image, device, prompt_embeds.dtype)
-
-            # 10. Convert to PIL
-            image = self.numpy_to_pil(image)
-
-            # 11. Apply watermark
-            if self.watermarker is not None:
-                self.watermarker.apply_watermark(image, self.unet.config.sample_size)
-        elif output_type == "pt":
-            nsfw_detected = None
-            watermark_detected = None
-
-            if hasattr(self, "unet_offload_hook") and self.unet_offload_hook is not None:
-                self.unet_offload_hook.offload()
-        else:
-            # 8. Post-processing
-            image = (image / 2 + 0.5).clamp(0, 1)
-            image = image.cpu().permute(0, 2, 3, 1).float().numpy()
-
-            # 9. Run safety checker
-            image, nsfw_detected, watermark_detected = self.run_safety_checker(image, device, prompt_embeds.dtype)
-
-        # Offload all models
-        self.maybe_free_model_hooks()
-
-        if not return_dict:
-            return (image, nsfw_detected, watermark_detected)
-
-        return IFPipelineOutput(images=image, nsfw_detected=nsfw_detected, watermark_detected=watermark_detected)

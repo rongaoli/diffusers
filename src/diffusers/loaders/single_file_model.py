@@ -1,16 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 import importlib
 import inspect
 import re
@@ -62,9 +49,7 @@ from .single_file_utils import (
     load_single_file_checkpoint,
 )
 
-
 logger = logging.get_logger(__name__)
-
 
 if is_accelerate_available():
     from accelerate import dispatch_model, init_empty_weights
@@ -193,14 +178,12 @@ SINGLE_FILE_LOADABLE_CLASSES = {
     },
 }
 
-
 def _should_convert_state_dict_to_diffusers(model_state_dict, checkpoint_state_dict):
     model_state_dict_keys = set(model_state_dict.keys())
     checkpoint_state_dict_keys = set(checkpoint_state_dict.keys())
     is_subset = model_state_dict_keys.issubset(checkpoint_state_dict_keys)
     is_match = model_state_dict_keys == checkpoint_state_dict_keys
     return not (is_subset and is_match)
-
 
 def _get_single_file_loadable_mapping_class(cls):
     diffusers_module = importlib.import_module(__name__.split(".")[0])
@@ -212,7 +195,6 @@ def _get_single_file_loadable_mapping_class(cls):
 
     return None
 
-
 def _get_mapping_function_kwargs(mapping_fn, **kwargs):
     parameters = inspect.signature(mapping_fn).parameters
 
@@ -223,77 +205,14 @@ def _get_mapping_function_kwargs(mapping_fn, **kwargs):
 
     return mapping_kwargs
 
-
 class FromOriginalModelMixin:
-    """
-    Load pretrained weights saved in the `.ckpt` or `.safetensors` format into a model.
-    """
+
 
     @classmethod
     @validate_hf_hub_args
     def from_single_file(cls, pretrained_model_link_or_path_or_dict: Optional[str] = None, **kwargs) -> Self:
-        r"""
-        Instantiate a model from pretrained weights saved in the original `.ckpt` or `.safetensors` format. The model
-        is set in evaluation mode (`model.eval()`) by default.
-
-        Parameters:
-            pretrained_model_link_or_path_or_dict (`str`, *optional*):
-                Can be either:
-                    - A link to the `.safetensors` or `.ckpt` file (for example
-                      `"https://huggingface.co/<repo_id>/blob/main/<path_to_file>.safetensors"`) on the Hub.
-                    - A path to a local *file* containing the weights of the component model.
-                    - A state dict containing the component model weights.
-            config (`str`, *optional*):
-                - A string, the *repo id* (for example `CompVis/ldm-text2im-large-256`) of a pretrained pipeline hosted
-                  on the Hub.
-                - A path to a *directory* (for example `./my_pipeline_directory/`) containing the pipeline component
-                  configs in Diffusers format.
-            subfolder (`str`, *optional*, defaults to `""`):
-                The subfolder location of a model file within a larger model repository on the Hub or locally.
-            original_config (`str`, *optional*):
-                Dict or path to a yaml file containing the configuration for the model in its original format.
-                    If a dict is provided, it will be used to initialize the model configuration.
-            torch_dtype (`torch.dtype`, *optional*):
-                Override the default `torch.dtype` and load the model with another dtype.
-            force_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to force the (re-)download of the model weights and configuration files, overriding the
-                cached versions if they exist.
-            cache_dir (`Union[str, os.PathLike]`, *optional*):
-                Path to a directory where a downloaded pretrained model configuration is cached if the standard cache
-                is not used.
-
-            proxies (`Dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, for example, `{'http': 'foo.bar:3128',
-                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
-            local_files_only (`bool`, *optional*, defaults to `False`):
-                Whether to only load local model weights and configuration files or not. If set to True, the model
-                won't be downloaded from the Hub.
-            token (`str` or *bool*, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, the token generated from
-                `diffusers-cli login` (stored in `~/.huggingface`) is used.
-            revision (`str`, *optional*, defaults to `"main"`):
-                The specific model version to use. It can be a branch name, a tag name, a commit id, or any identifier
-                allowed by Git.
-            low_cpu_mem_usage (`bool`, *optional*, defaults to `True` if torch version >= 1.9.0 and
-                is_accelerate_available() else `False`): Speed up model loading only loading the pretrained weights and
-                not initializing the weights. This also tries to not use more than 1x model size in CPU memory
-                (including peak memory) while loading the model. Only supported for PyTorch >= 1.9.0. If you are using
-                an older version of PyTorch, setting this argument to `True` will raise an error.
-            disable_mmap ('bool', *optional*, defaults to 'False'):
-                Whether to disable mmap when loading a Safetensors model. This option can perform better when the model
-                is on a network mount or hard drive, which may not handle the seeky-ness of mmap very well.
-            kwargs (remaining dictionary of keyword arguments, *optional*):
-                Can be used to overwrite load and saveable variables (for example the pipeline components of the
-                specific pipeline class). The overwritten components are directly passed to the pipelines `__init__`
-                method. See example below for more information.
-
-        ```py
-        >>> from diffusers import StableCascadeUNet
-
-        >>> ckpt_path = "https://huggingface.co/stabilityai/stable-cascade/blob/main/stage_b_lite.safetensors"
-        >>> model = StableCascadeUNet.from_single_file(ckpt_path)
-        ```
-        """
+        
+        """r"""
 
         mapping_class_name = _get_single_file_loadable_mapping_class(cls)
         # if class_name not in SINGLE_FILE_LOADABLE_CLASSES:
@@ -334,7 +253,7 @@ class FromOriginalModelMixin:
         device_map = kwargs.pop("device_map", None)
 
         user_agent = {"diffusers": __version__, "file_type": "single_file", "framework": "pytorch"}
-        # In order to ensure popular quantization methods are supported. Can be disable with `disable_telemetry`
+        # In order to ensure popular quantization...
         if quantization_config is not None:
             user_agent["quant"] = quantization_config.quant_method.value
 

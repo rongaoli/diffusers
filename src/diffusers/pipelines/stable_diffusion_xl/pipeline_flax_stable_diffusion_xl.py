@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from functools import partial
 from typing import Dict, List, Optional, Union
 
@@ -32,12 +18,10 @@ from ...schedulers import (
 from ..pipeline_flax_utils import FlaxDiffusionPipeline
 from .pipeline_output import FlaxStableDiffusionXLPipelineOutput
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Set to True to use python for loop instead of jax.fori_loop for easier debugging
 DEBUG = False
-
 
 class FlaxStableDiffusionXLPipeline(FlaxDiffusionPipeline):
     def __init__(
@@ -273,8 +257,7 @@ class FlaxStableDiffusionXLPipeline(FlaxDiffusionPipeline):
         image = (image / 2 + 0.5).clip(0, 1).transpose(0, 2, 3, 1)
         return image
 
-
-# Static argnums are pipe, num_inference_steps, height, width, return_latents. A change would trigger recompilation.
+# Static argnums are pipe, num_inference_steps, he...
 # Non-static args are (sharded) input tensors mapped over their first dimension (hence, `0`).
 @partial(
     jax.pmap,

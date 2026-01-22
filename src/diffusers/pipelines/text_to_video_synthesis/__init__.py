@@ -9,7 +9,6 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
 
@@ -26,7 +25,6 @@ else:
     _import_structure["pipeline_text_to_video_synth_img2img"] = ["VideoToVideoSDPipeline"]
     _import_structure["pipeline_text_to_video_zero"] = ["TextToVideoZeroPipeline"]
     _import_structure["pipeline_text_to_video_zero_sdxl"] = ["TextToVideoZeroSDXLPipeline"]
-
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:

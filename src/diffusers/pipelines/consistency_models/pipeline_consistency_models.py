@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import Callable, List, Optional, Union
 
 import torch
@@ -22,7 +8,6 @@ from ...utils import is_torch_xla_available, logging, replace_example_docstring
 from ...utils.torch_utils import randn_tensor
 from ..pipeline_utils import DiffusionPipeline, ImagePipelineOutput
 
-
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
@@ -32,52 +17,11 @@ else:
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 EXAMPLE_DOC_STRING = """
-    Examples:
-        ```py
-        >>> import torch
-
-        >>> from diffusers import ConsistencyModelPipeline
-
-        >>> device = "cuda"
-        >>> # Load the cd_imagenet64_l2 checkpoint.
-        >>> model_id_or_path = "openai/diffusers-cd_imagenet64_l2"
-        >>> pipe = ConsistencyModelPipeline.from_pretrained(model_id_or_path, torch_dtype=torch.float16)
-        >>> pipe.to(device)
-
-        >>> # Onestep Sampling
-        >>> image = pipe(num_inference_steps=1).images[0]
-        >>> image.save("cd_imagenet64_l2_onestep_sample.png")
-
-        >>> # Onestep sampling, class-conditional image generation
-        >>> # ImageNet-64 class label 145 corresponds to king penguins
-        >>> image = pipe(num_inference_steps=1, class_labels=145).images[0]
-        >>> image.save("cd_imagenet64_l2_onestep_sample_penguin.png")
-
-        >>> # Multistep sampling, class-conditional image generation
-        >>> # Timesteps can be explicitly specified; the particular timesteps below are from the original GitHub repo:
-        >>> # https://github.com/openai/consistency_models/blob/main/scripts/launch.sh#L77
-        >>> image = pipe(num_inference_steps=None, timesteps=[22, 0], class_labels=145).images[0]
-        >>> image.save("cd_imagenet64_l2_multistep_sample_penguin.png")
-        ```
-"""
 
 
 class ConsistencyModelPipeline(DiffusionPipeline):
-    r"""
-    Pipeline for unconditional or class-conditional image generation.
 
-    This model inherits from [`DiffusionPipeline`]. Check the superclass documentation for the generic methods
-    implemented for all pipelines (downloading, saving, running on a particular device, etc.).
-
-    Args:
-        unet ([`UNet2DModel`]):
-            A `UNet2DModel` to denoise the encoded image latents.
-        scheduler ([`SchedulerMixin`]):
-            A scheduler to be used in combination with `unet` to denoise the encoded image latents. Currently only
-            compatible with [`CMStochasticIterativeScheduler`].
-    """
 
     model_cpu_offload_seq = "unet"
 
@@ -176,51 +120,60 @@ class ConsistencyModelPipeline(DiffusionPipeline):
         class_labels: Optional[Union[torch.Tensor, List[int], int]] = None,
         num_inference_steps: int = 1,
         timesteps: List[int] = None,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+        generator: Optional[torch.Generator] = None,
         latents: Optional[torch.Tensor] = None,
         output_type: Optional[str] = "pil",
         return_dict: bool = True,
         callback: Optional[Callable[[int, int, torch.Tensor], None]] = None,
         callback_steps: int = 1,
     ):
-        r"""
-        Args:
-            batch_size (`int`, *optional*, defaults to 1):
-                The number of images to generate.
-            class_labels (`torch.Tensor` or `List[int]` or `int`, *optional*):
-                Optional class labels for conditioning class-conditional consistency models. Not used if the model is
-                not class-conditional.
-            num_inference_steps (`int`, *optional*, defaults to 1):
-                The number of denoising steps. More denoising steps usually lead to a higher quality image at the
-                expense of slower inference.
-            timesteps (`List[int]`, *optional*):
-                Custom timesteps to use for the denoising process. If not defined, equal spaced `num_inference_steps`
-                timesteps are used. Must be in descending order.
-            generator (`torch.Generator`, *optional*):
-                A [`torch.Generator`](https://pytorch.org/docs/stable/generated/torch.Generator.html) to make
-                generation deterministic.
-            latents (`torch.Tensor`, *optional*):
-                Pre-generated noisy latents sampled from a Gaussian distribution, to be used as inputs for image
-                generation. Can be used to tweak the same generation with different prompts. If not provided, a latents
-                tensor is generated by sampling using the supplied random `generator`.
-            output_type (`str`, *optional*, defaults to `"pil"`):
-                The output format of the generated image. Choose between `PIL.Image` or `np.array`.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether or not to return a [`~pipelines.ImagePipelineOutput`] instead of a plain tuple.
-            callback (`Callable`, *optional*):
-                A function that calls every `callback_steps` steps during inference. The function is called with the
-                following arguments: `callback(step: int, timestep: int, latents: torch.Tensor)`.
-            callback_steps (`int`, *optional*, defaults to 1):
-                The frequency at which the `callback` function is called. If not specified, the callback is called at
-                every step.
+        class labels
+                # TODO: should use generator here? int analogue of randn_tensor is not exposed in ...utils
+                class_labels = torch.randint(0, self.unet.config.num_class_embeds, size=(batch_size,))
+            class_labels = class_labels.to(device)
+        else:
+            class_labels = None
+        return class_labels
 
-        Examples:
+    def check_inputs(self, num_inference_steps, timesteps, latents, batch_size, img_size, callback_steps):
+        if num_inference_steps is None and timesteps is None:
+            raise ValueError("Exactly one of `num_inference_steps` or `timesteps` must be supplied.")
 
-        Returns:
-            [`~pipelines.ImagePipelineOutput`] or `tuple`:
-                If `return_dict` is `True`, [`~pipelines.ImagePipelineOutput`] is returned, otherwise a `tuple` is
-                returned where the first element is a list with the generated images.
-        """
+        if num_inference_steps is not None and timesteps is not None:
+            logger.warning(
+                f"Both `num_inference_steps`: {num_inference_steps} and `timesteps`: {timesteps} are supplied;"
+                " `timesteps` will be used over `num_inference_steps`."
+            )
+
+        if latents is not None:
+            expected_shape = (batch_size, 3, img_size, img_size)
+            if latents.shape != expected_shape:
+                raise ValueError(f"The shape of latents is {latents.shape} but is expected to be {expected_shape}.")
+
+        if (callback_steps is None) or (
+            callback_steps is not None and (not isinstance(callback_steps, int) or callback_steps <= 0)
+        ):
+            raise ValueError(
+                f"`callback_steps` has to be a positive integer but is {callback_steps} of type"
+                f" {type(callback_steps)}."
+            )
+
+    @torch.no_grad()
+    @replace_example_docstring(EXAMPLE_DOC_STRING)
+    def __call__(
+        self,
+        batch_size: int = 1,
+        class_labels: Optional[Union[torch.Tensor, List[int], int]] = None,
+        num_inference_steps: int = 1,
+        timesteps: List[int] = None,
+        generator: Optional[torch.Generator] = None,
+        latents: Optional[torch.Tensor] = None,
+        output_type: Optional[str] = "pil",
+        return_dict: bool = True,
+        callback: Optional[Callable[[int, int, torch.Tensor], None]] = None,
+        callback_steps: int = 1,
+    ):
+
         # 0. Prepare call parameters
         img_size = self.unet.config.sample_size
         device = self._execution_device

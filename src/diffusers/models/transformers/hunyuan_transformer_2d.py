@@ -1,16 +1,3 @@
-# Copyright 2025 HunyuanDiT Authors, Qixun Wang and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 from typing import Optional
 
 import torch
@@ -30,18 +17,10 @@ from ..modeling_outputs import Transformer2DModelOutput
 from ..modeling_utils import ModelMixin
 from ..normalization import AdaLayerNormContinuous, FP32LayerNorm
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 class AdaLayerNormShift(nn.Module):
-    r"""
-    Norm layer modified to incorporate timestep embeddings.
 
-    Parameters:
-        embedding_dim (`int`): The size of each embedding vector.
-        num_embeddings (`int`): The size of the embeddings dictionary.
-    """
 
     def __init__(self, embedding_dim: int, elementwise_affine=True, eps=1e-6):
         super().__init__()
@@ -54,39 +33,9 @@ class AdaLayerNormShift(nn.Module):
         x = self.norm(x) + shift.unsqueeze(dim=1)
         return x
 
-
 @maybe_allow_in_graph
 class HunyuanDiTBlock(nn.Module):
-    r"""
-    Transformer block used in Hunyuan-DiT model (https://github.com/Tencent/HunyuanDiT). Allow skip connection and
-    QKNorm
 
-    Parameters:
-        dim (`int`):
-            The number of channels in the input and output.
-        num_attention_heads (`int`):
-            The number of headsto use for multi-head attention.
-        cross_attention_dim (`int`,*optional*):
-            The size of the encoder_hidden_states vector for cross attention.
-        dropout(`float`, *optional*, defaults to 0.0):
-            The dropout probability to use.
-        activation_fn (`str`,*optional*, defaults to `"geglu"`):
-            Activation function to be used in feed-forward. .
-        norm_elementwise_affine (`bool`, *optional*, defaults to `True`):
-            Whether to use learnable elementwise affine parameters for normalization.
-        norm_eps (`float`, *optional*, defaults to 1e-6):
-            A small constant added to the denominator in normalization layers to prevent division by zero.
-        final_dropout (`bool` *optional*, defaults to False):
-            Whether to apply a final dropout after the last feed-forward layer.
-        ff_inner_dim (`int`, *optional*):
-            The size of the hidden layer in the feed-forward block. Defaults to `None`.
-        ff_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in the feed-forward block.
-        skip (`bool`, *optional*, defaults to `False`):
-            Whether to use skip connection. Defaults to `False` for down-blocks and mid-blocks.
-        qk_norm (`bool`, *optional*, defaults to `True`):
-            Whether to use normalization in QK calculation. Defaults to `True`.
-    """
 
     def __init__(
         self,
@@ -171,7 +120,7 @@ class HunyuanDiTBlock(nn.Module):
         image_rotary_emb=None,
         skip=None,
     ) -> torch.Tensor:
-        # Notice that normalization is always applied before the real computation in the following blocks.
+        # Notice that normalization is always appl...
         # 0. Long Skip Connection
         if self.skip_linear is not None:
             cat = torch.cat([hidden_states, skip], dim=-1)
@@ -199,50 +148,8 @@ class HunyuanDiTBlock(nn.Module):
 
         return hidden_states
 
-
 class HunyuanDiT2DModel(ModelMixin, AttentionMixin, ConfigMixin):
-    """
-    HunYuanDiT: Diffusion model with a Transformer backbone.
 
-    Inherit ModelMixin and ConfigMixin to be compatible with the sampler StableDiffusionPipeline of diffusers.
-
-    Parameters:
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            The number of heads to use for multi-head attention.
-        attention_head_dim (`int`, *optional*, defaults to 88):
-            The number of channels in each head.
-        in_channels (`int`, *optional*):
-            The number of channels in the input and output (specify if the input is **continuous**).
-        patch_size (`int`, *optional*):
-            The size of the patch to use for the input.
-        activation_fn (`str`, *optional*, defaults to `"geglu"`):
-            Activation function to use in feed-forward.
-        sample_size (`int`, *optional*):
-            The width of the latent images. This is fixed during training since it is used to learn a number of
-            position embeddings.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability to use.
-        cross_attention_dim (`int`, *optional*):
-            The number of dimension in the clip text embedding.
-        hidden_size (`int`, *optional*):
-            The size of hidden layer in the conditioning embedding layers.
-        num_layers (`int`, *optional*, defaults to 1):
-            The number of layers of Transformer blocks to use.
-        mlp_ratio (`float`, *optional*, defaults to 4.0):
-            The ratio of the hidden layer size to the input size.
-        learn_sigma (`bool`, *optional*, defaults to `True`):
-             Whether to predict variance.
-        cross_attention_dim_t5 (`int`, *optional*):
-            The number dimensions in t5 text embedding.
-        pooled_projection_dim (`int`, *optional*):
-            The size of the pooled projection.
-        text_len (`int`, *optional*):
-            The length of the clip text embedding.
-        text_len_t5 (`int`, *optional*):
-            The length of the T5 text embedding.
-        use_style_cond_and_image_meta_size (`bool`,  *optional*):
-            Whether or not to use style condition and image meta size. True for version <=1.1, False for version >= 1.2
-    """
 
     _skip_layerwise_casting_patterns = ["pos_embed", "norm", "pooler"]
     _supports_group_offloading = False
@@ -318,14 +225,9 @@ class HunyuanDiT2DModel(ModelMixin, AttentionMixin, ConfigMixin):
         self.norm_out = AdaLayerNormContinuous(self.inner_dim, self.inner_dim, elementwise_affine=False, eps=1e-6)
         self.proj_out = nn.Linear(self.inner_dim, patch_size * patch_size * self.out_channels, bias=True)
 
-    # Copied from diffusers.models.unets.unet_2d_condition.UNet2DConditionModel.fuse_qkv_projections with FusedAttnProcessor2_0->FusedHunyuanAttnProcessor2_0
+    # Copied from diffusers.models.unets.unet_2d_c...
     def fuse_qkv_projections(self):
-        """
-        Enables fused QKV projections. For self-attention modules, all projection matrices (i.e., query, key, value)
-        are fused. For cross-attention modules, key and value projection matrices are fused.
 
-        > [!WARNING] > This API is 🧪 experimental.
-        """
         self.original_attn_processors = None
 
         for _, attn_processor in self.attn_processors.items():
@@ -340,20 +242,14 @@ class HunyuanDiT2DModel(ModelMixin, AttentionMixin, ConfigMixin):
 
         self.set_attn_processor(FusedHunyuanAttnProcessor2_0())
 
-    # Copied from diffusers.models.unets.unet_2d_condition.UNet2DConditionModel.unfuse_qkv_projections
+    # Copied from diffusers.models.unets.unet_2d_c...
     def unfuse_qkv_projections(self):
-        """Disables the fused QKV projection if enabled.
 
-        > [!WARNING] > This API is 🧪 experimental.
-
-        """
         if self.original_attn_processors is not None:
             self.set_attn_processor(self.original_attn_processors)
 
     def set_default_attn_processor(self):
-        """
-        Disables custom attention processors and sets the default attention implementation.
-        """
+
         self.set_attn_processor(HunyuanAttnProcessor2_0())
 
     def forward(
@@ -370,33 +266,7 @@ class HunyuanDiT2DModel(ModelMixin, AttentionMixin, ConfigMixin):
         controlnet_block_samples=None,
         return_dict=True,
     ):
-        """
-        The [`HunyuanDiT2DModel`] forward method.
 
-        Args:
-        hidden_states (`torch.Tensor` of shape `(batch size, dim, height, width)`):
-            The input tensor.
-        timestep ( `torch.LongTensor`, *optional*):
-            Used to indicate denoising step.
-        encoder_hidden_states ( `torch.Tensor` of shape `(batch size, sequence len, embed dims)`, *optional*):
-            Conditional embeddings for cross attention layer. This is the output of `BertModel`.
-        text_embedding_mask: torch.Tensor
-            An attention mask of shape `(batch, key_tokens)` is applied to `encoder_hidden_states`. This is the output
-            of `BertModel`.
-        encoder_hidden_states_t5 ( `torch.Tensor` of shape `(batch size, sequence len, embed dims)`, *optional*):
-            Conditional embeddings for cross attention layer. This is the output of T5 Text Encoder.
-        text_embedding_mask_t5: torch.Tensor
-            An attention mask of shape `(batch, key_tokens)` is applied to `encoder_hidden_states`. This is the output
-            of T5 Text Encoder.
-        image_meta_size (torch.Tensor):
-            Conditional embedding indicate the image sizes
-        style: torch.Tensor:
-            Conditional embedding indicate the style
-        image_rotary_emb (`torch.Tensor`):
-            The image rotary embeddings to apply on query and key tensors during attention calculation.
-        return_dict: bool
-            Whether to return a dictionary.
-        """
 
         height, width = hidden_states.shape[-2:]
 
@@ -468,20 +338,9 @@ class HunyuanDiT2DModel(ModelMixin, AttentionMixin, ConfigMixin):
             return (output,)
         return Transformer2DModelOutput(sample=output)
 
-    # Copied from diffusers.models.unets.unet_3d_condition.UNet3DConditionModel.enable_forward_chunking
+    # Copied from diffusers.models.unets.unet_3d_c...
     def enable_forward_chunking(self, chunk_size: Optional[int] = None, dim: int = 0) -> None:
-        """
-        Sets the attention processor to use [feed forward
-        chunking](https://huggingface.co/blog/reformer#2-chunked-feed-forward-layers).
 
-        Parameters:
-            chunk_size (`int`, *optional*):
-                The chunk size of the feed-forward layers. If not specified, will run feed-forward layer individually
-                over each tensor of dim=`dim`.
-            dim (`int`, *optional*, defaults to `0`):
-                The dimension over which the feed-forward computation should be chunked. Choose between dim=0 (batch)
-                or dim=1 (sequence length).
-        """
         if dim not in [0, 1]:
             raise ValueError(f"Make sure to set `dim` to either 0 or 1, not {dim}")
 
@@ -498,7 +357,7 @@ class HunyuanDiT2DModel(ModelMixin, AttentionMixin, ConfigMixin):
         for module in self.children():
             fn_recursive_feed_forward(module, chunk_size, dim)
 
-    # Copied from diffusers.models.unets.unet_3d_condition.UNet3DConditionModel.disable_forward_chunking
+    # Copied from diffusers.models.unets.unet_3d_c...
     def disable_forward_chunking(self):
         def fn_recursive_feed_forward(module: torch.nn.Module, chunk_size: int, dim: int):
             if hasattr(module, "set_chunk_feed_forward"):

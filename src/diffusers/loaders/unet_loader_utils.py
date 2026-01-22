@@ -1,16 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 import copy
 from typing import TYPE_CHECKING, Dict, List, Union
 
@@ -18,16 +5,14 @@ from torch import nn
 
 from ..utils import logging
 
-
 if TYPE_CHECKING:
     # import here to avoid circular imports
     from ..models import UNet2DConditionModel
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 def _translate_into_actual_layer_name(name):
-    """Translate user-friendly name (e.g. 'mid') into actual layer name (e.g. 'mid_block.attentions.0')"""
+
     if name == "mid":
         return "mid_block.attentions.0"
 
@@ -38,7 +23,6 @@ def _translate_into_actual_layer_name(name):
     attn = "attentions." + attn
 
     return ".".join((updown, block, attn))
-
 
 def _maybe_expand_lora_scales(
     unet: "UNet2DConditionModel", weight_scales: List[Union[float, Dict]], default_scale=1.0
@@ -62,7 +46,6 @@ def _maybe_expand_lora_scales(
 
     return expanded_weight_scales
 
-
 def _maybe_expand_lora_scales_for_one_adapter(
     scales: Union[float, Dict],
     blocks_with_transformer: Dict[str, int],
@@ -70,40 +53,7 @@ def _maybe_expand_lora_scales_for_one_adapter(
     model: nn.Module,
     default_scale: float = 1.0,
 ):
-    """
-    Expands the inputs into a more granular dictionary. See the example below for more details.
 
-    Parameters:
-        scales (`Union[float, Dict]`):
-            Scales dict to expand.
-        blocks_with_transformer (`Dict[str, int]`):
-            Dict with keys 'up' and 'down', showing which blocks have transformer layers
-        transformer_per_block (`Dict[str, int]`):
-            Dict with keys 'up' and 'down', showing how many transformer layers each block has
-
-    E.g. turns
-    ```python
-    scales = {"down": 2, "mid": 3, "up": {"block_0": 4, "block_1": [5, 6, 7]}}
-    blocks_with_transformer = {"down": [1, 2], "up": [0, 1]}
-    transformer_per_block = {"down": 2, "up": 3}
-    ```
-    into
-    ```python
-    {
-        "down.block_1.0": 2,
-        "down.block_1.1": 2,
-        "down.block_2.0": 2,
-        "down.block_2.1": 2,
-        "mid": 3,
-        "up.block_0.0": 4,
-        "up.block_0.1": 4,
-        "up.block_0.2": 4,
-        "up.block_1.0": 5,
-        "up.block_1.1": 6,
-        "up.block_1.2": 7,
-    }
-    ```
-    """
     if sorted(blocks_with_transformer.keys()) != ["down", "up"]:
         raise ValueError("blocks_with_transformer needs to be a dict with keys `'down' and `'up'`")
 

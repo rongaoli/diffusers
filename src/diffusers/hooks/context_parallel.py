@@ -1,23 +1,8 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import inspect
 from dataclasses import dataclass
 from typing import Dict, List, Type, Union
 
 import torch
-
 
 if torch.distributed.is_available():
     import torch.distributed._functional_collectives as funcol
@@ -32,12 +17,10 @@ from ..utils import get_logger
 from ..utils.torch_utils import unwrap_module
 from .hooks import HookRegistry, ModelHook
 
-
 logger = get_logger(__name__)  # pylint: disable=invalid-name
 
 _CONTEXT_PARALLEL_INPUT_HOOK_TEMPLATE = "cp_input---{}"
 _CONTEXT_PARALLEL_OUTPUT_HOOK_TEMPLATE = "cp_output---{}"
-
 
 # TODO(aryan): consolidate with ._helpers.TransformerBlockMetadata
 @dataclass
@@ -74,13 +57,127 @@ class ModuleForwardMetadata:
 
         return args[index], False, index
 
+def apply_context_parallel(
+    module: torch.nn.Module,
+    parallel_config: ContextParallelConfig,
+    plan: Dict[str, ContextParallelModelPlan],
+) -> None:
+    class ModuleForwardMetadata:
+    cached_parameter_indices: Dict[str, int] = None
+    _cls: Type = None
+
+    def _get_parameter_from_args_kwargs(self, identifier: str, args=(), kwargs=None):
+        kwargs = kwargs or {}
+
+        if identifier in kwargs:
+            return kwargs[identifier], True, None
+
+        if self.cached_parameter_indices is not None:
+            index = self.cached_parameter_indices.get(identifier, None)
+            if index is None:
+                raise ValueError(f"Parameter '{identifier}' not found in cached indices.")
+            return args[index], False, index
+
+        if self._cls is None:
+            raise ValueError("Model class is not set for metadata.")
+
+        parameters = list(inspect.signature(self._cls.forward).parameters.keys())
+        parameters = parameters[1:]  # skip `self`
+        self.cached_parameter_indices = {param: i for i, param in enumerate(parameters)}
+
+        if identifier not in self.cached_parameter_indices:
+            raise ValueError(f"Parameter '{identifier}' not found in function signature but was requested.")
+
+        index = self.cached_parameter_indices[identifier]
+
+        if index >= len(args):
+            raise ValueError(f"Expected {index} arguments but got {len(args)}.")
+
+        return args[index], False, index
 
 def apply_context_parallel(
     module: torch.nn.Module,
     parallel_config: ContextParallelConfig,
     plan: Dict[str, ContextParallelModelPlan],
 ) -> None:
-    """Apply context parallel on a model."""
+    
+    class ModuleForwardMetadata:
+    cached_parameter_indices: Dict[str, int] = None
+    _cls: Type = None
+
+    def _get_parameter_from_args_kwargs(self, identifier: str, args=(), kwargs=None):
+        kwargs = kwargs or {}
+
+        if identifier in kwargs:
+            return kwargs[identifier], True, None
+
+        if self.cached_parameter_indices is not None:
+            index = self.cached_parameter_indices.get(identifier, None)
+            if index is None:
+                raise ValueError(f"Parameter '{identifier}' not found in cached indices.")
+            return args[index], False, index
+
+        if self._cls is None:
+            raise ValueError("Model class is not set for metadata.")
+
+        parameters = list(inspect.signature(self._cls.forward).parameters.keys())
+        parameters = parameters[1:]  # skip `self`
+        self.cached_parameter_indices = {param: i for i, param in enumerate(parameters)}
+
+        if identifier not in self.cached_parameter_indices:
+            raise ValueError(f"Parameter '{identifier}' not found in function signature but was requested.")
+
+        index = self.cached_parameter_indices[identifier]
+
+        if index >= len(args):
+            raise ValueError(f"Expected {index} arguments but got {len(args)}.")
+
+        return args[index], False, index
+
+def apply_context_parallel(
+    module: torch.nn.Module,
+    parallel_config: ContextParallelConfig,
+    plan: Dict[str, ContextParallelModelPlan],
+) -> None:
+    class ModuleForwardMetadata:
+    cached_parameter_indices: Dict[str, int] = None
+    _cls: Type = None
+
+    def _get_parameter_from_args_kwargs(self, identifier: str, args=(), kwargs=None):
+        kwargs = kwargs or {}
+
+        if identifier in kwargs:
+            return kwargs[identifier], True, None
+
+        if self.cached_parameter_indices is not None:
+            index = self.cached_parameter_indices.get(identifier, None)
+            if index is None:
+                raise ValueError(f"Parameter '{identifier}' not found in cached indices.")
+            return args[index], False, index
+
+        if self._cls is None:
+            raise ValueError("Model class is not set for metadata.")
+
+        parameters = list(inspect.signature(self._cls.forward).parameters.keys())
+        parameters = parameters[1:]  # skip `self`
+        self.cached_parameter_indices = {param: i for i, param in enumerate(parameters)}
+
+        if identifier not in self.cached_parameter_indices:
+            raise ValueError(f"Parameter '{identifier}' not found in function signature but was requested.")
+
+        index = self.cached_parameter_indices[identifier]
+
+        if index >= len(args):
+            raise ValueError(f"Expected {index} arguments but got {len(args)}.")
+
+        return args[index], False, index
+
+def apply_context_parallel(
+    module: torch.nn.Module,
+    parallel_config: ContextParallelConfig,
+    plan: Dict[str, ContextParallelModelPlan],
+) -> None:
+
     logger.debug(f"Applying context parallel with CP mesh: {parallel_config._mesh} and plan: {plan}")
 
     for module_id, cp_model_plan in plan.items():
@@ -106,7 +203,6 @@ def apply_context_parallel(
             registry = HookRegistry.check_if_exists_or_initialize(m)
             registry.register_hook(hook, hook_name)
 
-
 def remove_context_parallel(module: torch.nn.Module, plan: Dict[str, ContextParallelModelPlan]) -> None:
     for module_id, cp_model_plan in plan.items():
         submodule = _get_submodule_by_name(module, module_id)
@@ -122,7 +218,6 @@ def remove_context_parallel(module: torch.nn.Module, plan: Dict[str, ContextPara
             else:
                 raise ValueError(f"Unsupported context parallel model plan type: {type(cp_model_plan)}")
             registry.remove_hook(hook_name)
-
 
 class ContextParallelSplitHook(ModelHook):
     def __init__(self, metadata: ContextParallelModelPlan, parallel_config: ContextParallelConfig) -> None:
@@ -151,7 +246,7 @@ class ContextParallelSplitHook(ModelHook):
             if input_val is None:
                 continue
 
-            # The input_val may be a tensor or list/tuple of tensors. In certain cases, user may specify to shard
+            # The input_val may be a tensor or lis...
             # the output instead of input for a particular layer by setting split_output=True
             if isinstance(input_val, torch.Tensor):
                 input_val = self._prepare_cp_input(input_val, cpm)
@@ -210,7 +305,6 @@ class ContextParallelSplitHook(ModelHook):
         else:
             return EquipartitionSharder.shard(x, cp_input.split_dim, self.parallel_config._flattened_mesh)
 
-
 class ContextParallelGatherHook(ModelHook):
     def __init__(self, metadata: ContextParallelModelPlan, parallel_config: ContextParallelConfig) -> None:
         super().__init__()
@@ -237,7 +331,6 @@ class ContextParallelGatherHook(ModelHook):
 
         return output[0] if is_tensor else tuple(output)
 
-
 class AllGatherFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, tensor, dim, group):
@@ -251,7 +344,6 @@ class AllGatherFunction(torch.autograd.Function):
     def backward(ctx, grad_output):
         grad_chunks = torch.chunk(grad_output, ctx.world_size, dim=ctx.dim)
         return grad_chunks[ctx.rank], None, None
-
 
 class EquipartitionSharder:
     @classmethod
@@ -273,12 +365,10 @@ class EquipartitionSharder:
         tensor = AllGatherFunction.apply(tensor, dim, mesh.get_group())
         return tensor
 
-
 def _get_submodule_by_name(model: torch.nn.Module, name: str) -> Union[torch.nn.Module, List[torch.nn.Module]]:
     if name.count("*") > 1:
         raise ValueError("Wildcard '*' can only be used once in the name")
     return _find_submodule_by_name(model, name)
-
 
 def _find_submodule_by_name(model: torch.nn.Module, name: str) -> Union[torch.nn.Module, List[torch.nn.Module]]:
     if name == "":

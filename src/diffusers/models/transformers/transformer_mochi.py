@@ -1,18 +1,3 @@
-# Copyright 2025 The Genmo team and The HuggingFace Team.
-# All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import Any, Dict, Optional, Tuple
 
 import torch
@@ -31,9 +16,7 @@ from ..modeling_outputs import Transformer2DModelOutput
 from ..modeling_utils import ModelMixin
 from ..normalization import AdaLayerNormContinuous, RMSNorm
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 class MochiModulatedRMSNorm(nn.Module):
     def __init__(self, eps: float):
@@ -54,7 +37,6 @@ class MochiModulatedRMSNorm(nn.Module):
         hidden_states = hidden_states.to(hidden_states_dtype)
 
         return hidden_states
-
 
 class MochiLayerNormContinuous(nn.Module):
     def __init__(
@@ -78,20 +60,63 @@ class MochiLayerNormContinuous(nn.Module):
     ) -> torch.Tensor:
         input_dtype = x.dtype
 
-        # convert back to the original dtype in case `conditioning_embedding`` is upcasted to float32 (needed for hunyuanDiT)
+        # convert back to the original dtype in ca...
         scale = self.linear_1(self.silu(conditioning_embedding).to(x.dtype))
         x = self.norm(x, (1 + scale.unsqueeze(1).to(torch.float32)))
 
         return x.to(input_dtype)
 
+class MochiRMSNormZero(nn.Module):
+    class MochiModulatedRMSNorm(nn.Module):
+    def __init__(self, eps: float):
+        super().__init__()
+
+        self.eps = eps
+        self.norm = RMSNorm(0, eps, False)
+
+    def forward(self, hidden_states, scale=None):
+        hidden_states_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+
+        hidden_states = self.norm(hidden_states)
+
+        if scale is not None:
+            hidden_states = hidden_states * scale
+
+        hidden_states = hidden_states.to(hidden_states_dtype)
+
+        return hidden_states
+
+class MochiLayerNormContinuous(nn.Module):
+    def __init__(
+        self,
+        embedding_dim: int,
+        conditioning_embedding_dim: int,
+        eps=1e-5,
+        bias=True,
+    ):
+        super().__init__()
+
+        # AdaLN
+        self.silu = nn.SiLU()
+        self.linear_1 = nn.Linear(conditioning_embedding_dim, embedding_dim, bias=bias)
+        self.norm = MochiModulatedRMSNorm(eps=eps)
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        conditioning_embedding: torch.Tensor,
+    ) -> torch.Tensor:
+        input_dtype = x.dtype
+
+        # convert back to the original dtype in ca...
+        scale = self.linear_1(self.silu(conditioning_embedding).to(x.dtype))
+        x = self.norm(x, (1 + scale.unsqueeze(1).to(torch.float32)))
+
+        return x.to(input_dtype)
 
 class MochiRMSNormZero(nn.Module):
-    r"""
-    Adaptive RMS Norm used in Mochi.
 
-    Parameters:
-        embedding_dim (`int`): The size of each embedding vector.
-    """
 
     def __init__(
         self, embedding_dim: int, hidden_dim: int, eps: float = 1e-5, elementwise_affine: bool = False
@@ -114,28 +139,9 @@ class MochiRMSNormZero(nn.Module):
 
         return hidden_states, gate_msa, scale_mlp, gate_mlp
 
-
 @maybe_allow_in_graph
 class MochiTransformerBlock(nn.Module):
-    r"""
-    Transformer block used in [Mochi](https://huggingface.co/genmo/mochi-1-preview).
 
-    Args:
-        dim (`int`):
-            The number of channels in the input and output.
-        num_attention_heads (`int`):
-            The number of heads to use for multi-head attention.
-        attention_head_dim (`int`):
-            The number of channels in each head.
-        qk_norm (`str`, defaults to `"rms_norm"`):
-            The normalization layer to use.
-        activation_fn (`str`, defaults to `"swiglu"`):
-            Activation function to use in feed-forward.
-        context_pre_only (`bool`, defaults to `False`):
-            Whether or not to process context-related conditions with additional layers.
-        eps (`float`, defaults to `1e-6`):
-            Epsilon value for normalization layers.
-    """
 
     def __init__(
         self,
@@ -242,17 +248,8 @@ class MochiTransformerBlock(nn.Module):
 
         return hidden_states, encoder_hidden_states
 
-
 class MochiRoPE(nn.Module):
-    r"""
-    RoPE implementation used in [Mochi](https://huggingface.co/genmo/mochi-1-preview).
 
-    Args:
-        base_height (`int`, defaults to `192`):
-            Base height used to compute interpolation scale for rotary positional embeddings.
-        base_width (`int`, defaults to `192`):
-            Base width used to compute interpolation scale for rotary positional embeddings.
-    """
 
     def __init__(self, base_height: int = 192, base_width: int = 192) -> None:
         super().__init__()
@@ -304,36 +301,9 @@ class MochiRoPE(nn.Module):
         rope_cos, rope_sin = self._create_rope(pos_frequencies, pos)
         return rope_cos, rope_sin
 
-
 @maybe_allow_in_graph
 class MochiTransformer3DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOriginalModelMixin, CacheMixin):
-    r"""
-    A Transformer model for video-like data introduced in [Mochi](https://huggingface.co/genmo/mochi-1-preview).
 
-    Args:
-        patch_size (`int`, defaults to `2`):
-            The size of the patches to use in the patch embedding layer.
-        num_attention_heads (`int`, defaults to `24`):
-            The number of heads to use for multi-head attention.
-        attention_head_dim (`int`, defaults to `128`):
-            The number of channels in each head.
-        num_layers (`int`, defaults to `48`):
-            The number of layers of Transformer blocks to use.
-        in_channels (`int`, defaults to `12`):
-            The number of channels in the input.
-        out_channels (`int`, *optional*, defaults to `None`):
-            The number of channels in the output.
-        qk_norm (`str`, defaults to `"rms_norm"`):
-            The normalization layer to use.
-        text_embed_dim (`int`, defaults to `4096`):
-            Input dimension of text embeddings from the text encoder.
-        time_embed_dim (`int`, defaults to `256`):
-            Output dimension of timestep embeddings.
-        activation_fn (`str`, defaults to `"swiglu"`):
-            Activation function to use in feed-forward.
-        max_sequence_length (`int`, defaults to `256`):
-            The maximum sequence length of text embeddings supported.
-    """
 
     _supports_gradient_checkpointing = True
     _no_split_modules = ["MochiTransformerBlock"]

@@ -1,16 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 from dataclasses import dataclass
 from math import gcd
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -44,27 +31,16 @@ from ..unets.unet_2d_blocks import (
 from ..unets.unet_2d_condition import UNet2DConditionModel
 from .controlnet import ControlNetConditioningEmbedding
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 @dataclass
 class ControlNetXSOutput(BaseOutput):
-    """
-    The output of [`UNetControlNetXSModel`].
 
-    Args:
-        sample (`Tensor` of shape `(batch_size, num_channels, height, width)`):
-            The output of the `UNetControlNetXSModel`. Unlike `ControlNetOutput` this is NOT to be added to the base
-            model output, but is already the final output.
-    """
 
     sample: Tensor = None
 
-
 class DownBlockControlNetXSAdapter(nn.Module):
-    """Components that together with corresponding components from the base model will form a
-    `ControlNetXSCrossAttnDownBlock2D`"""
+
 
     def __init__(
         self,
@@ -81,10 +57,8 @@ class DownBlockControlNetXSAdapter(nn.Module):
         self.attentions = attentions
         self.downsamplers = downsampler
 
-
 class MidBlockControlNetXSAdapter(nn.Module):
-    """Components that together with corresponding components from the base model will form a
-    `ControlNetXSCrossAttnMidBlock2D`"""
+
 
     def __init__(self, midblock: UNetMidBlock2DCrossAttn, base_to_ctrl: nn.ModuleList, ctrl_to_base: nn.ModuleList):
         super().__init__()
@@ -92,14 +66,12 @@ class MidBlockControlNetXSAdapter(nn.Module):
         self.base_to_ctrl = base_to_ctrl
         self.ctrl_to_base = ctrl_to_base
 
-
 class UpBlockControlNetXSAdapter(nn.Module):
-    """Components that together with corresponding components from the base model will form a `ControlNetXSCrossAttnUpBlock2D`"""
+
 
     def __init__(self, ctrl_to_base: nn.ModuleList):
         super().__init__()
         self.ctrl_to_base = ctrl_to_base
-
 
 def get_down_block_adapter(
     base_in_channels: int,
@@ -191,7 +163,6 @@ def get_down_block_adapter(
 
     return down_block_components
 
-
 def get_mid_block_adapter(
     base_channels: int,
     ctrl_channels: int,
@@ -226,7 +197,6 @@ def get_mid_block_adapter(
 
     return MidBlockControlNetXSAdapter(base_to_ctrl=base_to_ctrl, midblock=midblock, ctrl_to_base=ctrl_to_base)
 
-
 def get_up_block_adapter(
     out_channels: int,
     prev_output_channel: int,
@@ -240,53 +210,8 @@ def get_up_block_adapter(
 
     return UpBlockControlNetXSAdapter(ctrl_to_base=nn.ModuleList(ctrl_to_base))
 
-
 class ControlNetXSAdapter(ModelMixin, AttentionMixin, ConfigMixin):
-    r"""
-    A `ControlNetXSAdapter` model. To use it, pass it into a `UNetControlNetXSModel` (together with a
-    `UNet2DConditionModel` base model).
 
-    This model inherits from [`ModelMixin`] and [`ConfigMixin`]. Check the superclass documentation for it's generic
-    methods implemented for all models (such as downloading or saving).
-
-    Like `UNetControlNetXSModel`, `ControlNetXSAdapter` is compatible with StableDiffusion and StableDiffusion-XL. It's
-    default parameters are compatible with StableDiffusion.
-
-    Parameters:
-        conditioning_channels (`int`, defaults to 3):
-            Number of channels of conditioning input (e.g. an image)
-        conditioning_channel_order (`str`, defaults to `"rgb"`):
-            The channel order of conditional image. Will convert to `rgb` if it's `bgr`.
-        conditioning_embedding_out_channels (`tuple[int]`, defaults to `(16, 32, 96, 256)`):
-            The tuple of output channels for each block in the `controlnet_cond_embedding` layer.
-        time_embedding_mix (`float`, defaults to 1.0):
-            If 0, then only the control adapters's time embedding is used. If 1, then only the base unet's time
-            embedding is used. Otherwise, both are combined.
-        learn_time_embedding (`bool`, defaults to `False`):
-            Whether a time embedding should be learned. If yes, `UNetControlNetXSModel` will combine the time
-            embeddings of the base model and the control adapter. If no, `UNetControlNetXSModel` will use the base
-            model's time embedding.
-        num_attention_heads (`list[int]`, defaults to `[4]`):
-            The number of attention heads.
-        block_out_channels (`list[int]`, defaults to `[4, 8, 16, 16]`):
-            The tuple of output channels for each block.
-        base_block_out_channels (`list[int]`, defaults to `[320, 640, 1280, 1280]`):
-            The tuple of output channels for each block in the base unet.
-        cross_attention_dim (`int`, defaults to 1024):
-            The dimension of the cross attention features.
-        down_block_types (`list[str]`, defaults to `["CrossAttnDownBlock2D", "CrossAttnDownBlock2D", "CrossAttnDownBlock2D", "DownBlock2D"]`):
-            The tuple of downsample blocks to use.
-        sample_size (`int`, defaults to 96):
-            Height and width of input/output sample.
-        transformer_layers_per_block (`Union[int, Tuple[int]]`, defaults to 1):
-            The number of transformer blocks of type [`~models.attention.BasicTransformerBlock`]. Only relevant for
-            [`~models.unet_2d_blocks.CrossAttnDownBlock2D`], [`~models.unet_2d_blocks.UNetMidBlock2DCrossAttn`].
-        upcast_attention (`bool`, defaults to `True`):
-            Whether the attention computation should always be upcasted.
-        max_norm_num_groups (`int`, defaults to 32):
-            Maximum number of groups in group normal. The actual number will be the largest divisor of the respective
-            channels, that is <= max_norm_num_groups.
-    """
 
     @register_to_config
     def __init__(
@@ -330,7 +255,7 @@ class ControlNetXSAdapter(ModelMixin, AttentionMixin, ConfigMixin):
             transformer_layers_per_block = [transformer_layers_per_block] * len(down_block_types)
         if not isinstance(cross_attention_dim, (list, tuple)):
             cross_attention_dim = [cross_attention_dim] * len(down_block_types)
-        # see https://github.com/huggingface/diffusers/issues/2011#issuecomment-1547958131 for why `ControlNetXSAdapter` takes `num_attention_heads` instead of `attention_head_dim`
+        # see https://github.com/huggingface/diffu...
         if not isinstance(num_attention_heads, (list, tuple)):
             num_attention_heads = [num_attention_heads] * len(down_block_types)
 
@@ -438,32 +363,8 @@ class ControlNetXSAdapter(ModelMixin, AttentionMixin, ConfigMixin):
         conditioning_channel_order: str = "rgb",
         conditioning_embedding_out_channels: Tuple[int, ...] = (16, 32, 96, 256),
     ):
-        r"""
-        Instantiate a [`ControlNetXSAdapter`] from a [`UNet2DConditionModel`].
-
-        Parameters:
-            unet (`UNet2DConditionModel`):
-                The UNet model we want to control. The dimensions of the ControlNetXSAdapter will be adapted to it.
-            size_ratio (float, *optional*, defaults to `None`):
-                When given, block_out_channels is set to a fraction of the base model's block_out_channels. Either this
-                or `block_out_channels` must be given.
-            block_out_channels (`List[int]`, *optional*, defaults to `None`):
-                Down blocks output channels in control model. Either this or `size_ratio` must be given.
-            num_attention_heads (`List[int]`, *optional*, defaults to `None`):
-                The dimension of the attention heads. The naming seems a bit confusing and it is, see
-                https://github.com/huggingface/diffusers/issues/2011#issuecomment-1547958131 for why.
-            learn_time_embedding (`bool`, defaults to `False`):
-                Whether the `ControlNetXSAdapter` should learn a time embedding.
-            time_embedding_mix (`float`, defaults to 1.0):
-                If 0, then only the control adapter's time embedding is used. If 1, then only the base unet's time
-                embedding is used. Otherwise, both are combined.
-            conditioning_channels (`int`, defaults to 3):
-                Number of channels of conditioning input (e.g. an image)
-            conditioning_channel_order (`str`, defaults to `"rgb"`):
-                The channel order of conditional image. Will convert to `rgb` if it's `bgr`.
-            conditioning_embedding_out_channels (`Tuple[int]`, defaults to `(16, 32, 96, 256)`):
-                The tuple of output channel for each block in the `controlnet_cond_embedding` layer.
-        """
+        
+        """r"""
 
         # Check input
         fixed_size = block_out_channels is not None
@@ -476,7 +377,7 @@ class ControlNetXSAdapter(ModelMixin, AttentionMixin, ConfigMixin):
         # Create model
         block_out_channels = block_out_channels or [int(b * size_ratio) for b in unet.config.block_out_channels]
         if num_attention_heads is None:
-            # The naming seems a bit confusing and it is, see https://github.com/huggingface/diffusers/issues/2011#issuecomment-1547958131 for why.
+            # The naming seems a bit confusing and...
             num_attention_heads = unet.config.attention_head_dim
 
         model = cls(
@@ -507,20 +408,8 @@ class ControlNetXSAdapter(ModelMixin, AttentionMixin, ConfigMixin):
             "A ControlNetXSAdapter cannot be run by itself. Use it together with a UNet2DConditionModel to instantiate a UNetControlNetXSModel."
         )
 
-
 class UNetControlNetXSModel(ModelMixin, AttentionMixin, ConfigMixin):
-    r"""
-    A UNet fused with a ControlNet-XS adapter model
 
-    This model inherits from [`ModelMixin`] and [`ConfigMixin`]. Check the superclass documentation for it's generic
-    methods implemented for all models (such as downloading or saving).
-
-    `UNetControlNetXSModel` is compatible with StableDiffusion and StableDiffusion-XL. It's default parameters are
-    compatible with StableDiffusion.
-
-    It's parameters are either passed to the underlying `UNet2DConditionModel` or used exactly like in
-    `ControlNetXSAdapter` . See their documentation for details.
-    """
 
     _supports_gradient_checkpointing = True
 
@@ -730,26 +619,8 @@ class UNetControlNetXSModel(ModelMixin, AttentionMixin, ConfigMixin):
         time_embedding_mix: Optional[float] = None,
         ctrl_optional_kwargs: Optional[Dict] = None,
     ):
-        r"""
-        Instantiate a [`UNetControlNetXSModel`] from a [`UNet2DConditionModel`] and an optional [`ControlNetXSAdapter`]
-        .
-
-        Parameters:
-            unet (`UNet2DConditionModel`):
-                The UNet model we want to control.
-            controlnet (`ControlNetXSAdapter`):
-                The ControlNet-XS adapter with which the UNet will be fused. If none is given, a new ControlNet-XS
-                adapter will be created.
-            size_ratio (float, *optional*, defaults to `None`):
-                Used to construct the controlnet if none is given. See [`ControlNetXSAdapter.from_unet`] for details.
-            ctrl_block_out_channels (`List[int]`, *optional*, defaults to `None`):
-                Used to construct the controlnet if none is given. See [`ControlNetXSAdapter.from_unet`] for details,
-                where this parameter is called `block_out_channels`.
-            time_embedding_mix (`float`, *optional*, defaults to None):
-                Used to construct the controlnet if none is given. See [`ControlNetXSAdapter.from_unet`] for details.
-            ctrl_optional_kwargs (`Dict`, *optional*, defaults to `None`):
-                Passed to the `init` of the new controlnet if no controlnet was given.
-        """
+        
+        """r"""
         if controlnet is None:
             controlnet = ControlNetXSAdapter.from_unet(
                 unet, size_ratio, ctrl_block_out_channels, **ctrl_optional_kwargs
@@ -779,7 +650,7 @@ class UNetControlNetXSModel(ModelMixin, AttentionMixin, ConfigMixin):
             "projection_class_embeddings_input_dim",
         ]
         params_for_unet = {k: v for k, v in unet.config.items() if k in params_for_unet}
-        # The naming seems a bit confusing and it is, see https://github.com/huggingface/diffusers/issues/2011#issuecomment-1547958131 for why.
+        # The naming seems a bit confusing and it...
         params_for_unet["num_attention_heads"] = unet.config.attention_head_dim
 
         params_for_controlnet = [
@@ -840,8 +711,7 @@ class UNetControlNetXSModel(ModelMixin, AttentionMixin, ConfigMixin):
         return model
 
     def freeze_unet_params(self) -> None:
-        """Freeze the weights of the parts belonging to the base UNet2DConditionModel, and leave everything else unfrozen for fine
-        tuning."""
+
         # Freeze everything
         for param in self.parameters():
             param.requires_grad = True
@@ -868,11 +738,9 @@ class UNetControlNetXSModel(ModelMixin, AttentionMixin, ConfigMixin):
         for u in self.up_blocks:
             u.freeze_base_params()
 
-    # Copied from diffusers.models.unets.unet_2d_condition.UNet2DConditionModel.set_default_attn_processor
+    # Copied from diffusers.models.unets.unet_2d_c...
     def set_default_attn_processor(self):
-        """
-        Disables custom attention processors and sets the default attention implementation.
-        """
+
         if all(proc.__class__ in ADDED_KV_ATTENTION_PROCESSORS for proc in self.attn_processors.values()):
             processor = AttnAddedKVProcessor()
         elif all(proc.__class__ in CROSS_ATTENTION_PROCESSORS for proc in self.attn_processors.values()):
@@ -886,23 +754,8 @@ class UNetControlNetXSModel(ModelMixin, AttentionMixin, ConfigMixin):
 
     # Copied from diffusers.models.unets.unet_2d_condition.UNet2DConditionModel.enable_freeu
     def enable_freeu(self, s1: float, s2: float, b1: float, b2: float):
-        r"""Enables the FreeU mechanism from https://huggingface.co/papers/2309.11497.
-
-        The suffixes after the scaling factors represent the stage blocks where they are being applied.
-
-        Please refer to the [official repository](https://github.com/ChenyangSi/FreeU) for combinations of values that
-        are known to work well for different pipelines such as Stable Diffusion v1, v2, and Stable Diffusion XL.
-
-        Args:
-            s1 (`float`):
-                Scaling factor for stage 1 to attenuate the contributions of the skip features. This is done to
-                mitigate the "oversmoothing effect" in the enhanced denoising process.
-            s2 (`float`):
-                Scaling factor for stage 2 to attenuate the contributions of the skip features. This is done to
-                mitigate the "oversmoothing effect" in the enhanced denoising process.
-            b1 (`float`): Scaling factor for stage 1 to amplify the contributions of backbone features.
-            b2 (`float`): Scaling factor for stage 2 to amplify the contributions of backbone features.
-        """
+        
+        """r"""
         for i, upsample_block in enumerate(self.up_blocks):
             setattr(upsample_block, "s1", s1)
             setattr(upsample_block, "s2", s2)
@@ -911,7 +764,7 @@ class UNetControlNetXSModel(ModelMixin, AttentionMixin, ConfigMixin):
 
     # Copied from diffusers.models.unets.unet_2d_condition.UNet2DConditionModel.disable_freeu
     def disable_freeu(self):
-        """Disables the FreeU mechanism."""
+
         freeu_keys = {"s1", "s2", "b1", "b2"}
         for i, upsample_block in enumerate(self.up_blocks):
             for k in freeu_keys:
@@ -920,12 +773,7 @@ class UNetControlNetXSModel(ModelMixin, AttentionMixin, ConfigMixin):
 
     # Copied from diffusers.models.unets.unet_2d_condition.UNet2DConditionModel.fuse_qkv_projections
     def fuse_qkv_projections(self):
-        """
-        Enables fused QKV projections. For self-attention modules, all projection matrices (i.e., query, key, value)
-        are fused. For cross-attention modules, key and value projection matrices are fused.
 
-        > [!WARNING] > This API is 🧪 experimental.
-        """
         self.original_attn_processors = None
 
         for _, attn_processor in self.attn_processors.items():
@@ -940,13 +788,9 @@ class UNetControlNetXSModel(ModelMixin, AttentionMixin, ConfigMixin):
 
         self.set_attn_processor(FusedAttnProcessor2_0())
 
-    # Copied from diffusers.models.unets.unet_2d_condition.UNet2DConditionModel.unfuse_qkv_projections
+    # Copied from diffusers.models.unets.unet_2d_c...
     def unfuse_qkv_projections(self):
-        """Disables the fused QKV projection if enabled.
 
-        > [!WARNING] > This API is 🧪 experimental.
-
-        """
         if self.original_attn_processors is not None:
             self.set_attn_processor(self.original_attn_processors)
 
@@ -965,45 +809,7 @@ class UNetControlNetXSModel(ModelMixin, AttentionMixin, ConfigMixin):
         return_dict: bool = True,
         apply_control: bool = True,
     ) -> Union[ControlNetXSOutput, Tuple]:
-        """
-        The [`ControlNetXSModel`] forward method.
 
-        Args:
-            sample (`Tensor`):
-                The noisy input tensor.
-            timestep (`Union[torch.Tensor, float, int]`):
-                The number of timesteps to denoise an input.
-            encoder_hidden_states (`torch.Tensor`):
-                The encoder hidden states.
-            controlnet_cond (`Tensor`):
-                The conditional input tensor of shape `(batch_size, sequence_length, hidden_size)`.
-            conditioning_scale (`float`, defaults to `1.0`):
-                How much the control model affects the base model outputs.
-            class_labels (`torch.Tensor`, *optional*, defaults to `None`):
-                Optional class labels for conditioning. Their embeddings will be summed with the timestep embeddings.
-            timestep_cond (`torch.Tensor`, *optional*, defaults to `None`):
-                Additional conditional embeddings for timestep. If provided, the embeddings will be summed with the
-                timestep_embedding passed through the `self.time_embedding` layer to obtain the final timestep
-                embeddings.
-            attention_mask (`torch.Tensor`, *optional*, defaults to `None`):
-                An attention mask of shape `(batch, key_tokens)` is applied to `encoder_hidden_states`. If `1` the mask
-                is kept, otherwise if `0` it is discarded. Mask will be converted into a bias, which adds large
-                negative values to the attention scores corresponding to "discard" tokens.
-            cross_attention_kwargs (`dict[str]`, *optional*, defaults to `None`):
-                A kwargs dictionary that if specified is passed along to the `AttnProcessor`.
-            added_cond_kwargs (`dict`):
-                Additional conditions for the Stable Diffusion XL UNet.
-            return_dict (`bool`, defaults to `True`):
-                Whether or not to return a [`~models.controlnets.controlnet.ControlNetOutput`] instead of a plain
-                tuple.
-            apply_control (`bool`, defaults to `True`):
-                If `False`, the input is run only through the base model.
-
-        Returns:
-            [`~models.controlnetxs.ControlNetXSOutput`] **or** `tuple`:
-                If `return_dict` is `True`, a [`~models.controlnetxs.ControlNetXSOutput`] is returned, otherwise a
-                tuple is returned where the first element is the sample tensor.
-        """
 
         # check channel order
         if self.config.ctrl_conditioning_channel_order == "bgr":
@@ -1154,7 +960,6 @@ class UNetControlNetXSModel(ModelMixin, AttentionMixin, ConfigMixin):
 
         return ControlNetXSOutput(sample=h_base)
 
-
 class ControlNetXSCrossAttnDownBlock2D(nn.Module):
     def __init__(
         self,
@@ -1191,7 +996,7 @@ class ControlNetXSCrossAttnDownBlock2D(nn.Module):
             base_in_channels = base_in_channels if i == 0 else base_out_channels
             ctrl_in_channels = ctrl_in_channels if i == 0 else ctrl_out_channels
 
-            # Before the resnet/attention application, information is concatted from base to control.
+            # Before the resnet/attention applicat...
             # Concat doesn't require change in number of channels
             base_to_ctrl.append(make_zero_conv(base_in_channels, base_in_channels))
 
@@ -1341,8 +1146,193 @@ class ControlNetXSCrossAttnDownBlock2D(nn.Module):
         return model
 
     def freeze_base_params(self) -> None:
-        """Freeze the weights of the parts belonging to the base UNet2DConditionModel, and leave everything else unfrozen for fine
-        tuning."""
+        class ControlNetXSCrossAttnDownBlock2D(nn.Module):
+    def __init__(
+        self,
+        base_in_channels: int,
+        base_out_channels: int,
+        ctrl_in_channels: int,
+        ctrl_out_channels: int,
+        temb_channels: int,
+        norm_num_groups: int = 32,
+        ctrl_max_norm_num_groups: int = 32,
+        has_crossattn=True,
+        transformer_layers_per_block: Optional[Union[int, Tuple[int]]] = 1,
+        base_num_attention_heads: Optional[int] = 1,
+        ctrl_num_attention_heads: Optional[int] = 1,
+        cross_attention_dim: Optional[int] = 1024,
+        add_downsample: bool = True,
+        upcast_attention: Optional[bool] = False,
+        use_linear_projection: Optional[bool] = True,
+    ):
+        super().__init__()
+        base_resnets = []
+        base_attentions = []
+        ctrl_resnets = []
+        ctrl_attentions = []
+        ctrl_to_base = []
+        base_to_ctrl = []
+
+        num_layers = 2  # only support sd + sdxl
+
+        if isinstance(transformer_layers_per_block, int):
+            transformer_layers_per_block = [transformer_layers_per_block] * num_layers
+
+        for i in range(num_layers):
+            base_in_channels = base_in_channels if i == 0 else base_out_channels
+            ctrl_in_channels = ctrl_in_channels if i == 0 else ctrl_out_channels
+
+            # Before the resnet/attention applicat...
+            # Concat doesn't require change in number of channels
+            base_to_ctrl.append(make_zero_conv(base_in_channels, base_in_channels))
+
+            base_resnets.append(
+                ResnetBlock2D(
+                    in_channels=base_in_channels,
+                    out_channels=base_out_channels,
+                    temb_channels=temb_channels,
+                    groups=norm_num_groups,
+                )
+            )
+            ctrl_resnets.append(
+                ResnetBlock2D(
+                    in_channels=ctrl_in_channels + base_in_channels,  # information from base is concatted to ctrl
+                    out_channels=ctrl_out_channels,
+                    temb_channels=temb_channels,
+                    groups=find_largest_factor(
+                        ctrl_in_channels + base_in_channels, max_factor=ctrl_max_norm_num_groups
+                    ),
+                    groups_out=find_largest_factor(ctrl_out_channels, max_factor=ctrl_max_norm_num_groups),
+                    eps=1e-5,
+                )
+            )
+
+            if has_crossattn:
+                base_attentions.append(
+                    Transformer2DModel(
+                        base_num_attention_heads,
+                        base_out_channels // base_num_attention_heads,
+                        in_channels=base_out_channels,
+                        num_layers=transformer_layers_per_block[i],
+                        cross_attention_dim=cross_attention_dim,
+                        use_linear_projection=use_linear_projection,
+                        upcast_attention=upcast_attention,
+                        norm_num_groups=norm_num_groups,
+                    )
+                )
+                ctrl_attentions.append(
+                    Transformer2DModel(
+                        ctrl_num_attention_heads,
+                        ctrl_out_channels // ctrl_num_attention_heads,
+                        in_channels=ctrl_out_channels,
+                        num_layers=transformer_layers_per_block[i],
+                        cross_attention_dim=cross_attention_dim,
+                        use_linear_projection=use_linear_projection,
+                        upcast_attention=upcast_attention,
+                        norm_num_groups=find_largest_factor(ctrl_out_channels, max_factor=ctrl_max_norm_num_groups),
+                    )
+                )
+
+            # After the resnet/attention application, information is added from control to base
+            # Addition requires change in number of channels
+            ctrl_to_base.append(make_zero_conv(ctrl_out_channels, base_out_channels))
+
+        if add_downsample:
+            # Before the downsampler application, information is concatted from base to control
+            # Concat doesn't require change in number of channels
+            base_to_ctrl.append(make_zero_conv(base_out_channels, base_out_channels))
+
+            self.base_downsamplers = Downsample2D(
+                base_out_channels, use_conv=True, out_channels=base_out_channels, name="op"
+            )
+            self.ctrl_downsamplers = Downsample2D(
+                ctrl_out_channels + base_out_channels, use_conv=True, out_channels=ctrl_out_channels, name="op"
+            )
+
+            # After the downsampler application, information is added from control to base
+            # Addition requires change in number of channels
+            ctrl_to_base.append(make_zero_conv(ctrl_out_channels, base_out_channels))
+        else:
+            self.base_downsamplers = None
+            self.ctrl_downsamplers = None
+
+        self.base_resnets = nn.ModuleList(base_resnets)
+        self.ctrl_resnets = nn.ModuleList(ctrl_resnets)
+        self.base_attentions = nn.ModuleList(base_attentions) if has_crossattn else [None] * num_layers
+        self.ctrl_attentions = nn.ModuleList(ctrl_attentions) if has_crossattn else [None] * num_layers
+        self.base_to_ctrl = nn.ModuleList(base_to_ctrl)
+        self.ctrl_to_base = nn.ModuleList(ctrl_to_base)
+
+        self.gradient_checkpointing = False
+
+    @classmethod
+    def from_modules(cls, base_downblock: CrossAttnDownBlock2D, ctrl_downblock: DownBlockControlNetXSAdapter):
+        # get params
+        def get_first_cross_attention(block):
+            return block.attentions[0].transformer_blocks[0].attn2
+
+        base_in_channels = base_downblock.resnets[0].in_channels
+        base_out_channels = base_downblock.resnets[0].out_channels
+        ctrl_in_channels = (
+            ctrl_downblock.resnets[0].in_channels - base_in_channels
+        )  # base channels are concatted to ctrl channels in init
+        ctrl_out_channels = ctrl_downblock.resnets[0].out_channels
+        temb_channels = base_downblock.resnets[0].time_emb_proj.in_features
+        num_groups = base_downblock.resnets[0].norm1.num_groups
+        ctrl_num_groups = ctrl_downblock.resnets[0].norm1.num_groups
+        if hasattr(base_downblock, "attentions"):
+            has_crossattn = True
+            transformer_layers_per_block = len(base_downblock.attentions[0].transformer_blocks)
+            base_num_attention_heads = get_first_cross_attention(base_downblock).heads
+            ctrl_num_attention_heads = get_first_cross_attention(ctrl_downblock).heads
+            cross_attention_dim = get_first_cross_attention(base_downblock).cross_attention_dim
+            upcast_attention = get_first_cross_attention(base_downblock).upcast_attention
+            use_linear_projection = base_downblock.attentions[0].use_linear_projection
+        else:
+            has_crossattn = False
+            transformer_layers_per_block = None
+            base_num_attention_heads = None
+            ctrl_num_attention_heads = None
+            cross_attention_dim = None
+            upcast_attention = None
+            use_linear_projection = None
+        add_downsample = base_downblock.downsamplers is not None
+
+        # create model
+        model = cls(
+            base_in_channels=base_in_channels,
+            base_out_channels=base_out_channels,
+            ctrl_in_channels=ctrl_in_channels,
+            ctrl_out_channels=ctrl_out_channels,
+            temb_channels=temb_channels,
+            norm_num_groups=num_groups,
+            ctrl_max_norm_num_groups=ctrl_num_groups,
+            has_crossattn=has_crossattn,
+            transformer_layers_per_block=transformer_layers_per_block,
+            base_num_attention_heads=base_num_attention_heads,
+            ctrl_num_attention_heads=ctrl_num_attention_heads,
+            cross_attention_dim=cross_attention_dim,
+            add_downsample=add_downsample,
+            upcast_attention=upcast_attention,
+            use_linear_projection=use_linear_projection,
+        )
+
+        # # load weights
+        model.base_resnets.load_state_dict(base_downblock.resnets.state_dict())
+        model.ctrl_resnets.load_state_dict(ctrl_downblock.resnets.state_dict())
+        if has_crossattn:
+            model.base_attentions.load_state_dict(base_downblock.attentions.state_dict())
+            model.ctrl_attentions.load_state_dict(ctrl_downblock.attentions.state_dict())
+        if add_downsample:
+            model.base_downsamplers.load_state_dict(base_downblock.downsamplers[0].state_dict())
+            model.ctrl_downsamplers.load_state_dict(ctrl_downblock.downsamplers.state_dict())
+        model.base_to_ctrl.load_state_dict(ctrl_downblock.base_to_ctrl.state_dict())
+        model.ctrl_to_base.load_state_dict(ctrl_downblock.ctrl_to_base.state_dict())
+
+        return model
+
+    def freeze_base_params(self) -> None:
+
         # Unfreeze everything
         for param in self.parameters():
             param.requires_grad = True
@@ -1449,7 +1439,6 @@ class ControlNetXSCrossAttnDownBlock2D(nn.Module):
 
         return h_base, h_ctrl, base_output_states, ctrl_output_states
 
-
 class ControlNetXSCrossAttnMidBlock2D(nn.Module):
     def __init__(
         self,
@@ -1553,8 +1542,110 @@ class ControlNetXSCrossAttnMidBlock2D(nn.Module):
         return model
 
     def freeze_base_params(self) -> None:
-        """Freeze the weights of the parts belonging to the base UNet2DConditionModel, and leave everything else unfrozen for fine
-        tuning."""
+        class ControlNetXSCrossAttnMidBlock2D(nn.Module):
+    def __init__(
+        self,
+        base_channels: int,
+        ctrl_channels: int,
+        temb_channels: Optional[int] = None,
+        norm_num_groups: int = 32,
+        ctrl_max_norm_num_groups: int = 32,
+        transformer_layers_per_block: int = 1,
+        base_num_attention_heads: Optional[int] = 1,
+        ctrl_num_attention_heads: Optional[int] = 1,
+        cross_attention_dim: Optional[int] = 1024,
+        upcast_attention: bool = False,
+        use_linear_projection: Optional[bool] = True,
+    ):
+        super().__init__()
+
+        # Before the midblock application, information is concatted from base to control.
+        # Concat doesn't require change in number of channels
+        self.base_to_ctrl = make_zero_conv(base_channels, base_channels)
+
+        self.base_midblock = UNetMidBlock2DCrossAttn(
+            transformer_layers_per_block=transformer_layers_per_block,
+            in_channels=base_channels,
+            temb_channels=temb_channels,
+            resnet_groups=norm_num_groups,
+            cross_attention_dim=cross_attention_dim,
+            num_attention_heads=base_num_attention_heads,
+            use_linear_projection=use_linear_projection,
+            upcast_attention=upcast_attention,
+        )
+
+        self.ctrl_midblock = UNetMidBlock2DCrossAttn(
+            transformer_layers_per_block=transformer_layers_per_block,
+            in_channels=ctrl_channels + base_channels,
+            out_channels=ctrl_channels,
+            temb_channels=temb_channels,
+            # number or norm groups must divide both in_channels and out_channels
+            resnet_groups=find_largest_factor(
+                gcd(ctrl_channels, ctrl_channels + base_channels), ctrl_max_norm_num_groups
+            ),
+            cross_attention_dim=cross_attention_dim,
+            num_attention_heads=ctrl_num_attention_heads,
+            use_linear_projection=use_linear_projection,
+            upcast_attention=upcast_attention,
+        )
+
+        # After the midblock application, information is added from control to base
+        # Addition requires change in number of channels
+        self.ctrl_to_base = make_zero_conv(ctrl_channels, base_channels)
+
+        self.gradient_checkpointing = False
+
+    @classmethod
+    def from_modules(
+        cls,
+        base_midblock: UNetMidBlock2DCrossAttn,
+        ctrl_midblock: MidBlockControlNetXSAdapter,
+    ):
+        base_to_ctrl = ctrl_midblock.base_to_ctrl
+        ctrl_to_base = ctrl_midblock.ctrl_to_base
+        ctrl_midblock = ctrl_midblock.midblock
+
+        # get params
+        def get_first_cross_attention(midblock):
+            return midblock.attentions[0].transformer_blocks[0].attn2
+
+        base_channels = ctrl_to_base.out_channels
+        ctrl_channels = ctrl_to_base.in_channels
+        transformer_layers_per_block = len(base_midblock.attentions[0].transformer_blocks)
+        temb_channels = base_midblock.resnets[0].time_emb_proj.in_features
+        num_groups = base_midblock.resnets[0].norm1.num_groups
+        ctrl_num_groups = ctrl_midblock.resnets[0].norm1.num_groups
+        base_num_attention_heads = get_first_cross_attention(base_midblock).heads
+        ctrl_num_attention_heads = get_first_cross_attention(ctrl_midblock).heads
+        cross_attention_dim = get_first_cross_attention(base_midblock).cross_attention_dim
+        upcast_attention = get_first_cross_attention(base_midblock).upcast_attention
+        use_linear_projection = base_midblock.attentions[0].use_linear_projection
+
+        # create model
+        model = cls(
+            base_channels=base_channels,
+            ctrl_channels=ctrl_channels,
+            temb_channels=temb_channels,
+            norm_num_groups=num_groups,
+            ctrl_max_norm_num_groups=ctrl_num_groups,
+            transformer_layers_per_block=transformer_layers_per_block,
+            base_num_attention_heads=base_num_attention_heads,
+            ctrl_num_attention_heads=ctrl_num_attention_heads,
+            cross_attention_dim=cross_attention_dim,
+            upcast_attention=upcast_attention,
+            use_linear_projection=use_linear_projection,
+        )
+
+        # load weights
+        model.base_to_ctrl.load_state_dict(base_to_ctrl.state_dict())
+        model.base_midblock.load_state_dict(base_midblock.state_dict())
+        model.ctrl_midblock.load_state_dict(ctrl_midblock.state_dict())
+        model.ctrl_to_base.load_state_dict(ctrl_to_base.state_dict())
+
+        return model
+
+    def freeze_base_params(self) -> None:
+
         # Unfreeze everything
         for param in self.parameters():
             param.requires_grad = True
@@ -1598,7 +1689,6 @@ class ControlNetXSCrossAttnMidBlock2D(nn.Module):
             h_base = h_base + self.ctrl_to_base(h_ctrl) * conditioning_scale  # add ctrl -> base
 
         return h_base, h_ctrl
-
 
 class ControlNetXSCrossAttnUpBlock2D(nn.Module):
     def __init__(
@@ -1732,8 +1822,139 @@ class ControlNetXSCrossAttnUpBlock2D(nn.Module):
         return model
 
     def freeze_base_params(self) -> None:
-        """Freeze the weights of the parts belonging to the base UNet2DConditionModel, and leave everything else unfrozen for fine
-        tuning."""
+        class ControlNetXSCrossAttnUpBlock2D(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        prev_output_channel: int,
+        ctrl_skip_channels: List[int],
+        temb_channels: int,
+        norm_num_groups: int = 32,
+        resolution_idx: Optional[int] = None,
+        has_crossattn=True,
+        transformer_layers_per_block: int = 1,
+        num_attention_heads: int = 1,
+        cross_attention_dim: int = 1024,
+        add_upsample: bool = True,
+        upcast_attention: bool = False,
+        use_linear_projection: Optional[bool] = True,
+    ):
+        super().__init__()
+        resnets = []
+        attentions = []
+        ctrl_to_base = []
+
+        num_layers = 3  # only support sd + sdxl
+
+        self.has_cross_attention = has_crossattn
+        self.num_attention_heads = num_attention_heads
+
+        if isinstance(transformer_layers_per_block, int):
+            transformer_layers_per_block = [transformer_layers_per_block] * num_layers
+
+        for i in range(num_layers):
+            res_skip_channels = in_channels if (i == num_layers - 1) else out_channels
+            resnet_in_channels = prev_output_channel if i == 0 else out_channels
+
+            ctrl_to_base.append(make_zero_conv(ctrl_skip_channels[i], resnet_in_channels))
+
+            resnets.append(
+                ResnetBlock2D(
+                    in_channels=resnet_in_channels + res_skip_channels,
+                    out_channels=out_channels,
+                    temb_channels=temb_channels,
+                    groups=norm_num_groups,
+                )
+            )
+
+            if has_crossattn:
+                attentions.append(
+                    Transformer2DModel(
+                        num_attention_heads,
+                        out_channels // num_attention_heads,
+                        in_channels=out_channels,
+                        num_layers=transformer_layers_per_block[i],
+                        cross_attention_dim=cross_attention_dim,
+                        use_linear_projection=use_linear_projection,
+                        upcast_attention=upcast_attention,
+                        norm_num_groups=norm_num_groups,
+                    )
+                )
+
+        self.resnets = nn.ModuleList(resnets)
+        self.attentions = nn.ModuleList(attentions) if has_crossattn else [None] * num_layers
+        self.ctrl_to_base = nn.ModuleList(ctrl_to_base)
+
+        if add_upsample:
+            self.upsamplers = Upsample2D(out_channels, use_conv=True, out_channels=out_channels)
+        else:
+            self.upsamplers = None
+
+        self.gradient_checkpointing = False
+        self.resolution_idx = resolution_idx
+
+    @classmethod
+    def from_modules(cls, base_upblock: CrossAttnUpBlock2D, ctrl_upblock: UpBlockControlNetXSAdapter):
+        ctrl_to_base_skip_connections = ctrl_upblock.ctrl_to_base
+
+        # get params
+        def get_first_cross_attention(block):
+            return block.attentions[0].transformer_blocks[0].attn2
+
+        out_channels = base_upblock.resnets[0].out_channels
+        in_channels = base_upblock.resnets[-1].in_channels - out_channels
+        prev_output_channels = base_upblock.resnets[0].in_channels - out_channels
+        ctrl_skip_channelss = [c.in_channels for c in ctrl_to_base_skip_connections]
+        temb_channels = base_upblock.resnets[0].time_emb_proj.in_features
+        num_groups = base_upblock.resnets[0].norm1.num_groups
+        resolution_idx = base_upblock.resolution_idx
+        if hasattr(base_upblock, "attentions"):
+            has_crossattn = True
+            transformer_layers_per_block = len(base_upblock.attentions[0].transformer_blocks)
+            num_attention_heads = get_first_cross_attention(base_upblock).heads
+            cross_attention_dim = get_first_cross_attention(base_upblock).cross_attention_dim
+            upcast_attention = get_first_cross_attention(base_upblock).upcast_attention
+            use_linear_projection = base_upblock.attentions[0].use_linear_projection
+        else:
+            has_crossattn = False
+            transformer_layers_per_block = None
+            num_attention_heads = None
+            cross_attention_dim = None
+            upcast_attention = None
+            use_linear_projection = None
+        add_upsample = base_upblock.upsamplers is not None
+
+        # create model
+        model = cls(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            prev_output_channel=prev_output_channels,
+            ctrl_skip_channels=ctrl_skip_channelss,
+            temb_channels=temb_channels,
+            norm_num_groups=num_groups,
+            resolution_idx=resolution_idx,
+            has_crossattn=has_crossattn,
+            transformer_layers_per_block=transformer_layers_per_block,
+            num_attention_heads=num_attention_heads,
+            cross_attention_dim=cross_attention_dim,
+            add_upsample=add_upsample,
+            upcast_attention=upcast_attention,
+            use_linear_projection=use_linear_projection,
+        )
+
+        # load weights
+        model.resnets.load_state_dict(base_upblock.resnets.state_dict())
+        if has_crossattn:
+            model.attentions.load_state_dict(base_upblock.attentions.state_dict())
+        if add_upsample:
+            model.upsamplers.load_state_dict(base_upblock.upsamplers[0].state_dict())
+        model.ctrl_to_base.load_state_dict(ctrl_to_base_skip_connections.state_dict())
+
+        return model
+
+    def freeze_base_params(self) -> None:
+
         # Unfreeze everything
         for param in self.parameters():
             param.requires_grad = True
@@ -1821,16 +2042,13 @@ class ControlNetXSCrossAttnUpBlock2D(nn.Module):
 
         return hidden_states
 
-
 def make_zero_conv(in_channels, out_channels=None):
     return zero_module(nn.Conv2d(in_channels, out_channels, 1, padding=0))
-
 
 def zero_module(module):
     for p in module.parameters():
         nn.init.zeros_(p)
     return module
-
 
 def find_largest_factor(number, max_factor):
     factor = max_factor

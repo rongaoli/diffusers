@@ -9,10 +9,8 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
-
 
 try:
     if not (is_transformers_available() and is_torch_available()):
@@ -25,7 +23,6 @@ else:
     _import_structure["pipeline_visualcloze_combined"] = ["VisualClozePipeline"]
     _import_structure["pipeline_visualcloze_generation"] = ["VisualClozeGenerationPipeline"]
 
-
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:
         if not (is_transformers_available() and is_torch_available()):
@@ -36,7 +33,6 @@ if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     else:
         from .pipeline_visualcloze_combined import VisualClozePipeline
         from .pipeline_visualcloze_generation import VisualClozeGenerationPipeline
-
 
 else:
     import sys

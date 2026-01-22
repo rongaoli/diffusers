@@ -1,17 +1,3 @@
-# Copyright 2025 HunyuanDiT Authors and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import inspect
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
@@ -33,7 +19,6 @@ from ...utils.torch_utils import randn_tensor
 from ..pipeline_utils import DiffusionPipeline
 from .pag_utils import PAGMixin
 
-
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
@@ -41,143 +26,14 @@ if is_torch_xla_available():
 else:
     XLA_AVAILABLE = False
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 EXAMPLE_DOC_STRING = """
-    Examples:
-        ```python
-        >>> import torch
-        >>> from diffusers import AutoPipelineForText2Image
+        使用示例见文档
 
-        >>> pipe = AutoPipelineForText2Image.from_pretrained(
-        ...     "Tencent-Hunyuan/HunyuanDiT-v1.2-Diffusers",
-        ...     torch_dtype=torch.float16,
-        ...     enable_pag=True,
-        ...     pag_applied_layers=[14],
-        ... ).to("cuda")
-
-        >>> # prompt = "an astronaut riding a horse"
-        >>> prompt = "一个宇航员在骑马"
-        >>> image = pipe(prompt, guidance_scale=4, pag_scale=3).images[0]
-        ```
-"""
-
-STANDARD_RATIO = np.array(
-    [
-        1.0,  # 1:1
-        4.0 / 3.0,  # 4:3
-        3.0 / 4.0,  # 3:4
-        16.0 / 9.0,  # 16:9
-        9.0 / 16.0,  # 9:16
-    ]
-)
-STANDARD_SHAPE = [
-    [(1024, 1024), (1280, 1280)],  # 1:1
-    [(1024, 768), (1152, 864), (1280, 960)],  # 4:3
-    [(768, 1024), (864, 1152), (960, 1280)],  # 3:4
-    [(1280, 768)],  # 16:9
-    [(768, 1280)],  # 9:16
-]
-STANDARD_AREA = [np.array([w * h for w, h in shapes]) for shapes in STANDARD_SHAPE]
-SUPPORTED_SHAPE = [
-    (1024, 1024),
-    (1280, 1280),  # 1:1
-    (1024, 768),
-    (1152, 864),
-    (1280, 960),  # 4:3
-    (768, 1024),
-    (864, 1152),
-    (960, 1280),  # 3:4
-    (1280, 768),  # 16:9
-    (768, 1280),  # 9:16
-]
-
-
-def map_to_standard_shapes(target_width, target_height):
-    target_ratio = target_width / target_height
-    closest_ratio_idx = np.argmin(np.abs(STANDARD_RATIO - target_ratio))
-    closest_area_idx = np.argmin(np.abs(STANDARD_AREA[closest_ratio_idx] - target_width * target_height))
-    width, height = STANDARD_SHAPE[closest_ratio_idx][closest_area_idx]
-    return width, height
-
-
-def get_resize_crop_region_for_grid(src, tgt_size):
-    th = tw = tgt_size
-    h, w = src
-
-    r = h / w
-
-    # resize
-    if r > 1:
-        resize_height = th
-        resize_width = int(round(th / h * w))
-    else:
-        resize_width = tw
-        resize_height = int(round(tw / w * h))
-
-    crop_top = int(round((th - resize_height) / 2.0))
-    crop_left = int(round((tw - resize_width) / 2.0))
-
-    return (crop_top, crop_left), (crop_top + resize_height, crop_left + resize_width)
-
-
-# Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.rescale_noise_cfg
-def rescale_noise_cfg(noise_cfg, noise_pred_text, guidance_rescale=0.0):
-    r"""
     Rescales `noise_cfg` tensor based on `guidance_rescale` to improve image quality and fix overexposure. Based on
     Section 3.4 from [Common Diffusion Noise Schedules and Sample Steps are
     Flawed](https://huggingface.co/papers/2305.08891).
-
-    Args:
-        noise_cfg (`torch.Tensor`):
-            The predicted noise tensor for the guided diffusion process.
-        noise_pred_text (`torch.Tensor`):
-            The predicted noise tensor for the text-guided diffusion process.
-        guidance_rescale (`float`, *optional*, defaults to 0.0):
-            A rescale factor applied to the noise predictions.
-
-    Returns:
-        noise_cfg (`torch.Tensor`): The rescaled noise prediction tensor.
-    """
-    std_text = noise_pred_text.std(dim=list(range(1, noise_pred_text.ndim)), keepdim=True)
-    std_cfg = noise_cfg.std(dim=list(range(1, noise_cfg.ndim)), keepdim=True)
-    # rescale the results from guidance (fixes overexposure)
-    noise_pred_rescaled = noise_cfg * (std_text / std_cfg)
-    # mix with the original results from guidance by factor guidance_rescale to avoid "plain looking" images
-    noise_cfg = guidance_rescale * noise_pred_rescaled + (1 - guidance_rescale) * noise_cfg
-    return noise_cfg
-
-
-class HunyuanDiTPAGPipeline(DiffusionPipeline, PAGMixin):
-    r"""
-    Pipeline for English/Chinese-to-image generation using HunyuanDiT and [Perturbed Attention
-    Guidance](https://huggingface.co/docs/diffusers/en/using-diffusers/pag).
-
-    This model inherits from [`DiffusionPipeline`]. Check the superclass documentation for the generic methods the
-    library implements for all the pipelines (such as downloading or saving, running on a particular device, etc.)
-
-    HunyuanDiT uses two text encoders: [mT5](https://huggingface.co/google/mt5-base) and [bilingual CLIP](fine-tuned by
-    ourselves)
-
-    Args:
-        vae ([`AutoencoderKL`]):
-            Variational Auto-Encoder (VAE) Model to encode and decode images to and from latent representations. We use
-            `sdxl-vae-fp16-fix`.
-        text_encoder (Optional[`~transformers.BertModel`, `~transformers.CLIPTextModel`]):
-            Frozen text-encoder ([clip-vit-large-patch14](https://huggingface.co/openai/clip-vit-large-patch14)).
-            HunyuanDiT uses a fine-tuned [bilingual CLIP].
-        tokenizer (Optional[`~transformers.BertTokenizer`, `~transformers.CLIPTokenizer`]):
-            A `BertTokenizer` or `CLIPTokenizer` to tokenize text.
-        transformer ([`HunyuanDiT2DModel`]):
-            The HunyuanDiT model designed by Tencent Hunyuan.
-        text_encoder_2 (`T5EncoderModel`):
-            The mT5 embedder. Specifically, it is 't5-v1_1-xxl'.
-        tokenizer_2 (`T5Tokenizer`):
-            The tokenizer for the mT5 embedder.
-        scheduler ([`DDPMScheduler`]):
-            A scheduler to be used in combination with HunyuanDiT to denoise the encoded image latents.
-    """
 
     model_cpu_offload_seq = "text_encoder->text_encoder_2->transformer->vae"
     _optional_components = [
@@ -254,7 +110,7 @@ class HunyuanDiTPAGPipeline(DiffusionPipeline, PAGMixin):
             pag_applied_layers, pag_attn_processors=(PAGCFGHunyuanAttnProcessor2_0(), PAGHunyuanAttnProcessor2_0())
         )
 
-    # Copied from diffusers.pipelines.hunyuandit.pipeline_hunyuandit.HunyuanDiTPipeline.encode_prompt
+    # Copied from diffusers.pipelines.hunyuandit.p...
     def encode_prompt(
         self,
         prompt: str,
@@ -270,39 +126,8 @@ class HunyuanDiTPAGPipeline(DiffusionPipeline, PAGMixin):
         max_sequence_length: Optional[int] = None,
         text_encoder_index: int = 0,
     ):
-        r"""
-        Encodes the prompt into text encoder hidden states.
-
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                prompt to be encoded
-            device: (`torch.device`):
-                torch device
-            dtype (`torch.dtype`):
-                torch dtype
-            num_images_per_prompt (`int`):
-                number of images that should be generated per prompt
-            do_classifier_free_guidance (`bool`):
-                whether to use classifier free guidance or not
-            negative_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts not to guide the image generation. If not defined, one has to pass
-                `negative_prompt_embeds` instead. Ignored when not using guidance (i.e., ignored if `guidance_scale` is
-                less than `1`).
-            prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt weighting. If not
-                provided, text embeddings will be generated from `prompt` input argument.
-            negative_prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated negative text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt
-                weighting. If not provided, negative_prompt_embeds will be generated from `negative_prompt` input
-                argument.
-            prompt_attention_mask (`torch.Tensor`, *optional*):
-                Attention mask for the prompt. Required when `prompt_embeds` is passed directly.
-            negative_prompt_attention_mask (`torch.Tensor`, *optional*):
-                Attention mask for the negative prompt. Required when `negative_prompt_embeds` is passed directly.
-            max_sequence_length (`int`, *optional*): maximum sequence length to use for the prompt.
-            text_encoder_index (`int`, *optional*):
-                Index of the text encoder to use. `0` for clip and `1` for T5.
-        """
+        
+        """r"""
         if dtype is None:
             if self.text_encoder_2 is not None:
                 dtype = self.text_encoder_2.dtype
@@ -410,7 +235,7 @@ class HunyuanDiTPAGPipeline(DiffusionPipeline, PAGMixin):
             negative_prompt_attention_mask = negative_prompt_attention_mask.repeat(num_images_per_prompt, 1)
 
         if do_classifier_free_guidance:
-            # duplicate unconditional embeddings for each generation per prompt, using mps friendly method
+            # duplicate unconditional embeddings f...
             seq_len = negative_prompt_embeds.shape[1]
 
             negative_prompt_embeds = negative_prompt_embeds.to(dtype=dtype, device=device)
@@ -420,7 +245,7 @@ class HunyuanDiTPAGPipeline(DiffusionPipeline, PAGMixin):
 
         return prompt_embeds, negative_prompt_embeds, prompt_attention_mask, negative_prompt_attention_mask
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.run_safety_checker
+    # Copied from diffusers.pipelines.stable_diffu...
     def run_safety_checker(self, image, device, dtype):
         if self.safety_checker is None:
             has_nsfw_concept = None
@@ -435,9 +260,9 @@ class HunyuanDiTPAGPipeline(DiffusionPipeline, PAGMixin):
             )
         return image, has_nsfw_concept
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_extra_step_kwargs
+    # Copied from diffusers.pipelines.stable_diffu...
     def prepare_extra_step_kwargs(self, generator, eta):
-        # prepare extra kwargs for the scheduler step, since not all schedulers have the same signature
+        # prepare extra kwargs for the scheduler s...
         # eta (η) is only used with the DDIMScheduler, it will be ignored for other schedulers.
         # eta corresponds to η in DDIM paper: https://huggingface.co/papers/2010.02502
         # and should be between [0, 1]
@@ -530,7 +355,7 @@ class HunyuanDiTPAGPipeline(DiffusionPipeline, PAGMixin):
                     f" {negative_prompt_embeds_2.shape}."
                 )
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_latents
+    # Copied from diffusers.pipelines.stable_diffu...
     def prepare_latents(self, batch_size, num_channels_latents, height, width, dtype, device, generator, latents=None):
         shape = (
             batch_size,
@@ -585,10 +410,10 @@ class HunyuanDiTPAGPipeline(DiffusionPipeline, PAGMixin):
         width: Optional[int] = None,
         num_inference_steps: Optional[int] = 50,
         guidance_scale: Optional[float] = 5.0,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        negative_prompt: Optional[str] = None,
         num_images_per_prompt: Optional[int] = 1,
         eta: Optional[float] = 0.0,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+        generator: Optional[torch.Generator] = None,
         latents: Optional[torch.Tensor] = None,
         prompt_embeds: Optional[torch.Tensor] = None,
         prompt_embeds_2: Optional[torch.Tensor] = None,
@@ -612,21 +437,8 @@ class HunyuanDiTPAGPipeline(DiffusionPipeline, PAGMixin):
         pag_scale: float = 3.0,
         pag_adaptive_scale: float = 0.0,
     ):
-        r"""
-        The call function to the pipeline for generation with HunyuanDiT.
 
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to guide image generation. If not defined, you need to pass `prompt_embeds`.
-            height (`int`):
-                The height in pixels of the generated image.
-            width (`int`):
-                The width in pixels of the generated image.
-            num_inference_steps (`int`, *optional*, defaults to 50):
-                The number of denoising steps. More denoising steps usually lead to a higher quality image at the
-                expense of slower inference. This parameter is modulated by `strength`.
-            guidance_scale (`float`, *optional*, defaults to 7.5):
-                A higher guidance scale value encourages the model to generate images closely linked to the text
+        The call function to the pipeline for generation with HunyuanDiT.
                 `prompt` at the expense of lower image quality. Guidance scale is enabled when `guidance_scale > 1`.
             negative_prompt (`str` or `List[str]`, *optional*):
                 The prompt or prompts to guide what to not include in image generation. If not defined, you need to
@@ -690,274 +502,3 @@ class HunyuanDiTPAGPipeline(DiffusionPipeline, PAGMixin):
                 used.
 
         Examples:
-
-        Returns:
-            [`~pipelines.stable_diffusion.StableDiffusionPipelineOutput`] or `tuple`:
-                If `return_dict` is `True`, [`~pipelines.stable_diffusion.StableDiffusionPipelineOutput`] is returned,
-                otherwise a `tuple` is returned where the first element is a list with the generated images and the
-                second element is a list of `bool`s indicating whether the corresponding generated image contains
-                "not-safe-for-work" (nsfw) content.
-        """
-
-        if isinstance(callback_on_step_end, (PipelineCallback, MultiPipelineCallbacks)):
-            callback_on_step_end_tensor_inputs = callback_on_step_end.tensor_inputs
-
-        # 0. Default height and width
-        height = height or self.default_sample_size * self.vae_scale_factor
-        width = width or self.default_sample_size * self.vae_scale_factor
-        height = int((height // 16) * 16)
-        width = int((width // 16) * 16)
-
-        if use_resolution_binning and (height, width) not in SUPPORTED_SHAPE:
-            width, height = map_to_standard_shapes(width, height)
-            height = int(height)
-            width = int(width)
-            logger.warning(f"Reshaped to (height, width)=({height}, {width}), Supported shapes are {SUPPORTED_SHAPE}")
-
-        # 1. Check inputs. Raise error if not correct
-        self.check_inputs(
-            prompt,
-            height,
-            width,
-            negative_prompt,
-            prompt_embeds,
-            negative_prompt_embeds,
-            prompt_attention_mask,
-            negative_prompt_attention_mask,
-            prompt_embeds_2,
-            negative_prompt_embeds_2,
-            prompt_attention_mask_2,
-            negative_prompt_attention_mask_2,
-            callback_on_step_end_tensor_inputs,
-        )
-        self._guidance_scale = guidance_scale
-        self._guidance_rescale = guidance_rescale
-        self._interrupt = False
-        self._pag_scale = pag_scale
-        self._pag_adaptive_scale = pag_adaptive_scale
-
-        # 2. Define call parameters
-        if prompt is not None and isinstance(prompt, str):
-            batch_size = 1
-        elif prompt is not None and isinstance(prompt, list):
-            batch_size = len(prompt)
-        else:
-            batch_size = prompt_embeds.shape[0]
-
-        device = self._execution_device
-
-        # 3. Encode input prompt
-        (
-            prompt_embeds,
-            negative_prompt_embeds,
-            prompt_attention_mask,
-            negative_prompt_attention_mask,
-        ) = self.encode_prompt(
-            prompt=prompt,
-            device=device,
-            dtype=self.transformer.dtype,
-            num_images_per_prompt=num_images_per_prompt,
-            do_classifier_free_guidance=self.do_classifier_free_guidance,
-            negative_prompt=negative_prompt,
-            prompt_embeds=prompt_embeds,
-            negative_prompt_embeds=negative_prompt_embeds,
-            prompt_attention_mask=prompt_attention_mask,
-            negative_prompt_attention_mask=negative_prompt_attention_mask,
-            max_sequence_length=77,
-            text_encoder_index=0,
-        )
-        (
-            prompt_embeds_2,
-            negative_prompt_embeds_2,
-            prompt_attention_mask_2,
-            negative_prompt_attention_mask_2,
-        ) = self.encode_prompt(
-            prompt=prompt,
-            device=device,
-            dtype=self.transformer.dtype,
-            num_images_per_prompt=num_images_per_prompt,
-            do_classifier_free_guidance=self.do_classifier_free_guidance,
-            negative_prompt=negative_prompt,
-            prompt_embeds=prompt_embeds_2,
-            negative_prompt_embeds=negative_prompt_embeds_2,
-            prompt_attention_mask=prompt_attention_mask_2,
-            negative_prompt_attention_mask=negative_prompt_attention_mask_2,
-            max_sequence_length=256,
-            text_encoder_index=1,
-        )
-
-        # 4. Prepare timesteps
-        self.scheduler.set_timesteps(num_inference_steps, device=device)
-        timesteps = self.scheduler.timesteps
-
-        # 5. Prepare latent variables
-        num_channels_latents = self.transformer.config.in_channels
-        latents = self.prepare_latents(
-            batch_size * num_images_per_prompt,
-            num_channels_latents,
-            height,
-            width,
-            prompt_embeds.dtype,
-            device,
-            generator,
-            latents,
-        )
-
-        # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
-        extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
-
-        # 7. Create image_rotary_emb, style embedding & time ids
-        grid_height = height // 8 // self.transformer.config.patch_size
-        grid_width = width // 8 // self.transformer.config.patch_size
-        base_size = 512 // 8 // self.transformer.config.patch_size
-        grid_crops_coords = get_resize_crop_region_for_grid((grid_height, grid_width), base_size)
-        image_rotary_emb = get_2d_rotary_pos_embed(
-            self.transformer.inner_dim // self.transformer.num_heads,
-            grid_crops_coords,
-            (grid_height, grid_width),
-            device=device,
-            output_type="pt",
-        )
-
-        style = torch.tensor([0], device=device)
-
-        target_size = target_size or (height, width)
-        add_time_ids = list(original_size + target_size + crops_coords_top_left)
-        add_time_ids = torch.tensor([add_time_ids], dtype=prompt_embeds.dtype)
-
-        # For classifier free guidance, we need to do two forward passes.
-        # Here we concatenate the unconditional and text embeddings into a single batch
-        # to avoid doing two forward passes
-        if self.do_perturbed_attention_guidance:
-            prompt_embeds = self._prepare_perturbed_attention_guidance(
-                prompt_embeds, negative_prompt_embeds, self.do_classifier_free_guidance
-            )
-            prompt_attention_mask = self._prepare_perturbed_attention_guidance(
-                prompt_attention_mask, negative_prompt_attention_mask, self.do_classifier_free_guidance
-            )
-            prompt_embeds_2 = self._prepare_perturbed_attention_guidance(
-                prompt_embeds_2, negative_prompt_embeds_2, self.do_classifier_free_guidance
-            )
-            prompt_attention_mask_2 = self._prepare_perturbed_attention_guidance(
-                prompt_attention_mask_2, negative_prompt_attention_mask_2, self.do_classifier_free_guidance
-            )
-            add_time_ids = torch.cat([add_time_ids] * 3, dim=0)
-            style = torch.cat([style] * 3, dim=0)
-        elif self.do_classifier_free_guidance:
-            prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
-            prompt_attention_mask = torch.cat([negative_prompt_attention_mask, prompt_attention_mask])
-            prompt_embeds_2 = torch.cat([negative_prompt_embeds_2, prompt_embeds_2])
-            prompt_attention_mask_2 = torch.cat([negative_prompt_attention_mask_2, prompt_attention_mask_2])
-            add_time_ids = torch.cat([add_time_ids] * 2, dim=0)
-            style = torch.cat([style] * 2, dim=0)
-
-        prompt_embeds = prompt_embeds.to(device=device)
-        prompt_attention_mask = prompt_attention_mask.to(device=device)
-        prompt_embeds_2 = prompt_embeds_2.to(device=device)
-        prompt_attention_mask_2 = prompt_attention_mask_2.to(device=device)
-        add_time_ids = add_time_ids.to(dtype=prompt_embeds.dtype, device=device).repeat(
-            batch_size * num_images_per_prompt, 1
-        )
-        style = style.to(device=device).repeat(batch_size * num_images_per_prompt)
-
-        # 8. Denoising loop
-        num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
-        self._num_timesteps = len(timesteps)
-
-        if self.do_perturbed_attention_guidance:
-            original_attn_proc = self.transformer.attn_processors
-            self._set_pag_attn_processor(
-                pag_applied_layers=self.pag_applied_layers,
-                do_classifier_free_guidance=self.do_classifier_free_guidance,
-            )
-
-        with self.progress_bar(total=num_inference_steps) as progress_bar:
-            for i, t in enumerate(timesteps):
-                if self.interrupt:
-                    continue
-
-                # expand the latents if we are doing classifier free guidance
-                latent_model_input = torch.cat([latents] * (prompt_embeds.shape[0] // latents.shape[0]))
-                latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
-
-                # expand scalar t to 1-D tensor to match the 1st dim of latent_model_input
-                t_expand = torch.tensor([t] * latent_model_input.shape[0], device=device).to(
-                    dtype=latent_model_input.dtype
-                )
-
-                # predict the noise residual
-                noise_pred = self.transformer(
-                    latent_model_input,
-                    t_expand,
-                    encoder_hidden_states=prompt_embeds,
-                    text_embedding_mask=prompt_attention_mask,
-                    encoder_hidden_states_t5=prompt_embeds_2,
-                    text_embedding_mask_t5=prompt_attention_mask_2,
-                    image_meta_size=add_time_ids,
-                    style=style,
-                    image_rotary_emb=image_rotary_emb,
-                    return_dict=False,
-                )[0]
-
-                noise_pred, _ = noise_pred.chunk(2, dim=1)
-
-                # perform guidance
-                if self.do_perturbed_attention_guidance:
-                    noise_pred, noise_pred_text = self._apply_perturbed_attention_guidance(
-                        noise_pred, self.do_classifier_free_guidance, self.guidance_scale, t, True
-                    )
-                elif self.do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                    noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
-
-                if self.do_classifier_free_guidance and guidance_rescale > 0.0:
-                    # Based on 3.4. in https://huggingface.co/papers/2305.08891
-                    noise_pred = rescale_noise_cfg(noise_pred, noise_pred_text, guidance_rescale=guidance_rescale)
-
-                # compute the previous noisy sample x_t -> x_t-1
-                latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
-
-                if callback_on_step_end is not None:
-                    callback_kwargs = {}
-                    for k in callback_on_step_end_tensor_inputs:
-                        callback_kwargs[k] = locals()[k]
-                    callback_outputs = callback_on_step_end(self, i, t, callback_kwargs)
-
-                    latents = callback_outputs.pop("latents", latents)
-                    prompt_embeds = callback_outputs.pop("prompt_embeds", prompt_embeds)
-                    negative_prompt_embeds = callback_outputs.pop("negative_prompt_embeds", negative_prompt_embeds)
-                    prompt_embeds_2 = callback_outputs.pop("prompt_embeds_2", prompt_embeds_2)
-                    negative_prompt_embeds_2 = callback_outputs.pop(
-                        "negative_prompt_embeds_2", negative_prompt_embeds_2
-                    )
-
-                if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
-                    progress_bar.update()
-
-                if XLA_AVAILABLE:
-                    xm.mark_step()
-
-        if not output_type == "latent":
-            image = self.vae.decode(latents / self.vae.config.scaling_factor, return_dict=False)[0]
-            image, has_nsfw_concept = self.run_safety_checker(image, device, prompt_embeds.dtype)
-        else:
-            image = latents
-            has_nsfw_concept = None
-
-        if has_nsfw_concept is None:
-            do_denormalize = [True] * image.shape[0]
-        else:
-            do_denormalize = [not has_nsfw for has_nsfw in has_nsfw_concept]
-
-        image = self.image_processor.postprocess(image, output_type=output_type, do_denormalize=do_denormalize)
-
-        # 9. Offload all models
-        self.maybe_free_model_hooks()
-
-        if self.do_perturbed_attention_guidance:
-            self.transformer.set_attn_processor(original_attn_proc)
-
-        if not return_dict:
-            return (image, has_nsfw_concept)
-
-        return StableDiffusionPipelineOutput(images=image, nsfw_content_detected=has_nsfw_concept)

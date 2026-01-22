@@ -10,7 +10,6 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 _dummy_objects = {}
 _additional_imports = {}
 _import_structure = {"pipeline_output": ["StableDiffusion3PipelineOutput"]}

@@ -1,26 +1,10 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""
 Adapted from
 https://github.com/huggingface/transformers/blob/c409cd81777fb27aadc043ed3d8339dbc020fb3b/src/transformers/quantizers/quantizer_bnb_4bit.py
-"""
 
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from ...utils import get_module_from_name
 from ..base import DiffusersQuantizer
-
 
 if TYPE_CHECKING:
     from ...models.modeling_utils import ModelMixin
@@ -34,22 +18,15 @@ from ...utils import (
     logging,
 )
 
-
 if is_torch_available():
     import torch
 
 logger = logging.get_logger(__name__)
 
-
 class BnB4BitDiffusersQuantizer(DiffusersQuantizer):
-    """
-    4-bit quantization from bitsandbytes.py quantization method:
-        before loading: converts transformer layers into Linear4bit during loading: load 16bit weight and pass to the
-        layer object after: quantizes individual weights in Linear4bit into 4bit at the first .cuda() call saving:
-            from state dict, as usual; saves weights and `quant_state` components
-        loading:
-            need to locate `quant_state` components and pass to Param4bit constructor
-    """
+    
+    class BnB4BitDiffusersQuantizer(DiffusersQuantizer):
+
 
     use_keep_in_fp32_modules = True
     requires_calibration = False
@@ -262,7 +239,7 @@ class BnB4BitDiffusersQuantizer(DiffusersQuantizer):
 
         load_in_8bit_fp32_cpu_offload = self.quantization_config.llm_int8_enable_fp32_cpu_offload
 
-        # We may keep some modules such as the `proj_out` in their original dtype for numerical stability reasons
+        # We may keep some modules such as the `pr...
         self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
 
         if not isinstance(self.modules_to_not_convert, list):
@@ -270,7 +247,7 @@ class BnB4BitDiffusersQuantizer(DiffusersQuantizer):
 
         self.modules_to_not_convert.extend(keep_in_fp32_modules)
 
-        # Extend `self.modules_to_not_convert` to keys that are supposed to be offloaded to `cpu` or `disk`
+        # Extend `self.modules_to_not_convert` to...
         if isinstance(device_map, dict) and len(device_map.keys()) > 1:
             keys_on_cpu = [key for key, value in device_map.items() if value in ["disk", "cpu"]]
 
@@ -328,17 +305,10 @@ class BnB4BitDiffusersQuantizer(DiffusersQuantizer):
             model.to("cpu")
         return model
 
-
 class BnB8BitDiffusersQuantizer(DiffusersQuantizer):
-    """
-    8-bit quantization from bitsandbytes quantization method:
-        before loading: converts transformer layers into Linear8bitLt during loading: load 16bit weight and pass to the
-        layer object after: quantizes individual weights in Linear8bitLt into 8bit at fitst .cuda() call
-    saving:
-        from state dict, as usual; saves weights and 'SCB' component
-    loading:
-        need to locate SCB component and pass to the Linear8bitLt object
-    """
+    
+    class BnB8BitDiffusersQuantizer(DiffusersQuantizer):
+
 
     use_keep_in_fp32_modules = True
     requires_calibration = False
@@ -386,13 +356,13 @@ class BnB8BitDiffusersQuantizer(DiffusersQuantizer):
                     "for more details. "
                 )
 
-    # Copied from diffusers.quantizers.bitsandbytes.bnb_quantizer.BnB4BitDiffusersQuantizer.adjust_max_memory
+    # Copied from diffusers.quantizers.bitsandbyte...
     def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
         # need more space for buffers that are created during quantization
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
 
-    # Copied from diffusers.quantizers.bitsandbytes.bnb_quantizer.BnB4BitDiffusersQuantizer.update_torch_dtype
+    # Copied from diffusers.quantizers.bitsandbyte...
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
             # We force the `dtype` to be float16, this is a requirement from `bitsandbytes`
@@ -406,7 +376,7 @@ class BnB8BitDiffusersQuantizer(DiffusersQuantizer):
             torch_dtype = torch.float16
         return torch_dtype
 
-    # Copied from diffusers.quantizers.bitsandbytes.bnb_quantizer.BnB4BitDiffusersQuantizer.update_device_map
+    # Copied from diffusers.quantizers.bitsandbyte...
     def update_device_map(self, device_map):
         if device_map is None:
             if torch.xpu.is_available():
@@ -503,12 +473,12 @@ class BnB8BitDiffusersQuantizer(DiffusersQuantizer):
         if fp16_weights_format is not None and unexpected_keys is not None:
             unexpected_keys.remove(fp16_weights_format_key)
 
-    # Copied from diffusers.quantizers.bitsandbytes.bnb_quantizer.BnB4BitDiffusersQuantizer._process_model_after_weight_loading with 4bit->8bit
+    # Copied from diffusers.quantizers.bitsandbyte...
     def _process_model_after_weight_loading(self, model: "ModelMixin", **kwargs):
         model.is_8bit_serializable = self.is_serializable
         return model
 
-    # Copied from diffusers.quantizers.bitsandbytes.bnb_quantizer.BnB4BitDiffusersQuantizer._process_model_before_weight_loading with 4bit->8bit
+    # Copied from diffusers.quantizers.bitsandbyte...
     def _process_model_before_weight_loading(
         self,
         model: "ModelMixin",
@@ -520,7 +490,7 @@ class BnB8BitDiffusersQuantizer(DiffusersQuantizer):
 
         load_in_8bit_fp32_cpu_offload = self.quantization_config.llm_int8_enable_fp32_cpu_offload
 
-        # We may keep some modules such as the `proj_out` in their original dtype for numerical stability reasons
+        # We may keep some modules such as the `pr...
         self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
 
         if not isinstance(self.modules_to_not_convert, list):
@@ -528,7 +498,7 @@ class BnB8BitDiffusersQuantizer(DiffusersQuantizer):
 
         self.modules_to_not_convert.extend(keep_in_fp32_modules)
 
-        # Extend `self.modules_to_not_convert` to keys that are supposed to be offloaded to `cpu` or `disk`
+        # Extend `self.modules_to_not_convert` to...
         if isinstance(device_map, dict) and len(device_map.keys()) > 1:
             keys_on_cpu = [key for key, value in device_map.items() if value in ["disk", "cpu"]]
 
@@ -553,13 +523,13 @@ class BnB8BitDiffusersQuantizer(DiffusersQuantizer):
         model.is_loaded_in_8bit = True
 
     @property
-    # Copied from diffusers.quantizers.bitsandbytes.bnb_quantizer.BnB4BitDiffusersQuantizer.is_serializable
+    # Copied from diffusers.quantizers.bitsandbyte...
     def is_serializable(self):
         # Because we're mandating `bitsandbytes` 0.43.3.
         return True
 
     @property
-    # Copied from diffusers.quantizers.bitsandbytes.bnb_quantizer.BnB4BitDiffusersQuantizer.is_serializable
+    # Copied from diffusers.quantizers.bitsandbyte...
     def is_trainable(self) -> bool:
         # Because we're mandating `bitsandbytes` 0.43.3.
         return True

@@ -11,7 +11,6 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
 
@@ -79,7 +78,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["spectrogram_diffusion"] = ["MidiProcessor", "SpectrogramDiffusionPipeline"]
 
-
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:
         if not is_torch_available():
@@ -138,7 +136,6 @@ if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
             MidiProcessor,
             SpectrogramDiffusionPipeline,
         )
-
 
 else:
     import sys

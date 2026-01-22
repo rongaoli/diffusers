@@ -2,12 +2,10 @@ import torch.nn as nn
 
 from ...utils import is_accelerate_available, logging
 
-
 logger = logging.get_logger(__name__)
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
-
 
 def _replace_with_quanto_layers(model, quantization_config, modules_to_not_convert: list, pre_quantized=False):
     # Quanto imports diffusers internally. These are placed here to avoid circular imports
@@ -52,7 +50,7 @@ def _replace_with_quanto_layers(model, quantization_config, modules_to_not_conve
             " https://github.com/huggingface/diffusers/issues/new"
         )
 
-    # We need to freeze the pre_quantized model in order for the loaded state_dict and model state dict
+    # We need to freeze the pre_quantized model in...
     # to match when trying to load weights with load_model_dict_into_meta
     if pre_quantized:
         freeze(model)

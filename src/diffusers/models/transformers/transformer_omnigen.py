@@ -1,17 +1,3 @@
-# Copyright 2025 OmniGen team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import math
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -27,9 +13,7 @@ from ..modeling_outputs import Transformer2DModelOutput
 from ..modeling_utils import ModelMixin
 from ..normalization import AdaLayerNorm, RMSNorm
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 class OmniGenFeedForward(nn.Module):
     def __init__(self, hidden_size: int, intermediate_size: int):
@@ -44,7 +28,6 @@ class OmniGenFeedForward(nn.Module):
         gate, up_states = up_states.chunk(2, dim=-1)
         up_states = up_states * self.activation_fn(gate)
         return self.down_proj(up_states)
-
 
 class OmniGenPatchEmbed(nn.Module):
     def __init__(
@@ -80,7 +63,55 @@ class OmniGenPatchEmbed(nn.Module):
         self.register_buffer("pos_embed", pos_embed.float().unsqueeze(0), persistent=True)
 
     def _cropped_pos_embed(self, height, width):
-        """Crops positional embeddings for SD3 compatibility."""
+        class OmniGenFeedForward(nn.Module):
+    def __init__(self, hidden_size: int, intermediate_size: int):
+        super().__init__()
+
+        self.gate_up_proj = nn.Linear(hidden_size, 2 * intermediate_size, bias=False)
+        self.down_proj = nn.Linear(intermediate_size, hidden_size, bias=False)
+        self.activation_fn = nn.SiLU()
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        up_states = self.gate_up_proj(hidden_states)
+        gate, up_states = up_states.chunk(2, dim=-1)
+        up_states = up_states * self.activation_fn(gate)
+        return self.down_proj(up_states)
+
+class OmniGenPatchEmbed(nn.Module):
+    def __init__(
+        self,
+        patch_size: int = 2,
+        in_channels: int = 4,
+        embed_dim: int = 768,
+        bias: bool = True,
+        interpolation_scale: float = 1,
+        pos_embed_max_size: int = 192,
+        base_size: int = 64,
+    ):
+        super().__init__()
+
+        self.output_image_proj = nn.Conv2d(
+            in_channels, embed_dim, kernel_size=(patch_size, patch_size), stride=patch_size, bias=bias
+        )
+        self.input_image_proj = nn.Conv2d(
+            in_channels, embed_dim, kernel_size=(patch_size, patch_size), stride=patch_size, bias=bias
+        )
+
+        self.patch_size = patch_size
+        self.interpolation_scale = interpolation_scale
+        self.pos_embed_max_size = pos_embed_max_size
+
+        pos_embed = get_2d_sincos_pos_embed(
+            embed_dim,
+            self.pos_embed_max_size,
+            base_size=base_size,
+            interpolation_scale=self.interpolation_scale,
+            output_type="pt",
+        )
+        self.register_buffer("pos_embed", pos_embed.float().unsqueeze(0), persistent=True)
+
+    def _cropped_pos_embed(self, height, width):
+
         if self.pos_embed_max_size is None:
             raise ValueError("`pos_embed_max_size` must be set for cropping.")
 
@@ -133,7 +164,6 @@ class OmniGenPatchEmbed(nn.Module):
 
         return patched_latents
 
-
 class OmniGenSuScaledRotaryEmbedding(nn.Module):
     def __init__(
         self, dim, max_position_embeddings=131072, original_max_position_embeddings=4096, base=10000, rope_scaling=None
@@ -184,12 +214,59 @@ class OmniGenSuScaledRotaryEmbedding(nn.Module):
             sin = emb.sin() * scaling_factor
         return cos, sin
 
+class OmniGenAttnProcessor2_0:
+    class OmniGenSuScaledRotaryEmbedding(nn.Module):
+    def __init__(
+        self, dim, max_position_embeddings=131072, original_max_position_embeddings=4096, base=10000, rope_scaling=None
+    ):
+        super().__init__()
+
+        self.dim = dim
+        self.max_position_embeddings = max_position_embeddings
+        self.base = base
+
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim))
+        self.register_buffer("inv_freq", tensor=inv_freq, persistent=False)
+
+        self.short_factor = rope_scaling["short_factor"]
+        self.long_factor = rope_scaling["long_factor"]
+        self.original_max_position_embeddings = original_max_position_embeddings
+
+    def forward(self, hidden_states, position_ids):
+        seq_len = torch.max(position_ids) + 1
+        if seq_len > self.original_max_position_embeddings:
+            ext_factors = torch.tensor(self.long_factor, dtype=torch.float32, device=hidden_states.device)
+        else:
+            ext_factors = torch.tensor(self.short_factor, dtype=torch.float32, device=hidden_states.device)
+
+        inv_freq_shape = (
+            torch.arange(0, self.dim, 2, dtype=torch.int64, device=hidden_states.device).float() / self.dim
+        )
+        self.inv_freq = 1.0 / (ext_factors * self.base**inv_freq_shape)
+
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        # Force float32 since bfloat16 loses precision on long contexts
+        # See https://github.com/huggingface/transformers/pull/29285
+        device_type = hidden_states.device.type
+        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)[0]
+
+            scale = self.max_position_embeddings / self.original_max_position_embeddings
+            if scale <= 1.0:
+                scaling_factor = 1.0
+            else:
+                scaling_factor = math.sqrt(1 + math.log(scale) / math.log(self.original_max_position_embeddings))
+
+            cos = emb.cos() * scaling_factor
+            sin = emb.sin() * scaling_factor
+        return cos, sin
 
 class OmniGenAttnProcessor2_0:
-    r"""
-    Processor for implementing scaled dot-product attention (enabled by default if you're using PyTorch 2.0). This is
-    used in the OmniGen model.
-    """
+
 
     def __init__(self):
         if not hasattr(F, "scaled_dot_product_attention"):
@@ -233,7 +310,6 @@ class OmniGenAttnProcessor2_0:
         hidden_states = hidden_states.reshape(bsz, q_len, attn.out_dim)
         hidden_states = attn.to_out[0](hidden_states)
         return hidden_states
-
 
 class OmniGenBlock(nn.Module):
     def __init__(
@@ -280,47 +356,54 @@ class OmniGenBlock(nn.Module):
         hidden_states = hidden_states + ff_output
         return hidden_states
 
+class OmniGenTransformer2DModel(ModelMixin, ConfigMixin):
+    class OmniGenBlock(nn.Module):
+    def __init__(
+        self,
+        hidden_size: int,
+        num_attention_heads: int,
+        num_key_value_heads: int,
+        intermediate_size: int,
+        rms_norm_eps: float,
+    ) -> None:
+        super().__init__()
+
+        self.input_layernorm = RMSNorm(hidden_size, eps=rms_norm_eps)
+        self.self_attn = Attention(
+            query_dim=hidden_size,
+            cross_attention_dim=hidden_size,
+            dim_head=hidden_size // num_attention_heads,
+            heads=num_attention_heads,
+            kv_heads=num_key_value_heads,
+            bias=False,
+            out_dim=hidden_size,
+            out_bias=False,
+            processor=OmniGenAttnProcessor2_0(),
+        )
+        self.post_attention_layernorm = RMSNorm(hidden_size, eps=rms_norm_eps)
+        self.mlp = OmniGenFeedForward(hidden_size, intermediate_size)
+
+    def forward(
+        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, image_rotary_emb: torch.Tensor
+    ) -> torch.Tensor:
+        # 1. Attention
+        norm_hidden_states = self.input_layernorm(hidden_states)
+        attn_output = self.self_attn(
+            hidden_states=norm_hidden_states,
+            encoder_hidden_states=norm_hidden_states,
+            attention_mask=attention_mask,
+            image_rotary_emb=image_rotary_emb,
+        )
+        hidden_states = hidden_states + attn_output
+
+        # 2. Feed Forward
+        norm_hidden_states = self.post_attention_layernorm(hidden_states)
+        ff_output = self.mlp(norm_hidden_states)
+        hidden_states = hidden_states + ff_output
+        return hidden_states
 
 class OmniGenTransformer2DModel(ModelMixin, ConfigMixin):
-    """
-    The Transformer model introduced in OmniGen (https://huggingface.co/papers/2409.11340).
 
-    Parameters:
-        in_channels (`int`, defaults to `4`):
-            The number of channels in the input.
-        patch_size (`int`, defaults to `2`):
-            The size of the spatial patches to use in the patch embedding layer.
-        hidden_size (`int`, defaults to `3072`):
-            The dimensionality of the hidden layers in the model.
-        rms_norm_eps (`float`, defaults to `1e-5`):
-            Eps for RMSNorm layer.
-        num_attention_heads (`int`, defaults to `32`):
-            The number of heads to use for multi-head attention.
-        num_key_value_heads (`int`, defaults to `32`):
-            The number of heads to use for keys and values in multi-head attention.
-        intermediate_size (`int`, defaults to `8192`):
-            Dimension of the hidden layer in FeedForward layers.
-        num_layers (`int`, default to `32`):
-            The number of layers of transformer blocks to use.
-        pad_token_id (`int`, default to `32000`):
-            The id of the padding token.
-        vocab_size (`int`, default to `32064`):
-            The size of the vocabulary of the embedding vocabulary.
-        rope_base (`int`, default to `10000`):
-            The default theta value to use when creating RoPE.
-        rope_scaling (`Dict`, optional):
-            The scaling factors for the RoPE. Must contain `short_factor` and `long_factor`.
-        pos_embed_max_size (`int`, default to `192`):
-            The maximum size of the positional embeddings.
-        time_step_dim (`int`, default to `256`):
-            Output dimension of timestep embeddings.
-        flip_sin_to_cos (`bool`, default to `True`):
-            Whether to flip the sin and cos in the positional embeddings when preparing timestep embeddings.
-        downscale_freq_shift (`int`, default to `0`):
-            The frequency shift to use when downscaling the timestep embeddings.
-        timestep_activation_fn (`str`, default to `silu`):
-            The activation function to use for the timestep embeddings.
-    """
 
     _supports_gradient_checkpointing = True
     _no_split_modules = ["OmniGenBlock"]

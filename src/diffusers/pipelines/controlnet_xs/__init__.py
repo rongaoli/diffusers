@@ -10,7 +10,6 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
 
@@ -34,7 +33,6 @@ except OptionalDependencyNotAvailable:
 else:
     pass  # _import_structure["pipeline_flax_controlnet"] = ["FlaxStableDiffusionControlNetPipeline"]
 
-
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:
         if not (is_transformers_available() and is_torch_available()):
@@ -53,7 +51,6 @@ if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
         from ...utils.dummy_flax_and_transformers_objects import *  # noqa F403
     else:
         pass  # from .pipeline_flax_controlnet import FlaxStableDiffusionControlNetPipeline
-
 
 else:
     import sys

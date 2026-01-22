@@ -1,17 +1,3 @@
-# Copyright 2025 The CogView team, Tsinghua University & ZhipuAI and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -30,9 +16,7 @@ from ..modeling_outputs import Transformer2DModelOutput
 from ..modeling_utils import ModelMixin
 from ..normalization import LayerNorm, RMSNorm
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 class CogView4PatchEmbed(nn.Module):
     def __init__(
@@ -61,7 +45,6 @@ class CogView4PatchEmbed(nn.Module):
         encoder_hidden_states = self.text_proj(encoder_hidden_states)
 
         return hidden_states, encoder_hidden_states
-
 
 class CogView4AdaLayerNormZero(nn.Module):
     def __init__(self, embedding_dim: int, dim: int) -> None:
@@ -110,15 +93,84 @@ class CogView4AdaLayerNormZero(nn.Module):
             c_gate_mlp,
         )
 
+class CogView4AttnProcessor:
+    class CogView4PatchEmbed(nn.Module):
+    def __init__(
+        self,
+        in_channels: int = 16,
+        hidden_size: int = 2560,
+        patch_size: int = 2,
+        text_hidden_size: int = 4096,
+    ):
+        super().__init__()
+        self.patch_size = patch_size
+
+        self.proj = nn.Linear(in_channels * patch_size**2, hidden_size)
+        self.text_proj = nn.Linear(text_hidden_size, hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor, encoder_hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, channel, height, width = hidden_states.shape
+        post_patch_height = height // self.patch_size
+        post_patch_width = width // self.patch_size
+
+        hidden_states = hidden_states.reshape(
+            batch_size, channel, post_patch_height, self.patch_size, post_patch_width, self.patch_size
+        )
+        hidden_states = hidden_states.permute(0, 2, 4, 1, 3, 5).flatten(3, 5).flatten(1, 2)
+        hidden_states = self.proj(hidden_states)
+        encoder_hidden_states = self.text_proj(encoder_hidden_states)
+
+        return hidden_states, encoder_hidden_states
+
+class CogView4AdaLayerNormZero(nn.Module):
+    def __init__(self, embedding_dim: int, dim: int) -> None:
+        super().__init__()
+
+        self.norm = nn.LayerNorm(dim, elementwise_affine=False, eps=1e-5)
+        self.norm_context = nn.LayerNorm(dim, elementwise_affine=False, eps=1e-5)
+        self.linear = nn.Linear(embedding_dim, 12 * dim, bias=True)
+
+    def forward(
+        self, hidden_states: torch.Tensor, encoder_hidden_states: torch.Tensor, temb: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        dtype = hidden_states.dtype
+        norm_hidden_states = self.norm(hidden_states).to(dtype=dtype)
+        norm_encoder_hidden_states = self.norm_context(encoder_hidden_states).to(dtype=dtype)
+
+        emb = self.linear(temb)
+        (
+            shift_msa,
+            c_shift_msa,
+            scale_msa,
+            c_scale_msa,
+            gate_msa,
+            c_gate_msa,
+            shift_mlp,
+            c_shift_mlp,
+            scale_mlp,
+            c_scale_mlp,
+            gate_mlp,
+            c_gate_mlp,
+        ) = emb.chunk(12, dim=1)
+
+        hidden_states = norm_hidden_states * (1 + scale_msa.unsqueeze(1)) + shift_msa.unsqueeze(1)
+        encoder_hidden_states = norm_encoder_hidden_states * (1 + c_scale_msa.unsqueeze(1)) + c_shift_msa.unsqueeze(1)
+
+        return (
+            hidden_states,
+            gate_msa,
+            shift_mlp,
+            scale_mlp,
+            gate_mlp,
+            encoder_hidden_states,
+            c_gate_msa,
+            c_shift_mlp,
+            c_scale_mlp,
+            c_gate_mlp,
+        )
 
 class CogView4AttnProcessor:
-    """
-    Processor for implementing scaled dot-product attention for the CogView4 model. It applies a rotary embedding on
-    query and key vectors, but does not include spatial normalization.
 
-    The processor supports passing an attention mask for text tokens. The attention mask should have shape (batch_size,
-    text_seq_length) where 1 indicates a non-padded token and 0 indicates a padded token.
-    """
 
     def __init__(self):
         if not hasattr(F, "scaled_dot_product_attention"):
@@ -190,17 +242,8 @@ class CogView4AttnProcessor:
         )
         return hidden_states, encoder_hidden_states
 
-
 class CogView4TrainingAttnProcessor:
-    """
-    Training Processor for implementing scaled dot-product attention for the CogView4 model. It applies a rotary
-    embedding on query and key vectors, but does not include spatial normalization.
 
-    This processor differs from CogView4AttnProcessor in several important ways:
-    1. It supports attention masking with variable sequence lengths for multi-resolution training
-    2. It unpacks and repacks sequences for efficient training with variable sequence lengths when batch_flag is
-       provided
-    """
 
     def __init__(self):
         if not hasattr(F, "scaled_dot_product_attention"):
@@ -219,30 +262,7 @@ class CogView4TrainingAttnProcessor:
         ] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Args:
-            attn (`Attention`):
-                The attention module.
-            hidden_states (`torch.Tensor`):
-                The input hidden states.
-            encoder_hidden_states (`torch.Tensor`):
-                The encoder hidden states for cross-attention.
-            latent_attn_mask (`torch.Tensor`, *optional*):
-                Mask for latent tokens where 0 indicates pad token and 1 indicates non-pad token. If None, full
-                attention is used for all latent tokens. Note: the shape of latent_attn_mask is (batch_size,
-                num_latent_tokens).
-            text_attn_mask (`torch.Tensor`, *optional*):
-                Mask for text tokens where 0 indicates pad token and 1 indicates non-pad token. If None, full attention
-                is used for all text tokens.
-            batch_flag (`torch.Tensor`, *optional*):
-                Values from 0 to n-1 indicating which samples belong to the same batch. Samples with the same
-                batch_flag are packed together. Example: [0, 1, 1, 2, 2] means sample 0 forms batch0, samples 1-2 form
-                batch1, and samples 3-4 form batch2. If None, no packing is used.
-            image_rotary_emb (`Tuple[torch.Tensor, torch.Tensor]` or `list[Tuple[torch.Tensor, torch.Tensor]]`, *optional*):
-                The rotary embedding for the image part of the input.
-        Returns:
-            `Tuple[torch.Tensor, torch.Tensor]`: The processed hidden states for both image and text streams.
-        """
+
 
         # Get dimensions and device info
         batch_size, text_seq_length, embed_dim = encoder_hidden_states.shape
@@ -321,7 +341,7 @@ class CogView4TrainingAttnProcessor:
             )
 
             # Fill attention mask with block diagonal matrices
-            # This ensures that tokens can only attend to other tokens within the same original sample
+            # This ensures that tokens can only at...
             for idx, mask in enumerate(attn_mask_matrix):
                 seq_lengths = mixed_seq_length[batch_flag == idx]
                 offset = 0
@@ -347,7 +367,7 @@ class CogView4TrainingAttnProcessor:
         key = attn.to_k(hidden_states)
         value = attn.to_v(hidden_states)
 
-        # Reshape for multi-head attention: [batch, seq_len, heads*dim] -> [batch, heads, seq_len, dim]
+        # Reshape for multi-head attention: [batch...
         query = query.unflatten(2, (attn.heads, -1)).transpose(1, 2)
         key = key.unflatten(2, (attn.heads, -1)).transpose(1, 2)
         value = value.unflatten(2, (attn.heads, -1)).transpose(1, 2)
@@ -453,7 +473,6 @@ class CogView4TrainingAttnProcessor:
 
         return hidden_states, encoder_hidden_states
 
-
 @maybe_allow_in_graph
 class CogView4TransformerBlock(nn.Module):
     def __init__(
@@ -535,6 +554,133 @@ class CogView4TransformerBlock(nn.Module):
 
         return hidden_states, encoder_hidden_states
 
+class CogView4RotaryPosEmbed(nn.Module):
+    def __init__(self, dim: int, patch_size: int, rope_axes_dim: Tuple[int, int], theta: float = 10000.0) -> None:
+        super().__init__()
+
+        self.dim = dim
+        self.patch_size = patch_size
+        self.rope_axes_dim = rope_axes_dim
+        self.theta = theta
+
+    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        batch_size, num_channels, height, width = hidden_states.shape
+        height, width = height // self.patch_size, width // self.patch_size
+
+        dim_h, dim_w = self.dim // 2, self.dim // 2
+        h_inv_freq = 1.0 / (
+            self.theta ** (torch.arange(0, dim_h, 2, dtype=torch.float32)[: (dim_h // 2)].float() / dim_h)
+        )
+        w_inv_freq = 1.0 / (
+            self.theta ** (torch.arange(0, dim_w, 2, dtype=torch.float32)[: (dim_w // 2)].float() / dim_w)
+        )
+        h_seq = torch.arange(self.rope_axes_dim[0])
+        w_seq = torch.arange(self.rope_axes_dim[1])
+        freqs_h = torch.outer(h_seq, h_inv_freq)
+        freqs_w = torch.outer(w_seq, w_inv_freq)
+
+        h_idx = torch.arange(height, device=freqs_h.device)
+        w_idx = torch.arange(width, device=freqs_w.device)
+        inner_h_idx = h_idx * self.rope_axes_dim[0] // height
+        inner_w_idx = w_idx * self.rope_axes_dim[1] // width
+
+        freqs_h = freqs_h[inner_h_idx]
+        freqs_w = freqs_w[inner_w_idx]
+
+        # Create position matrices for height and width
+        # [height, 1, dim//4] and [1, width, dim//4]
+        freqs_h = freqs_h.unsqueeze(1)
+        freqs_w = freqs_w.unsqueeze(0)
+        # Broadcast freqs_h and freqs_w to [height, width, dim//4]
+        freqs_h = freqs_h.expand(height, width, -1)
+        freqs_w = freqs_w.expand(height, width, -1)
+
+        # Concatenate along last dimension to get [height, width, dim//2]
+        freqs = torch.cat([freqs_h, freqs_w], dim=-1)
+        freqs = torch.cat([freqs, freqs], dim=-1)  # [height, width, dim]
+        freqs = freqs.reshape(height * width, -1)
+        return (freqs.cos(), freqs.sin())
+
+class CogView4AdaLayerNormContinuous(nn.Module):
+    class CogView4TransformerBlock(nn.Module):
+    def __init__(
+        self,
+        dim: int = 2560,
+        num_attention_heads: int = 64,
+        attention_head_dim: int = 40,
+        time_embed_dim: int = 512,
+    ) -> None:
+        super().__init__()
+
+        # 1. Attention
+        self.norm1 = CogView4AdaLayerNormZero(time_embed_dim, dim)
+        self.attn1 = Attention(
+            query_dim=dim,
+            heads=num_attention_heads,
+            dim_head=attention_head_dim,
+            out_dim=dim,
+            bias=True,
+            qk_norm="layer_norm",
+            elementwise_affine=False,
+            eps=1e-5,
+            processor=CogView4AttnProcessor(),
+        )
+
+        # 2. Feedforward
+        self.norm2 = nn.LayerNorm(dim, elementwise_affine=False, eps=1e-5)
+        self.norm2_context = nn.LayerNorm(dim, elementwise_affine=False, eps=1e-5)
+        self.ff = FeedForward(dim=dim, dim_out=dim, activation_fn="gelu-approximate")
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        temb: Optional[torch.Tensor] = None,
+        image_rotary_emb: Optional[
+            Union[Tuple[torch.Tensor, torch.Tensor], List[Tuple[torch.Tensor, torch.Tensor]]]
+        ] = None,
+        attention_mask: Optional[Dict[str, torch.Tensor]] = None,
+        attention_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        # 1. Timestep conditioning
+        (
+            norm_hidden_states,
+            gate_msa,
+            shift_mlp,
+            scale_mlp,
+            gate_mlp,
+            norm_encoder_hidden_states,
+            c_gate_msa,
+            c_shift_mlp,
+            c_scale_mlp,
+            c_gate_mlp,
+        ) = self.norm1(hidden_states, encoder_hidden_states, temb)
+
+        # 2. Attention
+        if attention_kwargs is None:
+            attention_kwargs = {}
+        attn_hidden_states, attn_encoder_hidden_states = self.attn1(
+            hidden_states=norm_hidden_states,
+            encoder_hidden_states=norm_encoder_hidden_states,
+            image_rotary_emb=image_rotary_emb,
+            attention_mask=attention_mask,
+            **attention_kwargs,
+        )
+        hidden_states = hidden_states + attn_hidden_states * gate_msa.unsqueeze(1)
+        encoder_hidden_states = encoder_hidden_states + attn_encoder_hidden_states * c_gate_msa.unsqueeze(1)
+
+        # 3. Feedforward
+        norm_hidden_states = self.norm2(hidden_states) * (1 + scale_mlp.unsqueeze(1)) + shift_mlp.unsqueeze(1)
+        norm_encoder_hidden_states = self.norm2_context(encoder_hidden_states) * (
+            1 + c_scale_mlp.unsqueeze(1)
+        ) + c_shift_mlp.unsqueeze(1)
+
+        ff_output = self.ff(norm_hidden_states)
+        ff_output_context = self.ff(norm_encoder_hidden_states)
+        hidden_states = hidden_states + ff_output * gate_mlp.unsqueeze(1)
+        encoder_hidden_states = encoder_hidden_states + ff_output_context * c_gate_mlp.unsqueeze(1)
+
+        return hidden_states, encoder_hidden_states
 
 class CogView4RotaryPosEmbed(nn.Module):
     def __init__(self, dim: int, patch_size: int, rope_axes_dim: Tuple[int, int], theta: float = 10000.0) -> None:
@@ -583,12 +729,8 @@ class CogView4RotaryPosEmbed(nn.Module):
         freqs = freqs.reshape(height * width, -1)
         return (freqs.cos(), freqs.sin())
 
-
 class CogView4AdaLayerNormContinuous(nn.Module):
-    """
-    CogView4-only final AdaLN: LN(x) -> Linear(cond) -> chunk -> affine. Matches Megatron: **no activation** before the
-    Linear on conditioning embedding.
-    """
+
 
     def __init__(
         self,
@@ -615,38 +757,8 @@ class CogView4AdaLayerNormContinuous(nn.Module):
         x = self.norm(x) * (1 + scale)[:, None, :] + shift[:, None, :]
         return x
 
-
 class CogView4Transformer2DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, CacheMixin):
-    r"""
-    Args:
-        patch_size (`int`, defaults to `2`):
-            The size of the patches to use in the patch embedding layer.
-        in_channels (`int`, defaults to `16`):
-            The number of channels in the input.
-        num_layers (`int`, defaults to `30`):
-            The number of layers of Transformer blocks to use.
-        attention_head_dim (`int`, defaults to `40`):
-            The number of channels in each head.
-        num_attention_heads (`int`, defaults to `64`):
-            The number of heads to use for multi-head attention.
-        out_channels (`int`, defaults to `16`):
-            The number of channels in the output.
-        text_embed_dim (`int`, defaults to `4096`):
-            Input dimension of text embeddings from the text encoder.
-        time_embed_dim (`int`, defaults to `512`):
-            Output dimension of timestep embeddings.
-        condition_dim (`int`, defaults to `256`):
-            The embedding dimension of the input SDXL-style resolution conditions (original_size, target_size,
-            crop_coords).
-        pos_embed_max_size (`int`, defaults to `128`):
-            The maximum resolution of the positional embeddings, from which slices of shape `H x W` are taken and added
-            to input patched latents, where `H` and `W` are the latent height and width respectively. A value of 128
-            means that the maximum supported height and width for image generation is `128 * vae_scale_factor *
-            patch_size => 128 * 8 * 2 => 2048`.
-        sample_size (`int`, defaults to `128`):
-            The base resolution of input latents. If height/width is not provided during generation, this value is used
-            to determine the resolution as `sample_size * vae_scale_factor => 128 * 8 => 1024`
-    """
+
 
     _supports_gradient_checkpointing = True
     _no_split_modules = ["CogView4TransformerBlock", "CogView4PatchEmbed", "CogView4PatchEmbed"]

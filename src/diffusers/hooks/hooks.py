@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import functools
 from typing import Any, Dict, Optional, Tuple
 
@@ -20,16 +6,13 @@ import torch
 from ..utils.logging import get_logger
 from ..utils.torch_utils import unwrap_module
 
-
 logger = get_logger(__name__)  # pylint: disable=invalid-name
-
 
 class BaseState:
     def reset(self, *args, **kwargs) -> None:
         raise NotImplementedError(
             "BaseState::reset is not implemented. Please implement this method in the derived class."
         )
-
 
 class StateManager:
     def __init__(self, state_cls: BaseState, init_args=None, init_kwargs=None):
@@ -55,11 +38,102 @@ class StateManager:
             self._state_cache.pop(name)
         self._current_context = None
 
+class ModelHook:
+    class BaseState:
+    def reset(self, *args, **kwargs) -> None:
+        raise NotImplementedError(
+            "BaseState::reset is not implemented. Please implement this method in the derived class."
+        )
+
+class StateManager:
+    def __init__(self, state_cls: BaseState, init_args=None, init_kwargs=None):
+        self._state_cls = state_cls
+        self._init_args = init_args if init_args is not None else ()
+        self._init_kwargs = init_kwargs if init_kwargs is not None else {}
+        self._state_cache = {}
+        self._current_context = None
+
+    def get_state(self):
+        if self._current_context is None:
+            raise ValueError("No context is set. Please set a context before retrieving the state.")
+        if self._current_context not in self._state_cache.keys():
+            self._state_cache[self._current_context] = self._state_cls(*self._init_args, **self._init_kwargs)
+        return self._state_cache[self._current_context]
+
+    def set_context(self, name: str) -> None:
+        self._current_context = name
+
+    def reset(self, *args, **kwargs) -> None:
+        for name, state in list(self._state_cache.items()):
+            state.reset(*args, **kwargs)
+            self._state_cache.pop(name)
+        self._current_context = None
 
 class ModelHook:
-    r"""
-    A hook that contains callbacks to be executed just before and after the forward method of a model.
-    """
+    
+    class BaseState:
+    def reset(self, *args, **kwargs) -> None:
+        raise NotImplementedError(
+            "BaseState::reset is not implemented. Please implement this method in the derived class."
+        )
+
+class StateManager:
+    def __init__(self, state_cls: BaseState, init_args=None, init_kwargs=None):
+        self._state_cls = state_cls
+        self._init_args = init_args if init_args is not None else ()
+        self._init_kwargs = init_kwargs if init_kwargs is not None else {}
+        self._state_cache = {}
+        self._current_context = None
+
+    def get_state(self):
+        if self._current_context is None:
+            raise ValueError("No context is set. Please set a context before retrieving the state.")
+        if self._current_context not in self._state_cache.keys():
+            self._state_cache[self._current_context] = self._state_cls(*self._init_args, **self._init_kwargs)
+        return self._state_cache[self._current_context]
+
+    def set_context(self, name: str) -> None:
+        self._current_context = name
+
+    def reset(self, *args, **kwargs) -> None:
+        for name, state in list(self._state_cache.items()):
+            state.reset(*args, **kwargs)
+            self._state_cache.pop(name)
+        self._current_context = None
+
+class ModelHook:
+    class BaseState:
+    def reset(self, *args, **kwargs) -> None:
+        raise NotImplementedError(
+            "BaseState::reset is not implemented. Please implement this method in the derived class."
+        )
+
+class StateManager:
+    def __init__(self, state_cls: BaseState, init_args=None, init_kwargs=None):
+        self._state_cls = state_cls
+        self._init_args = init_args if init_args is not None else ()
+        self._init_kwargs = init_kwargs if init_kwargs is not None else {}
+        self._state_cache = {}
+        self._current_context = None
+
+    def get_state(self):
+        if self._current_context is None:
+            raise ValueError("No context is set. Please set a context before retrieving the state.")
+        if self._current_context not in self._state_cache.keys():
+            self._state_cache[self._current_context] = self._state_cls(*self._init_args, **self._init_kwargs)
+        return self._state_cache[self._current_context]
+
+    def set_context(self, name: str) -> None:
+        self._current_context = name
+
+    def reset(self, *args, **kwargs) -> None:
+        for name, state in list(self._state_cache.items()):
+            state.reset(*args, **kwargs)
+            self._state_cache.pop(name)
+        self._current_context = None
+
+class ModelHook:
+
 
     _is_stateful = False
 
@@ -67,64 +141,23 @@ class ModelHook:
         self.fn_ref: "HookFunctionReference" = None
 
     def initialize_hook(self, module: torch.nn.Module) -> torch.nn.Module:
-        r"""
-        Hook that is executed when a model is initialized.
 
-        Args:
-            module (`torch.nn.Module`):
-                The module attached to this hook.
-        """
         return module
 
     def deinitalize_hook(self, module: torch.nn.Module) -> torch.nn.Module:
-        r"""
-        Hook that is executed when a model is deinitialized.
 
-        Args:
-            module (`torch.nn.Module`):
-                The module attached to this hook.
-        """
         return module
 
     def pre_forward(self, module: torch.nn.Module, *args, **kwargs) -> Tuple[Tuple[Any], Dict[str, Any]]:
-        r"""
-        Hook that is executed just before the forward method of the model.
 
-        Args:
-            module (`torch.nn.Module`):
-                The module whose forward pass will be executed just after this event.
-            args (`Tuple[Any]`):
-                The positional arguments passed to the module.
-            kwargs (`Dict[Str, Any]`):
-                The keyword arguments passed to the module.
-        Returns:
-            `Tuple[Tuple[Any], Dict[Str, Any]]`:
-                A tuple with the treated `args` and `kwargs`.
-        """
         return args, kwargs
 
     def post_forward(self, module: torch.nn.Module, output: Any) -> Any:
-        r"""
-        Hook that is executed just after the forward method of the model.
 
-        Args:
-            module (`torch.nn.Module`):
-                The module whose forward pass been executed just before this event.
-            output (`Any`):
-                The output of the module.
-        Returns:
-            `Any`: The processed `output`.
-        """
         return output
 
     def detach_hook(self, module: torch.nn.Module) -> torch.nn.Module:
-        r"""
-        Hook that is executed when the hook is detached from a module.
 
-        Args:
-            module (`torch.nn.Module`):
-                The module detached from this hook.
-        """
         return module
 
     def reset_state(self, module: torch.nn.Module):
@@ -133,36 +166,27 @@ class ModelHook:
         return module
 
     def _set_context(self, module: torch.nn.Module, name: str) -> None:
-        # Iterate over all attributes of the hook to see if any of them have the type `StateManager`. If so, call `set_context` on them.
+        # Iterate over all attributes of the hook...
         for attr_name in dir(self):
             attr = getattr(self, attr_name)
             if isinstance(attr, StateManager):
                 attr.set_context(name)
         return module
 
-
 class HookFunctionReference:
     def __init__(self) -> None:
-        """A container class that maintains mutable references to forward pass functions in a hook chain.
+        class HookFunctionReference:
+    def __init__(self) -> None:
+        
+        class HookFunctionReference:
+    def __init__(self) -> None:
+        class HookFunctionReference:
+    def __init__(self) -> None:
 
-        Its mutable nature allows the hook system to modify the execution chain dynamically without rebuilding the
-        entire forward pass structure.
-
-        Attributes:
-            pre_forward: A callable that processes inputs before the main forward pass.
-            post_forward: A callable that processes outputs after the main forward pass.
-            forward: The current forward function in the hook chain.
-            original_forward: The original forward function, stored when a hook provides a custom new_forward.
-
-        The class enables hook removal by allowing updates to the forward chain through reference modification rather
-        than requiring reconstruction of the entire chain. When a hook is removed, only the relevant references need to
-        be updated, preserving the execution order of the remaining hooks.
-        """
         self.pre_forward = None
         self.post_forward = None
         self.forward = None
         self.original_forward = None
-
 
 class HookRegistry:
     def __init__(self, module_ref: torch.nn.Module) -> None:

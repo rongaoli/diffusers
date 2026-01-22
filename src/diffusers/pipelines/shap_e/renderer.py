@@ -1,17 +1,3 @@
-# Copyright 2025 Open AI and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import math
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
@@ -26,20 +12,9 @@ from ...models import ModelMixin
 from ...utils import BaseOutput
 from .camera import create_pan_cameras
 
-
 def sample_pmf(pmf: torch.Tensor, n_samples: int) -> torch.Tensor:
-    r"""
-    Sample from the given discrete probability distribution with replacement.
-
-    The i-th bin is assumed to have mass pmf[i].
-
-    Args:
-        pmf: [batch_size, *shape, n_samples, 1] where (pmf.sum(dim=-2) == 1).all()
-        n_samples: number of samples
-
-    Return:
-        indices sampled with replacement
-    """
+    
+    """r"""
 
     *shape, support_size, last_dim = pmf.shape
     assert last_dim == 1
@@ -49,13 +24,8 @@ def sample_pmf(pmf: torch.Tensor, n_samples: int) -> torch.Tensor:
 
     return inds.view(*shape, n_samples, 1).clamp(0, support_size - 1)
 
-
 def posenc_nerf(x: torch.Tensor, min_deg: int = 0, max_deg: int = 15) -> torch.Tensor:
-    """
-    Concatenate x and its positional encodings, following NeRF.
 
-    Reference: https://huggingface.co/papers/2210.04628
-    """
     if min_deg == max_deg:
         return x
 
@@ -66,10 +36,8 @@ def posenc_nerf(x: torch.Tensor, min_deg: int = 0, max_deg: int = 15) -> torch.T
     emb = torch.cat([xb, xb + math.pi / 2.0], axis=-1).sin()
     return torch.cat([x, emb], dim=-1)
 
-
 def encode_position(position):
     return posenc_nerf(position, min_deg=0, max_deg=15)
-
 
 def encode_direction(position, direction=None):
     if direction is None:
@@ -77,25 +45,12 @@ def encode_direction(position, direction=None):
     else:
         return posenc_nerf(direction, min_deg=0, max_deg=8)
 
-
 def _sanitize_name(x: str) -> str:
     return x.replace(".", "__")
 
-
 def integrate_samples(volume_range, ts, density, channels):
-    r"""
-    Function integrating the model output.
-
-    Args:
-        volume_range: Specifies the integral range [t0, t1]
-        ts: timesteps
-        density: torch.Tensor [batch_size, *shape, n_samples, 1]
-        channels: torch.Tensor [batch_size, *shape, n_samples, n_channels]
-    returns:
-        channels: integrated rgb output weights: torch.Tensor [batch_size, *shape, n_samples, 1] (density
-        *transmittance)[i] weight for each rgb output at [..., i, :]. transmittance: transmittance of this volume
-    )
-    """
+    
+    """r"""
 
     # 1. Calculate the weights
     _, _, dt = volume_range.partition(ts)
@@ -115,7 +70,6 @@ def integrate_samples(volume_range, ts, density, channels):
 
     return channels, weights, transmittance
 
-
 def volume_query_points(volume, grid_size):
     indices = torch.arange(grid_size**3, device=volume.bbox_min.device)
     zs = indices % grid_size
@@ -124,10 +78,8 @@ def volume_query_points(volume, grid_size):
     combined = torch.stack([xs, ys, zs], dim=1)
     return (combined.float() / (grid_size - 1)) * (volume.bbox_max - volume.bbox_min) + volume.bbox_min
 
-
 def _convert_srgb_to_linear(u: torch.Tensor):
     return torch.where(u <= 0.04045, u / 12.92, ((u + 0.055) / 1.055) ** 2.4)
-
 
 def _create_flat_edge_indices(
     flat_cube_indices: torch.Tensor,
@@ -210,11 +162,8 @@ def _create_flat_edge_indices(
         dim=-1,
     )
 
-
 class VoidNeRFModel(nn.Module):
-    """
-    Implements the default empty space model where all queries are rendered as background.
-    """
+
 
     def __init__(self, background, channel_scale=255.0):
         super().__init__()
@@ -232,7 +181,6 @@ class VoidNeRFModel(nn.Module):
 
         return background
 
-
 @dataclass
 class VolumeRange:
     t0: torch.Tensor
@@ -243,20 +191,16 @@ class VolumeRange:
         assert self.t0.shape == self.t1.shape == self.intersected.shape
 
     def partition(self, ts):
-        """
-        Partitions t0 and t1 into n_samples intervals.
+        class VolumeRange:
+    t0: torch.Tensor
+    t1: torch.Tensor
+    intersected: torch.Tensor
 
-        Args:
-            ts: [batch_size, *shape, n_samples, 1]
+    def __post_init__(self):
+        assert self.t0.shape == self.t1.shape == self.intersected.shape
 
-        Return:
+    def partition(self, ts):
 
-            lower: [batch_size, *shape, n_samples, 1] upper: [batch_size, *shape, n_samples, 1] delta: [batch_size,
-            *shape, n_samples, 1]
-
-        where
-            ts \\in [lower, upper] deltas = upper - lower
-        """
 
         mids = (ts[..., 1:, :] + ts[..., :-1, :]) * 0.5
         lower = torch.cat([self.t0[..., None, :], mids], dim=-2)
@@ -265,11 +209,8 @@ class VolumeRange:
         assert lower.shape == upper.shape == delta.shape == ts.shape
         return lower, upper, delta
 
-
 class BoundingBoxVolume(nn.Module):
-    """
-    Axis-aligned bounding box defined by the two opposite corners.
-    """
+
 
     def __init__(
         self,
@@ -279,12 +220,7 @@ class BoundingBoxVolume(nn.Module):
         min_dist: float = 0.0,
         min_t_range: float = 1e-3,
     ):
-        """
-        Args:
-            bbox_min: the left/bottommost corner of the bounding box
-            bbox_max: the other corner of the bounding box
-            min_dist: all rays should start at least this distance away from the origin.
-        """
+
         super().__init__()
 
         self.min_dist = min_dist
@@ -304,19 +240,7 @@ class BoundingBoxVolume(nn.Module):
         t0_lower: Optional[torch.Tensor] = None,
         epsilon=1e-6,
     ):
-        """
-        Args:
-            origin: [batch_size, *shape, 3]
-            direction: [batch_size, *shape, 3]
-            t0_lower: Optional [batch_size, *shape, 1] lower bound of t0 when intersecting this volume.
-            params: Optional meta parameters in case Volume is parametric
-            epsilon: to stabilize calculations
 
-        Return:
-            A tuple of (t0, t1, intersected) where each has a shape [batch_size, *shape, 1]. If a ray intersects with
-            the volume, `o + td` is in the volume for all t in [t0, t1]. If the volume is bounded, t1 is guaranteed to
-            be on the boundary of the volume.
-        """
 
         batch_size, *shape, _ = origin.shape
         ones = [1] * len(shape)
@@ -349,17 +273,11 @@ class BoundingBoxVolume(nn.Module):
 
         return VolumeRange(t0=t0, t1=t1, intersected=intersected)
 
-
 class StratifiedRaySampler(nn.Module):
-    """
-    Instead of fixed intervals, a sample is drawn uniformly at random from each interval.
-    """
+
 
     def __init__(self, depth_mode: str = "linear"):
-        """
-        :param depth_mode: linear samples ts linearly in depth. harmonic ensures
-            closer points are sampled more densely.
-        """
+
         self.depth_mode = depth_mode
         assert self.depth_mode in ("linear", "geometric", "harmonic")
 
@@ -370,14 +288,7 @@ class StratifiedRaySampler(nn.Module):
         n_samples: int,
         epsilon: float = 1e-3,
     ) -> torch.Tensor:
-        """
-        Args:
-            t0: start time has shape [batch_size, *shape, 1]
-            t1: finish time has shape [batch_size, *shape, 1]
-            n_samples: number of ts to sample
-        Return:
-            sampled ts of shape [batch_size, *shape, n_samples, 1]
-        """
+
         ones = [1] * (len(t0.shape) - 1)
         ts = torch.linspace(0, 1, n_samples).view(*ones, n_samples).to(t0.dtype).to(t0.device)
 
@@ -401,11 +312,8 @@ class StratifiedRaySampler(nn.Module):
         ts = lower + (upper - lower) * t_rand
         return ts.unsqueeze(-1)
 
-
 class ImportanceRaySampler(nn.Module):
-    """
-    Given the initial estimate of densities, this samples more from regions/bins expected to have objects.
-    """
+
 
     def __init__(
         self,
@@ -415,14 +323,7 @@ class ImportanceRaySampler(nn.Module):
         blur_pool: bool = False,
         alpha: float = 1e-5,
     ):
-        """
-        Args:
-            volume_range: the range in which a ray intersects the given volume.
-            ts: earlier samples from the coarse rendering step
-            weights: discretized version of density * transmittance
-            blur_pool: if true, use 2-tap max + 2-tap blur filter from mip-NeRF.
-            alpha: small value to add to weights.
-        """
+
         self.volume_range = volume_range
         self.ts = ts.clone().detach()
         self.weights = weights.clone().detach()
@@ -431,14 +332,7 @@ class ImportanceRaySampler(nn.Module):
 
     @torch.no_grad()
     def sample(self, t0: torch.Tensor, t1: torch.Tensor, n_samples: int) -> torch.Tensor:
-        """
-        Args:
-            t0: start time has shape [batch_size, *shape, 1]
-            t1: finish time has shape [batch_size, *shape, 1]
-            n_samples: number of ts to sample
-        Return:
-            sampled ts of shape [batch_size, *shape, n_samples, 1]
-        """
+
         lower, upper, _ = self.volume_range.partition(self.ts)
 
         batch_size, *shape, n_coarse_samples, _ = self.ts.shape
@@ -462,30 +356,16 @@ class ImportanceRaySampler(nn.Module):
         ts = torch.sort(ts, dim=-2).values
         return ts
 
-
 @dataclass
 class MeshDecoderOutput(BaseOutput):
-    """
-    A 3D triangle mesh with optional data at the vertices and faces.
 
-    Args:
-        verts (`torch.Tensor` of shape `(N, 3)`):
-            array of vertext coordinates
-        faces (`torch.Tensor` of shape `(N, 3)`):
-            array of triangles, pointing to indices in verts.
-        vertext_channels (Dict):
-            vertext coordinates for each color channel
-    """
 
     verts: torch.Tensor
     faces: torch.Tensor
     vertex_channels: Dict[str, torch.Tensor]
 
-
 class MeshDecoder(nn.Module):
-    """
-    Construct meshes from Signed distance functions (SDFs) using marching cubes method
-    """
+
 
     def __init__(self):
         super().__init__()
@@ -496,16 +376,7 @@ class MeshDecoder(nn.Module):
         self.register_buffer("masks", masks)
 
     def forward(self, field: torch.Tensor, min_point: torch.Tensor, size: torch.Tensor):
-        """
-        For a signed distance field, produce a mesh using marching cubes.
 
-        :param field: a 3D tensor of field values, where negative values correspond
-                    to the outside of the shape. The dimensions correspond to the x, y, and z directions, respectively.
-        :param min_point: a tensor of shape [3] containing the point corresponding
-                        to (0, 0, 0) in the field.
-        :param size: a tensor of shape [3] containing the per-axis distance from the
-                    (0, 0, 0) field corner and the (-1, -1, -1) field corner.
-        """
         assert len(field.shape) == 3, "input must be a 3D scalar field"
         dev = field.device
 
@@ -597,14 +468,12 @@ class MeshDecoder(nn.Module):
 
         return MeshDecoderOutput(verts=verts, faces=faces, vertex_channels=None)
 
-
 @dataclass
 class MLPNeRFModelOutput(BaseOutput):
     density: torch.Tensor
     signed_distance: torch.Tensor
     channels: torch.Tensor
     ts: torch.Tensor
-
 
 class MLPNeRSTFModel(ModelMixin, ConfigMixin):
     @register_to_config
@@ -704,6 +573,135 @@ class MLPNeRSTFModel(ModelMixin, ConfigMixin):
         # yiyi notes: I think signed_distance is not used
         return MLPNeRFModelOutput(density=density, signed_distance=signed_distance, channels=channels, ts=ts)
 
+class ChannelsProj(nn.Module):
+    def __init__(
+        self,
+        *,
+        vectors: int,
+        channels: int,
+        d_latent: int,
+    ):
+        super().__init__()
+        self.proj = nn.Linear(d_latent, vectors * channels)
+        self.norm = nn.LayerNorm(channels)
+        self.d_latent = d_latent
+        self.vectors = vectors
+        self.channels = channels
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x_bvd = x
+        w_vcd = self.proj.weight.view(self.vectors, self.channels, self.d_latent)
+        b_vc = self.proj.bias.view(1, self.vectors, self.channels)
+        h = torch.einsum("bvd,vcd->bvc", x_bvd, w_vcd)
+        h = self.norm(h)
+
+        h = h + b_vc
+        return h
+
+class ShapEParamsProjModel(ModelMixin, ConfigMixin):
+    class MLPNeRFModelOutput(BaseOutput):
+    density: torch.Tensor
+    signed_distance: torch.Tensor
+    channels: torch.Tensor
+    ts: torch.Tensor
+
+class MLPNeRSTFModel(ModelMixin, ConfigMixin):
+    @register_to_config
+    def __init__(
+        self,
+        d_hidden: int = 256,
+        n_output: int = 12,
+        n_hidden_layers: int = 6,
+        act_fn: str = "swish",
+        insert_direction_at: int = 4,
+    ):
+        super().__init__()
+
+        # Instantiate the MLP
+
+        # Find out the dimension of encoded position and direction
+        dummy = torch.eye(1, 3)
+        d_posenc_pos = encode_position(position=dummy).shape[-1]
+        d_posenc_dir = encode_direction(position=dummy).shape[-1]
+
+        mlp_widths = [d_hidden] * n_hidden_layers
+        input_widths = [d_posenc_pos] + mlp_widths
+        output_widths = mlp_widths + [n_output]
+
+        if insert_direction_at is not None:
+            input_widths[insert_direction_at] += d_posenc_dir
+
+        self.mlp = nn.ModuleList([nn.Linear(d_in, d_out) for d_in, d_out in zip(input_widths, output_widths)])
+
+        if act_fn == "swish":
+            # self.activation = swish
+            # yiyi testing:
+            self.activation = lambda x: F.silu(x)
+        else:
+            raise ValueError(f"Unsupported activation function {act_fn}")
+
+        self.sdf_activation = torch.tanh
+        self.density_activation = torch.nn.functional.relu
+        self.channel_activation = torch.sigmoid
+
+    def map_indices_to_keys(self, output):
+        h_map = {
+            "sdf": (0, 1),
+            "density_coarse": (1, 2),
+            "density_fine": (2, 3),
+            "stf": (3, 6),
+            "nerf_coarse": (6, 9),
+            "nerf_fine": (9, 12),
+        }
+
+        mapped_output = {k: output[..., start:end] for k, (start, end) in h_map.items()}
+
+        return mapped_output
+
+    def forward(self, *, position, direction, ts, nerf_level="coarse", rendering_mode="nerf"):
+        h = encode_position(position)
+
+        h_preact = h
+        h_directionless = None
+        for i, layer in enumerate(self.mlp):
+            if i == self.config.insert_direction_at:  # 4 in the config
+                h_directionless = h_preact
+                h_direction = encode_direction(position, direction=direction)
+                h = torch.cat([h, h_direction], dim=-1)
+
+            h = layer(h)
+
+            h_preact = h
+
+            if i < len(self.mlp) - 1:
+                h = self.activation(h)
+
+        h_final = h
+        if h_directionless is None:
+            h_directionless = h_preact
+
+        activation = self.map_indices_to_keys(h_final)
+
+        if nerf_level == "coarse":
+            h_density = activation["density_coarse"]
+        else:
+            h_density = activation["density_fine"]
+
+        if rendering_mode == "nerf":
+            if nerf_level == "coarse":
+                h_channels = activation["nerf_coarse"]
+            else:
+                h_channels = activation["nerf_fine"]
+
+        elif rendering_mode == "stf":
+            h_channels = activation["stf"]
+
+        density = self.density_activation(h_density)
+        signed_distance = self.sdf_activation(activation["sdf"])
+        channels = self.channel_activation(h_channels)
+
+        # yiyi notes: I think signed_distance is not used
+        return MLPNeRFModelOutput(density=density, signed_distance=signed_distance, channels=channels, ts=ts)
 
 class ChannelsProj(nn.Module):
     def __init__(
@@ -730,13 +728,8 @@ class ChannelsProj(nn.Module):
         h = h + b_vc
         return h
 
-
 class ShapEParamsProjModel(ModelMixin, ConfigMixin):
-    """
-    project the latent representation of a 3D asset to obtain weights of a multi-layer perceptron (MLP).
 
-    For more details, see the original paper:
-    """
 
     @register_to_config
     def __init__(
@@ -779,7 +772,6 @@ class ShapEParamsProjModel(ModelMixin, ConfigMixin):
             out[k] = self.projections[_sanitize_name(k)](x_bvd).reshape(len(x), *shape)
             start = end
         return out
-
 
 class ShapERenderer(ModelMixin, ConfigMixin):
     @register_to_config
@@ -824,35 +816,50 @@ class ShapERenderer(ModelMixin, ConfigMixin):
 
     @torch.no_grad()
     def render_rays(self, rays, sampler, n_samples, prev_model_out=None, render_with_direction=False):
-        """
-        Perform volumetric rendering over a partition of possible t's in the union of rendering volumes (written below
-        with some abuse of notations)
+        class ShapERenderer(ModelMixin, ConfigMixin):
+    @register_to_config
+    def __init__(
+        self,
+        *,
+        param_names: Tuple[str, ...] = (
+            "nerstf.mlp.0.weight",
+            "nerstf.mlp.1.weight",
+            "nerstf.mlp.2.weight",
+            "nerstf.mlp.3.weight",
+        ),
+        param_shapes: Tuple[Tuple[int, int], ...] = (
+            (256, 93),
+            (256, 256),
+            (256, 256),
+            (256, 256),
+        ),
+        d_latent: int = 1024,
+        d_hidden: int = 256,
+        n_output: int = 12,
+        n_hidden_layers: int = 6,
+        act_fn: str = "swish",
+        insert_direction_at: int = 4,
+        background: Tuple[float, ...] = (
+            255.0,
+            255.0,
+            255.0,
+        ),
+    ):
+        super().__init__()
 
-            C(r) := sum(
-                transmittance(t[i]) * integrate(
-                    lambda t: density(t) * channels(t) * transmittance(t), [t[i], t[i + 1]],
-                ) for i in range(len(parts))
-            ) + transmittance(t[-1]) * void_model(t[-1]).channels
+        self.params_proj = ShapEParamsProjModel(
+            param_names=param_names,
+            param_shapes=param_shapes,
+            d_latent=d_latent,
+        )
+        self.mlp = MLPNeRSTFModel(d_hidden, n_output, n_hidden_layers, act_fn, insert_direction_at)
+        self.void = VoidNeRFModel(background=background, channel_scale=255.0)
+        self.volume = BoundingBoxVolume(bbox_max=[1.0, 1.0, 1.0], bbox_min=[-1.0, -1.0, -1.0])
+        self.mesh_decoder = MeshDecoder()
 
-        where
+    @torch.no_grad()
+    def render_rays(self, rays, sampler, n_samples, prev_model_out=None, render_with_direction=False):
 
-        1) transmittance(s) := exp(-integrate(density, [t[0], s])) calculates the probability of light passing through
-        the volume specified by [t[0], s]. (transmittance of 1 means light can pass freely) 2) density and channels are
-        obtained by evaluating the appropriate part.model at time t. 3) [t[i], t[i + 1]] is defined as the range of t
-        where the ray intersects (parts[i].volume \\ union(part.volume for part in parts[:i])) at the surface of the
-        shell (if bounded). If the ray does not intersect, the integral over this segment is evaluated as 0 and
-        transmittance(t[i + 1]) := transmittance(t[i]). 4) The last term is integration to infinity (e.g. [t[-1],
-        math.inf]) that is evaluated by the void_model (i.e. we consider this space to be empty).
-
-        Args:
-            rays: [batch_size x ... x 2 x 3] origin and direction. sampler: disjoint volume integrals. n_samples:
-            number of ts to sample. prev_model_outputs: model outputs from the previous rendering step, including
-
-        :return: A tuple of
-            - `channels`
-            - A importance samplers for additional fine-grained rendering
-            - raw model output
-        """
         origin, direction = rays[..., 0, :], rays[..., 1, :]
 
         # Integrate over [t[i], t[i + 1]]
@@ -894,7 +901,7 @@ class ShapERenderer(ModelMixin, ConfigMixin):
         # 4. Clean up results that do not intersect with the volume.
         transmittance = torch.where(vrange.intersected, transmittance, torch.ones_like(transmittance))
         channels = torch.where(vrange.intersected, channels, torch.zeros_like(channels))
-        # 5. integration to infinity (e.g. [t[-1], math.inf]) that is evaluated by the void_model (i.e. we consider this space to be empty).
+        # 5. integration to infinity (e.g. [t[-1],...
         channels = channels + transmittance * self.void(origin)
 
         weighted_sampler = ImportanceRaySampler(vrange, ts=model_out.ts, weights=weights)

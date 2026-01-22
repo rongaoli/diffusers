@@ -1,16 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -34,39 +21,14 @@ from ..modeling_utils import ModelMixin
 from ..unets.unet_2d import UNet2DModel
 from .vae import AutoencoderMixin, DecoderOutput, DiagonalGaussianDistribution, Encoder
 
-
 @dataclass
 class ConsistencyDecoderVAEOutput(BaseOutput):
-    """
-    Output of encoding method.
 
-    Args:
-        latent_dist (`DiagonalGaussianDistribution`):
-            Encoded outputs of `Encoder` represented as the mean and logvar of `DiagonalGaussianDistribution`.
-            `DiagonalGaussianDistribution` allows for sampling latents from the distribution.
-    """
 
     latent_dist: "DiagonalGaussianDistribution"
 
-
 class ConsistencyDecoderVAE(ModelMixin, AttentionMixin, AutoencoderMixin, ConfigMixin):
-    r"""
-    The consistency decoder used with DALL-E 3.
 
-    Examples:
-        ```py
-        >>> import torch
-        >>> from diffusers import StableDiffusionPipeline, ConsistencyDecoderVAE
-
-        >>> vae = ConsistencyDecoderVAE.from_pretrained("openai/consistency-decoder", torch_dtype=torch.float16)
-        >>> pipe = StableDiffusionPipeline.from_pretrained(
-        ...     "stable-diffusion-v1-5/stable-diffusion-v1-5", vae=vae, torch_dtype=torch.float16
-        ... ).to("cuda")
-
-        >>> image = pipe("horse", generator=torch.manual_seed(0)).images[0]
-        >>> image
-        ```
-    """
 
     _supports_group_offloading = False
 
@@ -167,11 +129,9 @@ class ConsistencyDecoderVAE(ModelMixin, AttentionMixin, AutoencoderMixin, Config
         self.tile_latent_min_size = int(sample_size / (2 ** (len(self.config.block_out_channels) - 1)))
         self.tile_overlap_factor = 0.25
 
-    # Copied from diffusers.models.unets.unet_2d_condition.UNet2DConditionModel.set_default_attn_processor
+    # Copied from diffusers.models.unets.unet_2d_c...
     def set_default_attn_processor(self):
-        """
-        Disables custom attention processors and sets the default attention implementation.
-        """
+
         if all(proc.__class__ in ADDED_KV_ATTENTION_PROCESSORS for proc in self.attn_processors.values()):
             processor = AttnAddedKVProcessor()
         elif all(proc.__class__ in CROSS_ATTENTION_PROCESSORS for proc in self.attn_processors.values()):
@@ -187,20 +147,7 @@ class ConsistencyDecoderVAE(ModelMixin, AttentionMixin, AutoencoderMixin, Config
     def encode(
         self, x: torch.Tensor, return_dict: bool = True
     ) -> Union[ConsistencyDecoderVAEOutput, Tuple[DiagonalGaussianDistribution]]:
-        """
-        Encode a batch of images into latents.
 
-        Args:
-            x (`torch.Tensor`): Input batch of images.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether to return a [`~models.autoencoders.consistency_decoder_vae.ConsistencyDecoderVAEOutput`]
-                instead of a plain tuple.
-
-        Returns:
-                The latent representations of the encoded images. If `return_dict` is True, a
-                [`~models.autoencoders.consistency_decoder_vae.ConsistencyDecoderVAEOutput`] is returned, otherwise a
-                plain `tuple` is returned.
-        """
         if self.use_tiling and (x.shape[-1] > self.tile_sample_min_size or x.shape[-2] > self.tile_sample_min_size):
             return self.tiled_encode(x, return_dict=return_dict)
 
@@ -226,19 +173,7 @@ class ConsistencyDecoderVAE(ModelMixin, AttentionMixin, AutoencoderMixin, Config
         return_dict: bool = True,
         num_inference_steps: int = 2,
     ) -> Union[DecoderOutput, Tuple[torch.Tensor]]:
-        """
-        Decodes the input latent vector `z` using the consistency decoder VAE model.
 
-        Args:
-            z (torch.Tensor): The input latent vector.
-            generator (Optional[torch.Generator]): The random number generator. Default is None.
-            return_dict (bool): Whether to return the output as a dictionary. Default is True.
-            num_inference_steps (int): The number of inference steps. Default is 2.
-
-        Returns:
-            Union[DecoderOutput, Tuple[torch.Tensor]]: The decoded output.
-
-        """
         z = (z * self.config.scaling_factor - self.means) / self.stds
 
         scale_factor = 2 ** (len(self.config.block_out_channels) - 1)
@@ -280,25 +215,8 @@ class ConsistencyDecoderVAE(ModelMixin, AttentionMixin, AutoencoderMixin, Config
         return b
 
     def tiled_encode(self, x: torch.Tensor, return_dict: bool = True) -> Union[ConsistencyDecoderVAEOutput, Tuple]:
-        r"""Encode a batch of images using a tiled encoder.
-
-        When this option is enabled, the VAE will split the input tensor into tiles to compute encoding in several
-        steps. This is useful to keep memory use constant regardless of image size. The end result of tiled encoding is
-        different from non-tiled encoding because each tile uses a different encoder. To avoid tiling artifacts, the
-        tiles overlap and are blended together to form a smooth output. You may still see tile-sized changes in the
-        output, but they should be much less noticeable.
-
-        Args:
-            x (`torch.Tensor`): Input batch of images.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether or not to return a [`~models.autoencoders.consistency_decoder_vae.ConsistencyDecoderVAEOutput`]
-                instead of a plain tuple.
-
-        Returns:
-            [`~models.autoencoders.consistency_decoder_vae.ConsistencyDecoderVAEOutput`] or `tuple`:
-                If return_dict is True, a [`~models.autoencoders.consistency_decoder_vae.ConsistencyDecoderVAEOutput`]
-                is returned, otherwise a plain `tuple` is returned.
-        """
+        
+        """r"""
         overlap_size = int(self.tile_sample_min_size * (1 - self.tile_overlap_factor))
         blend_extent = int(self.tile_latent_min_size * self.tile_overlap_factor)
         row_limit = self.tile_latent_min_size - blend_extent
@@ -341,20 +259,8 @@ class ConsistencyDecoderVAE(ModelMixin, AttentionMixin, AutoencoderMixin, Config
         return_dict: bool = True,
         generator: Optional[torch.Generator] = None,
     ) -> Union[DecoderOutput, Tuple[torch.Tensor]]:
-        r"""
-        Args:
-            sample (`torch.Tensor`): Input sample.
-            sample_posterior (`bool`, *optional*, defaults to `False`):
-                Whether to sample from the posterior.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether or not to return a [`DecoderOutput`] instead of a plain tuple.
-            generator (`torch.Generator`, *optional*, defaults to `None`):
-                Generator to use for sampling.
-
-        Returns:
-            [`DecoderOutput`] or `tuple`:
-                If return_dict is True, a [`DecoderOutput`] is returned, otherwise a plain `tuple` is returned.
-        """
+        
+        """r"""
         x = sample
         posterior = self.encode(x).latent_dist
         if sample_posterior:

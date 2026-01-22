@@ -1,17 +1,3 @@
-# Copyright 2025 Qwen-Image Team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import inspect
 from typing import List, Tuple
 
@@ -26,13 +12,11 @@ from ..modular_pipeline import BlockState, LoopSequentialPipelineBlocks, Modular
 from ..modular_pipeline_utils import ComponentSpec, InputParam, OutputParam
 from .modular_pipeline import QwenImageModularPipeline
 
-
 logger = logging.get_logger(__name__)
 
 # ====================
 # 1. LOOP STEPS (run at each denoising step)
 # ====================
-
 
 # loop step:before denoiser
 class QwenImageLoopBeforeDenoiser(ModularPipelineBlocks):
@@ -63,7 +47,6 @@ class QwenImageLoopBeforeDenoiser(ModularPipelineBlocks):
         block_state.timestep = t.expand(block_state.latents.shape[0]).to(block_state.latents.dtype)
         block_state.latent_model_input = block_state.latents
         return components, block_state
-
 
 class QwenImageEditLoopBeforeDenoiser(ModularPipelineBlocks):
     model_name = "qwenimage-edit"
@@ -100,7 +83,6 @@ class QwenImageEditLoopBeforeDenoiser(ModularPipelineBlocks):
         block_state.latent_model_input = torch.cat([block_state.latents, block_state.image_latents], dim=1)
         block_state.timestep = t.expand(block_state.latents.shape[0]).to(block_state.latents.dtype)
         return components, block_state
-
 
 class QwenImageLoopBeforeDenoiserControlNet(ModularPipelineBlocks):
     model_name = "qwenimage"
@@ -188,7 +170,6 @@ class QwenImageLoopBeforeDenoiserControlNet(ModularPipelineBlocks):
         block_state.additional_cond_kwargs["controlnet_block_samples"] = controlnet_block_samples
 
         return components, block_state
-
 
 # loop step:denoiser
 class QwenImageLoopDenoiser(ModularPipelineBlocks):
@@ -289,7 +270,6 @@ class QwenImageLoopDenoiser(ModularPipelineBlocks):
         block_state.noise_pred = guider_output.pred * (pred_cond_norm / pred_norm)
 
         return components, block_state
-
 
 class QwenImageEditLoopDenoiser(ModularPipelineBlocks):
     model_name = "qwenimage-edit"
@@ -393,7 +373,6 @@ class QwenImageEditLoopDenoiser(ModularPipelineBlocks):
 
         return components, block_state
 
-
 # loop step:after denoiser
 class QwenImageLoopAfterDenoiser(ModularPipelineBlocks):
     model_name = "qwenimage"
@@ -430,11 +409,10 @@ class QwenImageLoopAfterDenoiser(ModularPipelineBlocks):
 
         if block_state.latents.dtype != latents_dtype:
             if torch.backends.mps.is_available():
-                # some platforms (eg. apple mps) misbehave due to a pytorch bug: https://github.com/pytorch/pytorch/pull/99272
+                # some platforms (eg. apple mps) m...
                 block_state.latents = block_state.latents.to(latents_dtype)
 
         return components, block_state
-
 
 class QwenImageLoopAfterDenoiserInpaint(ModularPipelineBlocks):
     model_name = "qwenimage"
@@ -490,7 +468,6 @@ class QwenImageLoopAfterDenoiserInpaint(ModularPipelineBlocks):
         ) * block_state.init_latents_proper + block_state.mask * block_state.latents
 
         return components, block_state
-
 
 # ====================
 # 2. DENOISE LOOP WRAPPER: define the denoising loop logic
@@ -550,11 +527,9 @@ class QwenImageDenoiseLoopWrapper(LoopSequentialPipelineBlocks):
 
         return components, state
 
-
 # ====================
 # 3. DENOISE STEPS: compose the denoising loop with loop wrapper + loop steps
 # ====================
-
 
 # Qwen Image (text2image, image2image)
 class QwenImageDenoiseStep(QwenImageDenoiseLoopWrapper):
@@ -578,7 +553,6 @@ class QwenImageDenoiseStep(QwenImageDenoiseLoopWrapper):
             " - `QwenImageLoopAfterDenoiser`\n"
             "This block supports text2image and image2image tasks for QwenImage."
         )
-
 
 # Qwen Image (inpainting)
 class QwenImageInpaintDenoiseStep(QwenImageDenoiseLoopWrapper):
@@ -604,7 +578,6 @@ class QwenImageInpaintDenoiseStep(QwenImageDenoiseLoopWrapper):
             "This block supports inpainting tasks for QwenImage."
         )
 
-
 # Qwen Image (text2image, image2image) with controlnet
 class QwenImageControlNetDenoiseStep(QwenImageDenoiseLoopWrapper):
     model_name = "qwenimage"
@@ -628,7 +601,6 @@ class QwenImageControlNetDenoiseStep(QwenImageDenoiseLoopWrapper):
             " - `QwenImageLoopAfterDenoiser`\n"
             "This block supports text2img/img2img tasks with controlnet for QwenImage."
         )
-
 
 # Qwen Image (inpainting) with controlnet
 class QwenImageInpaintControlNetDenoiseStep(QwenImageDenoiseLoopWrapper):
@@ -662,7 +634,6 @@ class QwenImageInpaintControlNetDenoiseStep(QwenImageDenoiseLoopWrapper):
             "This block supports inpainting tasks with controlnet for QwenImage."
         )
 
-
 # Qwen Image Edit (image2image)
 class QwenImageEditDenoiseStep(QwenImageDenoiseLoopWrapper):
     model_name = "qwenimage-edit"
@@ -684,7 +655,6 @@ class QwenImageEditDenoiseStep(QwenImageDenoiseLoopWrapper):
             " - `QwenImageLoopAfterDenoiser`\n"
             "This block supports QwenImage Edit."
         )
-
 
 # Qwen Image Edit (inpainting)
 class QwenImageEditInpaintDenoiseStep(QwenImageDenoiseLoopWrapper):
@@ -709,7 +679,6 @@ class QwenImageEditInpaintDenoiseStep(QwenImageDenoiseLoopWrapper):
             " - `QwenImageLoopAfterDenoiserInpaint`\n"
             "This block supports inpainting tasks for QwenImage Edit."
         )
-
 
 # Qwen Image Layered (image2image)
 class QwenImageLayeredDenoiseStep(QwenImageDenoiseLoopWrapper):

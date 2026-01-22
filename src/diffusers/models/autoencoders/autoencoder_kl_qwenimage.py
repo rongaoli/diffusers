@@ -1,23 +1,3 @@
-# Copyright 2025 The Qwen-Image Team, Wan Team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
-# We gratefully acknowledge the Wan Team for their outstanding contributions.
-# QwenImageVAE is further fine-tuned from the Wan Video VAE to achieve improved performance.
-# For more information about the Wan VAE, please refer to:
-# - GitHub: https://github.com/Wan-Video/Wan2.1
-# - Paper: https://huggingface.co/papers/2503.20314
-
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -33,26 +13,12 @@ from ..modeling_outputs import AutoencoderKLOutput
 from ..modeling_utils import ModelMixin
 from .vae import AutoencoderMixin, DecoderOutput, DiagonalGaussianDistribution
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 CACHE_T = 2
 
-
 class QwenImageCausalConv3d(nn.Conv3d):
-    r"""
-    A custom 3D causal convolution layer with feature caching support.
 
-    This layer extends the standard Conv3D layer by ensuring causality in the time dimension and handling feature
-    caching for efficient inference.
-
-    Args:
-        in_channels (int): Number of channels in the input image
-        out_channels (int): Number of channels produced by the convolution
-        kernel_size (int or tuple): Size of the convolving kernel
-        stride (int or tuple, optional): Stride of the convolution. Default: 1
-        padding (int or tuple, optional): Zero-padding added to all three sides of the input. Default: 0
-    """
 
     def __init__(
         self,
@@ -83,18 +49,8 @@ class QwenImageCausalConv3d(nn.Conv3d):
         x = F.pad(x, padding)
         return super().forward(x)
 
-
 class QwenImageRMS_norm(nn.Module):
-    r"""
-    A custom RMS normalization layer.
 
-    Args:
-        dim (int): The number of dimensions to normalize over.
-        channel_first (bool, optional): Whether the input tensor has channels as the first dimension.
-            Default is True.
-        images (bool, optional): Whether the input represents image data. Default is True.
-        bias (bool, optional): Whether to include a learnable bias term. Default is False.
-    """
 
     def __init__(self, dim: int, channel_first: bool = True, images: bool = True, bias: bool = False) -> None:
         super().__init__()
@@ -109,35 +65,14 @@ class QwenImageRMS_norm(nn.Module):
     def forward(self, x):
         return F.normalize(x, dim=(1 if self.channel_first else -1)) * self.scale * self.gamma + self.bias
 
-
 class QwenImageUpsample(nn.Upsample):
-    r"""
-    Perform upsampling while ensuring the output tensor has the same data type as the input.
 
-    Args:
-        x (torch.Tensor): Input tensor to be upsampled.
-
-    Returns:
-        torch.Tensor: Upsampled tensor with the same data type as the input.
-    """
 
     def forward(self, x):
         return super().forward(x.float()).type_as(x)
 
-
 class QwenImageResample(nn.Module):
-    r"""
-    A custom resampling module for 2D and 3D data.
 
-    Args:
-        dim (int): The number of input/output channels.
-        mode (str): The resampling mode. Must be one of:
-            - 'none': No resampling (identity operation).
-            - 'upsample2d': 2D upsampling with nearest-exact interpolation and convolution.
-            - 'upsample3d': 3D upsampling with nearest-exact interpolation, convolution, and causal 3D convolution.
-            - 'downsample2d': 2D downsampling with zero-padding and convolution.
-            - 'downsample3d': 3D downsampling with zero-padding, convolution, and causal 3D convolution.
-    """
 
     def __init__(self, dim: int, mode: str) -> None:
         super().__init__()
@@ -211,17 +146,8 @@ class QwenImageResample(nn.Module):
                     feat_idx[0] += 1
         return x
 
-
 class QwenImageResidualBlock(nn.Module):
-    r"""
-    A custom residual block module.
 
-    Args:
-        in_dim (int): Number of input channels.
-        out_dim (int): Number of output channels.
-        dropout (float, optional): Dropout rate for the dropout layer. Default is 0.0.
-        non_linearity (str, optional): Type of non-linearity to use. Default is "silu".
-    """
 
     def __init__(
         self,
@@ -285,14 +211,8 @@ class QwenImageResidualBlock(nn.Module):
         # Add residual connection
         return x + h
 
-
 class QwenImageAttentionBlock(nn.Module):
-    r"""
-    Causal self-attention with a single head.
 
-    Args:
-        dim (int): The number of channels in the input tensor.
-    """
 
     def __init__(self, dim):
         super().__init__()
@@ -330,16 +250,8 @@ class QwenImageAttentionBlock(nn.Module):
 
         return x + identity
 
-
 class QwenImageMidBlock(nn.Module):
-    """
-    Middle block for QwenImageVAE encoder and decoder.
 
-    Args:
-        dim (int): Number of input/output channels.
-        dropout (float): Dropout rate.
-        non_linearity (str): Type of non-linearity to use.
-    """
 
     def __init__(self, dim: int, dropout: float = 0.0, non_linearity: str = "silu", num_layers: int = 1):
         super().__init__()
@@ -369,21 +281,8 @@ class QwenImageMidBlock(nn.Module):
 
         return x
 
-
 class QwenImageEncoder3d(nn.Module):
-    r"""
-    A 3D encoder module.
 
-    Args:
-        dim (int): The base number of channels in the first layer.
-        z_dim (int): The dimensionality of the latent space.
-        dim_mult (list of int): Multipliers for the number of channels in each block.
-        num_res_blocks (int): Number of residual blocks in each block.
-        attn_scales (list of float): Scales at which to apply attention mechanisms.
-        temperal_downsample (list of bool): Whether to downsample temporally in each block.
-        dropout (float): Dropout rate for the dropout layers.
-        non_linearity (str): Type of non-linearity to use.
-    """
 
     def __init__(
         self,
@@ -477,19 +376,8 @@ class QwenImageEncoder3d(nn.Module):
             x = self.conv_out(x)
         return x
 
-
 class QwenImageUpBlock(nn.Module):
-    """
-    A block that handles upsampling for the QwenImageVAE decoder.
 
-    Args:
-        in_dim (int): Input dimension
-        out_dim (int): Output dimension
-        num_res_blocks (int): Number of residual blocks
-        dropout (float): Dropout rate
-        upsample_mode (str, optional): Mode for upsampling ('upsample2d' or 'upsample3d')
-        non_linearity (str): Type of non-linearity to use
-    """
 
     def __init__(
         self,
@@ -522,17 +410,7 @@ class QwenImageUpBlock(nn.Module):
         self.gradient_checkpointing = False
 
     def forward(self, x, feat_cache=None, feat_idx=[0]):
-        """
-        Forward pass through the upsampling block.
 
-        Args:
-            x (torch.Tensor): Input tensor
-            feat_cache (list, optional): Feature cache for causal convolutions
-            feat_idx (list, optional): Feature index for cache management
-
-        Returns:
-            torch.Tensor: Output tensor
-        """
         for resnet in self.resnets:
             if feat_cache is not None:
                 x = resnet(x, feat_cache, feat_idx)
@@ -546,21 +424,8 @@ class QwenImageUpBlock(nn.Module):
                 x = self.upsamplers[0](x)
         return x
 
-
 class QwenImageDecoder3d(nn.Module):
-    r"""
-    A 3D decoder module.
 
-    Args:
-        dim (int): The base number of channels in the first layer.
-        z_dim (int): The dimensionality of the latent space.
-        dim_mult (list of int): Multipliers for the number of channels in each block.
-        num_res_blocks (int): Number of residual blocks in each block.
-        attn_scales (list of float): Scales at which to apply attention mechanisms.
-        temperal_upsample (list of bool): Whether to upsample temporally in each block.
-        dropout (float): Dropout rate for the dropout layers.
-        non_linearity (str): Type of non-linearity to use.
-    """
 
     def __init__(
         self,
@@ -664,14 +529,8 @@ class QwenImageDecoder3d(nn.Module):
             x = self.conv_out(x)
         return x
 
-
 class AutoencoderKLQwenImage(ModelMixin, AutoencoderMixin, ConfigMixin, FromOriginalModelMixin):
-    r"""
-    A VAE model with KL loss for encoding videos into latents and decoding latent representations into videos.
 
-    This model inherits from [`ModelMixin`]. Check the superclass documentation for it's generic methods implemented
-    for all models (such as downloading or saving).
-    """
 
     _supports_gradient_checkpointing = False
 
@@ -709,12 +568,12 @@ class AutoencoderKLQwenImage(ModelMixin, AutoencoderMixin, ConfigMixin, FromOrig
 
         self.spatial_compression_ratio = 2 ** len(self.temperal_downsample)
 
-        # When decoding a batch of video latents at a time, one can save memory by slicing across the batch dimension
+        # When decoding a batch of video latents a...
         # to perform decoding of a single video latent at a time.
         self.use_slicing = False
 
-        # When decoding spatially large video latents, the memory requirement is very high. By breaking the video latent
-        # frames spatially into smaller tiles and performing multiple forward passes for decoding, and then blending the
+        # When decoding spatially large video late...
+        # frames spatially into smaller tiles and...
         # intermediate tiles together, the memory requirement can be lowered.
         self.use_tiling = False
 
@@ -743,23 +602,8 @@ class AutoencoderKLQwenImage(ModelMixin, AutoencoderMixin, ConfigMixin, FromOrig
         tile_sample_stride_height: Optional[float] = None,
         tile_sample_stride_width: Optional[float] = None,
     ) -> None:
-        r"""
-        Enable tiled VAE decoding. When this option is enabled, the VAE will split the input tensor into tiles to
-        compute decoding and encoding in several steps. This is useful for saving a large amount of memory and to allow
-        processing larger images.
-
-        Args:
-            tile_sample_min_height (`int`, *optional*):
-                The minimum height required for a sample to be separated into tiles across the height dimension.
-            tile_sample_min_width (`int`, *optional*):
-                The minimum width required for a sample to be separated into tiles across the width dimension.
-            tile_sample_stride_height (`int`, *optional*):
-                The minimum amount of overlap between two consecutive vertical tiles. This is to ensure that there are
-                no tiling artifacts produced across the height dimension.
-            tile_sample_stride_width (`int`, *optional*):
-                The stride between two consecutive horizontal tiles. This is to ensure that there are no tiling
-                artifacts produced across the width dimension.
-        """
+        
+        """r"""
         self.use_tiling = True
         self.tile_sample_min_height = tile_sample_min_height or self.tile_sample_min_height
         self.tile_sample_min_width = tile_sample_min_width or self.tile_sample_min_width
@@ -810,18 +654,8 @@ class AutoencoderKLQwenImage(ModelMixin, AutoencoderMixin, ConfigMixin, FromOrig
     def encode(
         self, x: torch.Tensor, return_dict: bool = True
     ) -> Union[AutoencoderKLOutput, Tuple[DiagonalGaussianDistribution]]:
-        r"""
-        Encode a batch of images into latents.
-
-        Args:
-            x (`torch.Tensor`): Input batch of images.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether to return a [`~models.autoencoder_kl.AutoencoderKLOutput`] instead of a plain tuple.
-
-        Returns:
-                The latent representations of the encoded videos. If `return_dict` is True, a
-                [`~models.autoencoder_kl.AutoencoderKLOutput`] is returned, otherwise a plain `tuple` is returned.
-        """
+        
+        """r"""
         if self.use_slicing and x.shape[0] > 1:
             encoded_slices = [self._encode(x_slice) for x_slice in x.split(1)]
             h = torch.cat(encoded_slices)
@@ -860,19 +694,8 @@ class AutoencoderKLQwenImage(ModelMixin, AutoencoderMixin, ConfigMixin, FromOrig
 
     @apply_forward_hook
     def decode(self, z: torch.Tensor, return_dict: bool = True) -> Union[DecoderOutput, torch.Tensor]:
-        r"""
-        Decode a batch of images.
-
-        Args:
-            z (`torch.Tensor`): Input batch of latent vectors.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether to return a [`~models.vae.DecoderOutput`] instead of a plain tuple.
-
-        Returns:
-            [`~models.vae.DecoderOutput`] or `tuple`:
-                If return_dict is True, a [`~models.vae.DecoderOutput`] is returned, otherwise a plain `tuple` is
-                returned.
-        """
+        
+        """r"""
         if self.use_slicing and z.shape[0] > 1:
             decoded_slices = [self._decode(z_slice).sample for z_slice in z.split(1)]
             decoded = torch.cat(decoded_slices)
@@ -900,15 +723,8 @@ class AutoencoderKLQwenImage(ModelMixin, AutoencoderMixin, ConfigMixin, FromOrig
         return b
 
     def tiled_encode(self, x: torch.Tensor) -> AutoencoderKLOutput:
-        r"""Encode a batch of images using a tiled encoder.
-
-        Args:
-            x (`torch.Tensor`): Input batch of videos.
-
-        Returns:
-            `torch.Tensor`:
-                The latent representation of the encoded videos.
-        """
+        
+        """r"""
         _, _, num_frames, height, width = x.shape
         latent_height = height // self.spatial_compression_ratio
         latent_width = width // self.spatial_compression_ratio
@@ -966,19 +782,8 @@ class AutoencoderKLQwenImage(ModelMixin, AutoencoderMixin, ConfigMixin, FromOrig
         return enc
 
     def tiled_decode(self, z: torch.Tensor, return_dict: bool = True) -> Union[DecoderOutput, torch.Tensor]:
-        r"""
-        Decode a batch of images using a tiled decoder.
-
-        Args:
-            z (`torch.Tensor`): Input batch of latent vectors.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether or not to return a [`~models.vae.DecoderOutput`] instead of a plain tuple.
-
-        Returns:
-            [`~models.vae.DecoderOutput`] or `tuple`:
-                If return_dict is True, a [`~models.vae.DecoderOutput`] is returned, otherwise a plain `tuple` is
-                returned.
-        """
+        
+        """r"""
         _, _, num_frames, height, width = z.shape
         sample_height = height * self.spatial_compression_ratio
         sample_width = width * self.spatial_compression_ratio
@@ -1035,12 +840,7 @@ class AutoencoderKLQwenImage(ModelMixin, AutoencoderMixin, ConfigMixin, FromOrig
         return_dict: bool = True,
         generator: Optional[torch.Generator] = None,
     ) -> Union[DecoderOutput, torch.Tensor]:
-        """
-        Args:
-            sample (`torch.Tensor`): Input sample.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether or not to return a [`DecoderOutput`] instead of a plain tuple.
-        """
+
         x = sample
         posterior = self.encode(x).latent_dist
         if sample_posterior:

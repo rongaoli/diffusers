@@ -8,7 +8,6 @@ import torch.nn.functional as F
 from ...configuration_utils import ConfigMixin, register_to_config
 from ...models.modeling_utils import ModelMixin
 
-
 class ResBlock(nn.Module):
     def __init__(
         self,
@@ -46,11 +45,46 @@ class ResBlock(nn.Module):
             x = x + xt
         return x
 
+class LTX2Vocoder(ModelMixin, ConfigMixin):
+    class ResBlock(nn.Module):
+    def __init__(
+        self,
+        channels: int,
+        kernel_size: int = 3,
+        stride: int = 1,
+        dilations: Tuple[int, ...] = (1, 3, 5),
+        leaky_relu_negative_slope: float = 0.1,
+        padding_mode: str = "same",
+    ):
+        super().__init__()
+        self.dilations = dilations
+        self.negative_slope = leaky_relu_negative_slope
+
+        self.convs1 = nn.ModuleList(
+            [
+                nn.Conv1d(channels, channels, kernel_size, stride=stride, dilation=dilation, padding=padding_mode)
+                for dilation in dilations
+            ]
+        )
+
+        self.convs2 = nn.ModuleList(
+            [
+                nn.Conv1d(channels, channels, kernel_size, stride=stride, dilation=1, padding=padding_mode)
+                for _ in range(len(dilations))
+            ]
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        for conv1, conv2 in zip(self.convs1, self.convs2):
+            xt = F.leaky_relu(x, negative_slope=self.negative_slope)
+            xt = conv1(xt)
+            xt = F.leaky_relu(xt, negative_slope=self.negative_slope)
+            xt = conv2(xt)
+            x = x + xt
+        return x
 
 class LTX2Vocoder(ModelMixin, ConfigMixin):
-    r"""
-    LTX 2.0 vocoder for converting generated mel spectrograms back to audio waveforms.
-    """
+
 
     @register_to_config
     def __init__(
@@ -115,45 +149,8 @@ class LTX2Vocoder(ModelMixin, ConfigMixin):
         self.conv_out = nn.Conv1d(output_channels, out_channels, 7, stride=1, padding=3)
 
     def forward(self, hidden_states: torch.Tensor, time_last: bool = False) -> torch.Tensor:
-        r"""
-        Forward pass of the vocoder.
 
-        Args:
-            hidden_states (`torch.Tensor`):
-                Input Mel spectrogram tensor of shape `(batch_size, num_channels, time, num_mel_bins)` if `time_last`
-                is `False` (the default) or shape `(batch_size, num_channels, num_mel_bins, time)` if `time_last` is
+        Forward pass of the vocoder.
                 `True`.
             time_last (`bool`, *optional*, defaults to `False`):
                 Whether the last dimension of the input is the time/frame dimension or the Mel bins dimension.
-
-        Returns:
-            `torch.Tensor`:
-                Audio waveform tensor of shape (batch_size, out_channels, audio_length)
-        """
-
-        # Ensure that the time/frame dimension is last
-        if not time_last:
-            hidden_states = hidden_states.transpose(2, 3)
-        # Combine channels and frequency (mel bins) dimensions
-        hidden_states = hidden_states.flatten(1, 2)
-
-        hidden_states = self.conv_in(hidden_states)
-
-        for i in range(self.num_upsample_layers):
-            hidden_states = F.leaky_relu(hidden_states, negative_slope=self.negative_slope)
-            hidden_states = self.upsamplers[i](hidden_states)
-
-            # Run all resnets in parallel on hidden_states
-            start = i * self.resnets_per_upsample
-            end = (i + 1) * self.resnets_per_upsample
-            resnet_outputs = torch.stack([self.resnets[j](hidden_states) for j in range(start, end)], dim=0)
-
-            hidden_states = torch.mean(resnet_outputs, dim=0)
-
-        # NOTE: unlike the first leaky ReLU, this leaky ReLU is set to use the default F.leaky_relu negative slope of
-        # 0.01 (whereas the others usually use a slope of 0.1). Not sure if this is intended
-        hidden_states = F.leaky_relu(hidden_states, negative_slope=0.01)
-        hidden_states = self.conv_out(hidden_states)
-        hidden_states = torch.tanh(hidden_states)
-
-        return hidden_states

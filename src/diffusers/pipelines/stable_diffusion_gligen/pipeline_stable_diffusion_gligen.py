@@ -1,17 +1,3 @@
-# Copyright 2025 The GLIGEN Authors and HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import inspect
 import warnings
 from typing import Any, Callable, Dict, List, Optional, Union
@@ -40,7 +26,6 @@ from ..pipeline_utils import DeprecatedPipelineMixin, DiffusionPipeline, StableD
 from ..stable_diffusion import StableDiffusionPipelineOutput
 from ..stable_diffusion.safety_checker import StableDiffusionSafetyChecker
 
-
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
@@ -50,90 +35,11 @@ else:
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 EXAMPLE_DOC_STRING = """
-    Examples:
-        ```py
-        >>> import torch
-        >>> from diffusers import StableDiffusionGLIGENPipeline
-        >>> from diffusers.utils import load_image
-
-        >>> # Insert objects described by text at the region defined by bounding boxes
-        >>> pipe = StableDiffusionGLIGENPipeline.from_pretrained(
-        ...     "masterful/gligen-1-4-inpainting-text-box", variant="fp16", torch_dtype=torch.float16
-        ... )
-        >>> pipe = pipe.to("cuda")
-
-        >>> input_image = load_image(
-        ...     "https://hf.co/datasets/huggingface/documentation-images/resolve/main/diffusers/gligen/livingroom_modern.png"
-        ... )
-        >>> prompt = "a birthday cake"
-        >>> boxes = [[0.2676, 0.6088, 0.4773, 0.7183]]
-        >>> phrases = ["a birthday cake"]
-
-        >>> images = pipe(
-        ...     prompt=prompt,
-        ...     gligen_phrases=phrases,
-        ...     gligen_inpaint_image=input_image,
-        ...     gligen_boxes=boxes,
-        ...     gligen_scheduled_sampling_beta=1,
-        ...     output_type="pil",
-        ...     num_inference_steps=50,
-        ... ).images
-
-        >>> images[0].save("./gligen-1-4-inpainting-text-box.jpg")
-
-        >>> # Generate an image described by the prompt and
-        >>> # insert objects described by text at the region defined by bounding boxes
-        >>> pipe = StableDiffusionGLIGENPipeline.from_pretrained(
-        ...     "masterful/gligen-1-4-generation-text-box", variant="fp16", torch_dtype=torch.float16
-        ... )
-        >>> pipe = pipe.to("cuda")
-
-        >>> prompt = "a waterfall and a modern high speed train running through the tunnel in a beautiful forest with fall foliage"
-        >>> boxes = [[0.1387, 0.2051, 0.4277, 0.7090], [0.4980, 0.4355, 0.8516, 0.7266]]
-        >>> phrases = ["a waterfall", "a modern high speed train running through the tunnel"]
-
-        >>> images = pipe(
-        ...     prompt=prompt,
-        ...     gligen_phrases=phrases,
-        ...     gligen_boxes=boxes,
-        ...     gligen_scheduled_sampling_beta=1,
-        ...     output_type="pil",
-        ...     num_inference_steps=50,
-        ... ).images
-
-        >>> images[0].save("./gligen-1-4-generation-text-box.jpg")
-        ```
-"""
 
 
 class StableDiffusionGLIGENPipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableDiffusionMixin):
-    r"""
-    Pipeline for text-to-image generation using Stable Diffusion with Grounded-Language-to-Image Generation (GLIGEN).
 
-    This model inherits from [`DiffusionPipeline`]. Check the superclass documentation for the generic methods the
-    library implements for all the pipelines (such as downloading or saving, running on a particular device, etc.).
-
-    Args:
-        vae ([`AutoencoderKL`]):
-            Variational Auto-Encoder (VAE) model to encode and decode images to and from latent representations.
-        text_encoder ([`~transformers.CLIPTextModel`]):
-            Frozen text-encoder ([clip-vit-large-patch14](https://huggingface.co/openai/clip-vit-large-patch14)).
-        tokenizer ([`~transformers.CLIPTokenizer`]):
-            A `CLIPTokenizer` to tokenize text.
-        unet ([`UNet2DConditionModel`]):
-            A `UNet2DConditionModel` to denoise the encoded image latents.
-        scheduler ([`SchedulerMixin`]):
-            A scheduler to be used in combination with `unet` to denoise the encoded image latents. Can be one of
-            [`DDIMScheduler`], [`LMSDiscreteScheduler`], or [`PNDMScheduler`].
-        safety_checker ([`StableDiffusionSafetyChecker`]):
-            Classification module that estimates whether generated images could be considered offensive or harmful.
-            Please refer to the [model card](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5) for
-            more details about a model's potential harms.
-        feature_extractor ([`~transformers.CLIPImageProcessor`]):
-            A `CLIPImageProcessor` to extract features from generated images; used as inputs to the `safety_checker`.
-    """
 
     _last_supported_version = "0.33.1"
 
@@ -183,7 +89,7 @@ class StableDiffusionGLIGENPipeline(DeprecatedPipelineMixin, DiffusionPipeline, 
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor, do_convert_rgb=True)
         self.register_to_config(requires_safety_checker=requires_safety_checker)
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline._encode_prompt
+    # Copied from diffusers.pipelines.stable_diffu...
     def _encode_prompt(
         self,
         prompt,
@@ -216,7 +122,7 @@ class StableDiffusionGLIGENPipeline(DeprecatedPipelineMixin, DiffusionPipeline, 
 
         return prompt_embeds
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.encode_prompt
+    # Copied from diffusers.pipelines.stable_diffu...
     def encode_prompt(
         self,
         prompt,
@@ -229,35 +135,8 @@ class StableDiffusionGLIGENPipeline(DeprecatedPipelineMixin, DiffusionPipeline, 
         lora_scale: Optional[float] = None,
         clip_skip: Optional[int] = None,
     ):
-        r"""
-        Encodes the prompt into text encoder hidden states.
-
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                prompt to be encoded
-            device: (`torch.device`):
-                torch device
-            num_images_per_prompt (`int`):
-                number of images that should be generated per prompt
-            do_classifier_free_guidance (`bool`):
-                whether to use classifier free guidance or not
-            negative_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts not to guide the image generation. If not defined, one has to pass
-                `negative_prompt_embeds` instead. Ignored when not using guidance (i.e., ignored if `guidance_scale` is
-                less than `1`).
-            prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt weighting. If not
-                provided, text embeddings will be generated from `prompt` input argument.
-            negative_prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated negative text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt
-                weighting. If not provided, negative_prompt_embeds will be generated from `negative_prompt` input
-                argument.
-            lora_scale (`float`, *optional*):
-                A LoRA scale that will be applied to all LoRA layers of the text encoder if LoRA layers are loaded.
-            clip_skip (`int`, *optional*):
-                Number of layers to be skipped from CLIP while computing the prompt embeddings. A value of 1 means that
-                the output of the pre-final layer will be used for computing the prompt embeddings.
-        """
+        
+        """r"""
         # set lora scale so that monkey patched LoRA
         # function of text encoder can correctly access it
         if lora_scale is not None and isinstance(self, StableDiffusionLoraLoaderMixin):
@@ -384,7 +263,7 @@ class StableDiffusionGLIGENPipeline(DeprecatedPipelineMixin, DiffusionPipeline, 
             negative_prompt_embeds = negative_prompt_embeds[0]
 
         if do_classifier_free_guidance:
-            # duplicate unconditional embeddings for each generation per prompt, using mps friendly method
+            # duplicate unconditional embeddings f...
             seq_len = negative_prompt_embeds.shape[1]
 
             negative_prompt_embeds = negative_prompt_embeds.to(dtype=prompt_embeds_dtype, device=device)
@@ -399,7 +278,7 @@ class StableDiffusionGLIGENPipeline(DeprecatedPipelineMixin, DiffusionPipeline, 
 
         return prompt_embeds, negative_prompt_embeds
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.run_safety_checker
+    # Copied from diffusers.pipelines.stable_diffu...
     def run_safety_checker(self, image, device, dtype):
         if self.safety_checker is None:
             has_nsfw_concept = None
@@ -415,7 +294,7 @@ class StableDiffusionGLIGENPipeline(DeprecatedPipelineMixin, DiffusionPipeline, 
         return image, has_nsfw_concept
 
     def prepare_extra_step_kwargs(self, generator, eta):
-        # prepare extra kwargs for the scheduler step, since not all schedulers have the same signature
+        # prepare extra kwargs for the scheduler s...
         # eta (η) is only used with the DDIMScheduler, it will be ignored for other schedulers.
         # eta corresponds to η in DDIM paper: https://huggingface.co/papers/2010.02502
         # and should be between [0, 1]
@@ -486,7 +365,7 @@ class StableDiffusionGLIGENPipeline(DeprecatedPipelineMixin, DiffusionPipeline, 
                 f" got: `gligen_phrases` {len(gligen_phrases)} != `gligen_boxes` {len(gligen_boxes)}"
             )
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_latents
+    # Copied from diffusers.pipelines.stable_diffu...
     def prepare_latents(self, batch_size, num_channels_latents, height, width, dtype, device, generator, latents=None):
         shape = (
             batch_size,
@@ -549,10 +428,10 @@ class StableDiffusionGLIGENPipeline(DeprecatedPipelineMixin, DiffusionPipeline, 
         gligen_phrases: List[str] = None,
         gligen_boxes: List[List[float]] = None,
         gligen_inpaint_image: Optional[PIL.Image.Image] = None,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        negative_prompt: Optional[str] = None,
         num_images_per_prompt: Optional[int] = 1,
         eta: float = 0.0,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+        generator: Optional[torch.Generator] = None,
         latents: Optional[torch.Tensor] = None,
         prompt_embeds: Optional[torch.Tensor] = None,
         negative_prompt_embeds: Optional[torch.Tensor] = None,
@@ -563,21 +442,8 @@ class StableDiffusionGLIGENPipeline(DeprecatedPipelineMixin, DiffusionPipeline, 
         cross_attention_kwargs: Optional[Dict[str, Any]] = None,
         clip_skip: Optional[int] = None,
     ):
-        r"""
-        The call function to the pipeline for generation.
 
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to guide image generation. If not defined, you need to pass `prompt_embeds`.
-            height (`int`, *optional*, defaults to `self.unet.config.sample_size * self.vae_scale_factor`):
-                The height in pixels of the generated image.
-            width (`int`, *optional*, defaults to `self.unet.config.sample_size * self.vae_scale_factor`):
-                The width in pixels of the generated image.
-            num_inference_steps (`int`, *optional*, defaults to 50):
-                The number of denoising steps. More denoising steps usually lead to a higher quality image at the
-                expense of slower inference.
-            guidance_scale (`float`, *optional*, defaults to 7.5):
-                A higher guidance scale value encourages the model to generate images closely linked to the text
+        The call function to the pipeline for generation.
                 `prompt` at the expense of lower image quality. Guidance scale is enabled when `guidance_scale > 1`.
             gligen_phrases (`List[str]`):
                 The phrases to guide what to include in each of the regions defined by the corresponding
@@ -636,230 +502,3 @@ class StableDiffusionGLIGENPipeline(DeprecatedPipelineMixin, DiffusionPipeline, 
                 Number of layers to be skipped from CLIP while computing the prompt embeddings. A value of 1 means that
                 the output of the pre-final layer will be used for computing the prompt embeddings.
         Examples:
-
-        Returns:
-            [`~pipelines.stable_diffusion.StableDiffusionPipelineOutput`] or `tuple`:
-                If `return_dict` is `True`, [`~pipelines.stable_diffusion.StableDiffusionPipelineOutput`] is returned,
-                otherwise a `tuple` is returned where the first element is a list with the generated images and the
-                second element is a list of `bool`s indicating whether the corresponding generated image contains
-                "not-safe-for-work" (nsfw) content.
-        """
-        # 0. Default height and width to unet
-        height = height or self.unet.config.sample_size * self.vae_scale_factor
-        width = width or self.unet.config.sample_size * self.vae_scale_factor
-
-        # 1. Check inputs. Raise error if not correct
-        self.check_inputs(
-            prompt,
-            height,
-            width,
-            callback_steps,
-            gligen_phrases,
-            gligen_boxes,
-            negative_prompt,
-            prompt_embeds,
-            negative_prompt_embeds,
-        )
-
-        # 2. Define call parameters
-        if prompt is not None and isinstance(prompt, str):
-            batch_size = 1
-        elif prompt is not None and isinstance(prompt, list):
-            batch_size = len(prompt)
-        else:
-            batch_size = prompt_embeds.shape[0]
-
-        device = self._execution_device
-        # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
-        # of the Imagen paper: https://huggingface.co/papers/2205.11487 . `guidance_scale = 1`
-        # corresponds to doing no classifier free guidance.
-        do_classifier_free_guidance = guidance_scale > 1.0
-
-        # 3. Encode input prompt
-        prompt_embeds, negative_prompt_embeds = self.encode_prompt(
-            prompt,
-            device,
-            num_images_per_prompt,
-            do_classifier_free_guidance,
-            negative_prompt,
-            prompt_embeds=prompt_embeds,
-            negative_prompt_embeds=negative_prompt_embeds,
-            clip_skip=clip_skip,
-        )
-        # For classifier free guidance, we need to do two forward passes.
-        # Here we concatenate the unconditional and text embeddings into a single batch
-        # to avoid doing two forward passes
-        if do_classifier_free_guidance:
-            prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
-
-        # 4. Prepare timesteps
-        self.scheduler.set_timesteps(num_inference_steps, device=device)
-        timesteps = self.scheduler.timesteps
-
-        # 5. Prepare latent variables
-        num_channels_latents = self.unet.config.in_channels
-        latents = self.prepare_latents(
-            batch_size * num_images_per_prompt,
-            num_channels_latents,
-            height,
-            width,
-            prompt_embeds.dtype,
-            device,
-            generator,
-            latents,
-        )
-
-        # 5.1 Prepare GLIGEN variables
-        max_objs = 30
-        if len(gligen_boxes) > max_objs:
-            warnings.warn(
-                f"More that {max_objs} objects found. Only first {max_objs} objects will be processed.",
-                FutureWarning,
-            )
-            gligen_phrases = gligen_phrases[:max_objs]
-            gligen_boxes = gligen_boxes[:max_objs]
-        # prepare batched input to the GLIGENTextBoundingboxProjection (boxes, phrases, mask)
-        # Get tokens for phrases from pre-trained CLIPTokenizer
-        tokenizer_inputs = self.tokenizer(gligen_phrases, padding=True, return_tensors="pt").to(device)
-        # For the token, we use the same pre-trained text encoder
-        # to obtain its text feature
-        _text_embeddings = self.text_encoder(**tokenizer_inputs).pooler_output
-        n_objs = len(gligen_boxes)
-        # For each entity, described in phrases, is denoted with a bounding box,
-        # we represent the location information as (xmin,ymin,xmax,ymax)
-        boxes = torch.zeros(max_objs, 4, device=device, dtype=self.text_encoder.dtype)
-        boxes[:n_objs] = torch.tensor(gligen_boxes)
-        text_embeddings = torch.zeros(
-            max_objs, self.unet.config.cross_attention_dim, device=device, dtype=self.text_encoder.dtype
-        )
-        text_embeddings[:n_objs] = _text_embeddings
-        # Generate a mask for each object that is entity described by phrases
-        masks = torch.zeros(max_objs, device=device, dtype=self.text_encoder.dtype)
-        masks[:n_objs] = 1
-
-        repeat_batch = batch_size * num_images_per_prompt
-        boxes = boxes.unsqueeze(0).expand(repeat_batch, -1, -1).clone()
-        text_embeddings = text_embeddings.unsqueeze(0).expand(repeat_batch, -1, -1).clone()
-        masks = masks.unsqueeze(0).expand(repeat_batch, -1).clone()
-        if do_classifier_free_guidance:
-            repeat_batch = repeat_batch * 2
-            boxes = torch.cat([boxes] * 2)
-            text_embeddings = torch.cat([text_embeddings] * 2)
-            masks = torch.cat([masks] * 2)
-            masks[: repeat_batch // 2] = 0
-        if cross_attention_kwargs is None:
-            cross_attention_kwargs = {}
-        cross_attention_kwargs["gligen"] = {"boxes": boxes, "positive_embeddings": text_embeddings, "masks": masks}
-
-        # Prepare latent variables for GLIGEN inpainting
-        if gligen_inpaint_image is not None:
-            # if the given input image is not of the same size as expected by VAE
-            # center crop and resize the input image to expected shape
-            if gligen_inpaint_image.size != (self.vae.sample_size, self.vae.sample_size):
-                gligen_inpaint_image = self.target_size_center_crop(gligen_inpaint_image, self.vae.sample_size)
-            # Convert a single image into a batch of images with a batch size of 1
-            # The resulting shape becomes (1, C, H, W), where C is the number of channels,
-            # and H and W are the height and width of the image.
-            # scales the pixel values to a range [-1, 1]
-            gligen_inpaint_image = self.image_processor.preprocess(gligen_inpaint_image)
-            gligen_inpaint_image = gligen_inpaint_image.to(dtype=self.vae.dtype, device=self.vae.device)
-            # Run AutoEncoder to get corresponding latents
-            gligen_inpaint_latent = self.vae.encode(gligen_inpaint_image).latent_dist.sample()
-            gligen_inpaint_latent = self.vae.config.scaling_factor * gligen_inpaint_latent
-            # Generate an inpainting mask
-            # pixel value = 0, where the object is present (defined by bounding boxes above)
-            #               1, everywhere else
-            gligen_inpaint_mask = self.draw_inpaint_mask_from_boxes(gligen_boxes, gligen_inpaint_latent.shape[2:])
-            gligen_inpaint_mask = gligen_inpaint_mask.to(
-                dtype=gligen_inpaint_latent.dtype, device=gligen_inpaint_latent.device
-            )
-            gligen_inpaint_mask = gligen_inpaint_mask[None, None]
-            gligen_inpaint_mask_addition = torch.cat(
-                (gligen_inpaint_latent * gligen_inpaint_mask, gligen_inpaint_mask), dim=1
-            )
-            # Convert a single mask into a batch of masks with a batch size of 1
-            gligen_inpaint_mask_addition = gligen_inpaint_mask_addition.expand(repeat_batch, -1, -1, -1).clone()
-
-        num_grounding_steps = int(gligen_scheduled_sampling_beta * len(timesteps))
-        self.enable_fuser(True)
-
-        # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
-        extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
-
-        # 7. Denoising loop
-        num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
-        with self.progress_bar(total=num_inference_steps) as progress_bar:
-            for i, t in enumerate(timesteps):
-                # Scheduled sampling
-                if i == num_grounding_steps:
-                    self.enable_fuser(False)
-
-                if latents.shape[1] != 4:
-                    latents = torch.randn_like(latents[:, :4])
-
-                if gligen_inpaint_image is not None:
-                    gligen_inpaint_latent_with_noise = (
-                        self.scheduler.add_noise(
-                            gligen_inpaint_latent, torch.randn_like(gligen_inpaint_latent), torch.tensor([t])
-                        )
-                        .expand(latents.shape[0], -1, -1, -1)
-                        .clone()
-                    )
-                    latents = gligen_inpaint_latent_with_noise * gligen_inpaint_mask + latents * (
-                        1 - gligen_inpaint_mask
-                    )
-
-                # expand the latents if we are doing classifier free guidance
-                latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
-                latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
-
-                if gligen_inpaint_image is not None:
-                    latent_model_input = torch.cat((latent_model_input, gligen_inpaint_mask_addition), dim=1)
-
-                # predict the noise residual
-                noise_pred = self.unet(
-                    latent_model_input,
-                    t,
-                    encoder_hidden_states=prompt_embeds,
-                    cross_attention_kwargs=cross_attention_kwargs,
-                ).sample
-
-                # perform guidance
-                if do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                    noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
-
-                # compute the previous noisy sample x_t -> x_t-1
-                latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
-
-                # call the callback, if provided
-                if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
-                    progress_bar.update()
-                    if callback is not None and i % callback_steps == 0:
-                        step_idx = i // getattr(self.scheduler, "order", 1)
-                        callback(step_idx, t, latents)
-
-                if XLA_AVAILABLE:
-                    xm.mark_step()
-
-        if not output_type == "latent":
-            image = self.vae.decode(latents / self.vae.config.scaling_factor, return_dict=False)[0]
-            image, has_nsfw_concept = self.run_safety_checker(image, device, prompt_embeds.dtype)
-        else:
-            image = latents
-            has_nsfw_concept = None
-
-        if has_nsfw_concept is None:
-            do_denormalize = [True] * image.shape[0]
-        else:
-            do_denormalize = [not has_nsfw for has_nsfw in has_nsfw_concept]
-
-        image = self.image_processor.postprocess(image, output_type=output_type, do_denormalize=do_denormalize)
-
-        # Offload all models
-        self.maybe_free_model_hooks()
-
-        if not return_dict:
-            return (image, has_nsfw_concept)
-
-        return StableDiffusionPipelineOutput(images=image, nsfw_content_detected=has_nsfw_concept)

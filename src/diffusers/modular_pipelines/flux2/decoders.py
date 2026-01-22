@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import Any, List, Tuple, Union
 
 import numpy as np
@@ -25,9 +11,7 @@ from ...utils import logging
 from ..modular_pipeline import ModularPipelineBlocks, PipelineState
 from ..modular_pipeline_utils import ComponentSpec, InputParam, OutputParam
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 class Flux2DecodeStep(ModularPipelineBlocks):
     model_name = "flux2"
@@ -78,16 +62,56 @@ class Flux2DecodeStep(ModularPipelineBlocks):
 
     @staticmethod
     def _unpack_latents_with_ids(x: torch.Tensor, x_ids: torch.Tensor) -> torch.Tensor:
-        """
-        Unpack latents using position IDs to scatter tokens into place.
+        class Flux2DecodeStep(ModularPipelineBlocks):
+    model_name = "flux2"
 
-        Args:
-            x: Packed latents tensor of shape (B, seq_len, C)
-            x_ids: Position IDs tensor of shape (B, seq_len, 4) with (T, H, W, L) coordinates
+    @property
+    def expected_components(self) -> List[ComponentSpec]:
+        return [
+            ComponentSpec("vae", AutoencoderKLFlux2),
+            ComponentSpec(
+                "image_processor",
+                Flux2ImageProcessor,
+                config=FrozenDict({"vae_scale_factor": 16, "vae_latent_channels": 32}),
+                default_creation_method="from_config",
+            ),
+        ]
 
-        Returns:
-            Unpacked latents tensor of shape (B, C, H, W)
-        """
+    @property
+    def description(self) -> str:
+        return "Step that decodes the denoised latents into images using Flux2 VAE with batch norm denormalization"
+
+    @property
+    def inputs(self) -> List[Tuple[str, Any]]:
+        return [
+            InputParam("output_type", default="pil"),
+            InputParam(
+                "latents",
+                required=True,
+                type_hint=torch.Tensor,
+                description="The denoised latents from the denoising step",
+            ),
+            InputParam(
+                "latent_ids",
+                required=True,
+                type_hint=torch.Tensor,
+                description="Position IDs for the latents, used for unpacking",
+            ),
+        ]
+
+    @property
+    def intermediate_outputs(self) -> List[str]:
+        return [
+            OutputParam(
+                "images",
+                type_hint=Union[List[PIL.Image.Image], torch.Tensor, np.ndarray],
+                description="The generated images, can be a list of PIL.Image.Image, torch.Tensor or a numpy array",
+            )
+        ]
+
+    @staticmethod
+    def _unpack_latents_with_ids(x: torch.Tensor, x_ids: torch.Tensor) -> torch.Tensor:
+
         x_list = []
         for data, pos in zip(x, x_ids):
             _, ch = data.shape  # noqa: F841
@@ -109,7 +133,7 @@ class Flux2DecodeStep(ModularPipelineBlocks):
 
     @staticmethod
     def _unpatchify_latents(latents):
-        """Convert patchified latents back to regular format."""
+
         batch_size, num_channels_latents, height, width = latents.shape
         latents = latents.reshape(batch_size, num_channels_latents // (2 * 2), 2, 2, height, width)
         latents = latents.permute(0, 1, 4, 2, 5, 3)

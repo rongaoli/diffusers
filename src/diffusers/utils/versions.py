@@ -1,19 +1,4 @@
-# Copyright 2020 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""
 Utilities for working with package versions
-"""
 
 import importlib.metadata
 import operator
@@ -23,7 +8,6 @@ from typing import Optional
 
 from packaging import version
 
-
 ops = {
     "<": operator.lt,
     "<=": operator.le,
@@ -32,7 +16,6 @@ ops = {
     ">=": operator.ge,
     ">": operator.gt,
 }
-
 
 def _compare_versions(op, got_ver, want_ver, requirement, pkg, hint):
     if got_ver is None or want_ver is None:
@@ -45,23 +28,8 @@ def _compare_versions(op, got_ver, want_ver, requirement, pkg, hint):
             f"{requirement} is required for a normal functioning of this module, but found {pkg}=={got_ver}.{hint}"
         )
 
-
 def require_version(requirement: str, hint: Optional[str] = None) -> None:
-    """
-    Perform a runtime check of the dependency versions, using the exact same syntax used by pip.
 
-    The installed module version comes from the *site-packages* dir via *importlib.metadata*.
-
-    Args:
-        requirement (`str`): pip style definition, e.g.,  "tokenizers==0.9.4", "tqdm>=4.27", "numpy"
-        hint (`str`, *optional*): what suggestion to print in case of requirements not being met
-
-    Example:
-
-    ```python
-    require_version("pandas>1.1.2")
-    require_version("numpy>1.18.5", "this is important to have for whatever reason")
-    ```"""
 
     hint = f"\n{hint}" if hint is not None else ""
 
@@ -110,8 +78,7 @@ def require_version(requirement: str, hint: Optional[str] = None) -> None:
         for op, want_ver in wanted.items():
             _compare_versions(op, got_ver, want_ver, requirement, pkg, hint)
 
-
 def require_version_core(requirement):
-    """require_version wrapper which emits a core-specific hint on failure"""
+
     hint = "Try: pip install transformers -U or pip install -e '.[dev]' if you're working with git main"
     return require_version(requirement, hint)

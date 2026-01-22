@@ -1,18 +1,4 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from collections import OrderedDict
 
 from huggingface_hub.utils import validate_hf_hub_args
@@ -130,7 +116,6 @@ from .z_image import (
     ZImageOmniPipeline,
     ZImagePipeline,
 )
-
 
 AUTO_TEXT2IMAGE_PIPELINES_MAPPING = OrderedDict(
     [
@@ -297,9 +282,8 @@ SUPPORTED_TASKS_MAPPINGS = [
     _AUTO_INPAINT_DECODER_PIPELINES_MAPPING,
 ]
 
-
 def _get_connected_pipeline(pipeline_cls):
-    # for now connected pipelines can only be loaded from decoder pipelines, such as kandinsky-community/kandinsky-2-2-decoder
+    # for now connected pipelines can only be load...
     if pipeline_cls in _AUTO_TEXT2IMAGE_DECODER_PIPELINES_MAPPING.values():
         return _get_task_class(
             AUTO_TEXT2IMAGE_PIPELINES_MAPPING, pipeline_cls.__name__, throw_error_if_not_exist=False
@@ -311,13 +295,11 @@ def _get_connected_pipeline(pipeline_cls):
     if pipeline_cls in _AUTO_INPAINT_DECODER_PIPELINES_MAPPING.values():
         return _get_task_class(AUTO_INPAINT_PIPELINES_MAPPING, pipeline_cls.__name__, throw_error_if_not_exist=False)
 
-
 def _get_model(pipeline_class_name):
     for task_mapping in SUPPORTED_TASKS_MAPPINGS:
         for model_name, pipeline in task_mapping.items():
             if pipeline.__name__ == pipeline_class_name:
                 return model_name
-
 
 def _get_task_class(mapping, pipeline_class_name, throw_error_if_not_exist: bool = True):
     model_name = _get_model(pipeline_class_name)
@@ -330,22 +312,15 @@ def _get_task_class(mapping, pipeline_class_name, throw_error_if_not_exist: bool
     if throw_error_if_not_exist:
         raise ValueError(f"AutoPipeline can't find a pipeline linked to {pipeline_class_name} for {model_name}")
 
+class AutoPipelineForText2Image(ConfigMixin):
+    class is not None:
+            return task_class
+
+    if throw_error_if_not_exist:
+        raise ValueError(f"AutoPipeline can't find a pipeline linked to {pipeline_class_name} for {model_name}")
 
 class AutoPipelineForText2Image(ConfigMixin):
-    r"""
 
-    [`AutoPipelineForText2Image`] is a generic pipeline class that instantiates a text-to-image pipeline class. The
-    specific underlying pipeline class is automatically selected from either the
-    [`~AutoPipelineForText2Image.from_pretrained`] or [`~AutoPipelineForText2Image.from_pipe`] methods.
-
-    This class cannot be instantiated using `__init__()` (throws an error).
-
-    Class attributes:
-
-        - **config_name** (`str`) -- The configuration filename that stores the class and module names of all the
-          diffusion pipeline's components.
-
-    """
 
     config_name = "model_index.json"
 
@@ -359,10 +334,49 @@ class AutoPipelineForText2Image(ConfigMixin):
     @classmethod
     @validate_hf_hub_args
     def from_pretrained(cls, pretrained_model_or_path, **kwargs):
-        r"""
-        Instantiates a text-to-image Pytorch diffusion pipeline from pretrained pipeline weight.
+        
+        """r"""
+        cache_dir = kwargs.pop("cache_dir", None)
+        force_download = kwargs.pop("force_download", False)
+        proxies = kwargs.pop("proxies", None)
+        token = kwargs.pop("token", None)
+        local_files_only = kwargs.pop("local_files_only", False)
+        revision = kwargs.pop("revision", None)
 
-        The from_pretrained() method takes care of returning the correct pipeline class instance by:
+        load_config_kwargs = {
+            "cache_dir": cache_dir,
+            "force_download": force_download,
+            "proxies": proxies,
+            "token": token,
+            "local_files_only": local_files_only,
+            "revision": revision,
+        }
+
+        config = cls.load_config(pretrained_model_or_path, **load_config_kwargs)
+        orig_class_name = config["_class_name"]
+        if "ControlPipeline" in orig_class_name:
+            to_replace = "ControlPipeline"
+        else:
+            to_replace = "Pipeline"
+
+        if "controlnet" in kwargs:
+            if isinstance(kwargs["controlnet"], ControlNetUnionModel):
+                orig_class_name = config["_class_name"].replace(to_replace, "ControlNetUnionPipeline")
+            else:
+                orig_class_name = config["_class_name"].replace(to_replace, "ControlNetPipeline")
+        if "enable_pag" in kwargs:
+            enable_pag = kwargs.pop("enable_pag")
+            if enable_pag:
+                orig_class_name = orig_class_name.replace(to_replace, "PAGPipeline")
+
+        text_2_image_cls = _get_task_class(AUTO_TEXT2IMAGE_PIPELINES_MAPPING, orig_class_name)
+
+        kwargs = {**load_config_kwargs, **kwargs}
+        return text_2_image_cls.from_pretrained(pretrained_model_or_path, **kwargs)
+
+    @classmethod
+    def from_pipe(cls, pipeline, **kwargs):
+        class instance by:
             1. Detect the pipeline class of the pretrained_model_or_path based on the _class_name property of its
                config object
             2. Find the text-to-image pipeline linked to the pipeline class using pattern matching on pipeline class
@@ -379,10 +393,6 @@ class AutoPipelineForText2Image(ConfigMixin):
         - conv_in.weight: found shape torch.Size([320, 4, 3, 3]) in the checkpoint and torch.Size([320, 9, 3, 3]) in the model instantiated
         You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
         ```
-
-        Parameters:
-            pretrained_model_or_path (`str` or `os.PathLike`, *optional*):
-                Can be either:
 
                     - A string, the *repo id* (for example `CompVis/ldm-text2im-large-256`) of a pretrained pipeline
                       hosted on the Hub.
@@ -456,82 +466,7 @@ class AutoPipelineForText2Image(ConfigMixin):
 
         > [!TIP] > To use private or [gated](https://huggingface.co/docs/hub/models-gated#gated-models) models, log-in
         with `hf > auth login`.
-
-        Examples:
-
-        ```py
-        >>> from diffusers import AutoPipelineForText2Image
-
-        >>> pipeline = AutoPipelineForText2Image.from_pretrained("stable-diffusion-v1-5/stable-diffusion-v1-5")
-        >>> image = pipeline(prompt).images[0]
-        ```
-        """
-        cache_dir = kwargs.pop("cache_dir", None)
-        force_download = kwargs.pop("force_download", False)
-        proxies = kwargs.pop("proxies", None)
-        token = kwargs.pop("token", None)
-        local_files_only = kwargs.pop("local_files_only", False)
-        revision = kwargs.pop("revision", None)
-
-        load_config_kwargs = {
-            "cache_dir": cache_dir,
-            "force_download": force_download,
-            "proxies": proxies,
-            "token": token,
-            "local_files_only": local_files_only,
-            "revision": revision,
-        }
-
-        config = cls.load_config(pretrained_model_or_path, **load_config_kwargs)
-        orig_class_name = config["_class_name"]
-        if "ControlPipeline" in orig_class_name:
-            to_replace = "ControlPipeline"
-        else:
-            to_replace = "Pipeline"
-
-        if "controlnet" in kwargs:
-            if isinstance(kwargs["controlnet"], ControlNetUnionModel):
-                orig_class_name = config["_class_name"].replace(to_replace, "ControlNetUnionPipeline")
-            else:
-                orig_class_name = config["_class_name"].replace(to_replace, "ControlNetPipeline")
-        if "enable_pag" in kwargs:
-            enable_pag = kwargs.pop("enable_pag")
-            if enable_pag:
-                orig_class_name = orig_class_name.replace(to_replace, "PAGPipeline")
-
-        text_2_image_cls = _get_task_class(AUTO_TEXT2IMAGE_PIPELINES_MAPPING, orig_class_name)
-
-        kwargs = {**load_config_kwargs, **kwargs}
-        return text_2_image_cls.from_pretrained(pretrained_model_or_path, **kwargs)
-
-    @classmethod
-    def from_pipe(cls, pipeline, **kwargs):
-        r"""
-        Instantiates a text-to-image Pytorch diffusion pipeline from another instantiated diffusion pipeline class.
-
-        The from_pipe() method takes care of returning the correct pipeline class instance by finding the text-to-image
-        pipeline linked to the pipeline class using pattern matching on pipeline class name.
-
-        All the modules the pipeline contains will be used to initialize the new pipeline without reallocating
-        additional memory.
-
-        The pipeline is set in evaluation mode (`model.eval()`) by default.
-
-        Parameters:
-            pipeline (`DiffusionPipeline`):
-                an instantiated `DiffusionPipeline` object
-
-        ```py
-        >>> from diffusers import AutoPipelineForText2Image, AutoPipelineForImage2Image
-
-        >>> pipe_i2i = AutoPipelineForImage2Image.from_pretrained(
-        ...     "stable-diffusion-v1-5/stable-diffusion-v1-5", requires_safety_checker=False
-        ... )
-
-        >>> pipe_t2i = AutoPipelineForText2Image.from_pipe(pipe_i2i)
-        >>> image = pipe_t2i(prompt).images[0]
-        ```
-        """
+        使用示例见文档
 
         original_config = dict(pipeline.config)
         original_cls_name = pipeline.__class__.__name__
@@ -620,22 +555,93 @@ class AutoPipelineForText2Image(ConfigMixin):
 
         return model
 
+class AutoPipelineForImage2Image(ConfigMixin):
+    class to instantiate
+        text_2_image_cls = _get_task_class(AUTO_TEXT2IMAGE_PIPELINES_MAPPING, original_cls_name)
+
+        if "controlnet" in kwargs:
+            if kwargs["controlnet"] is not None:
+                to_replace = "PAGPipeline" if "PAG" in text_2_image_cls.__name__ else "Pipeline"
+                text_2_image_cls = _get_task_class(
+                    AUTO_TEXT2IMAGE_PIPELINES_MAPPING,
+                    text_2_image_cls.__name__.replace("ControlNet", "").replace(to_replace, "ControlNet" + to_replace),
+                )
+            else:
+                text_2_image_cls = _get_task_class(
+                    AUTO_TEXT2IMAGE_PIPELINES_MAPPING,
+                    text_2_image_cls.__name__.replace("ControlNet", ""),
+                )
+
+        if "enable_pag" in kwargs:
+            enable_pag = kwargs.pop("enable_pag")
+            if enable_pag:
+                text_2_image_cls = _get_task_class(
+                    AUTO_TEXT2IMAGE_PIPELINES_MAPPING,
+                    text_2_image_cls.__name__.replace("PAG", "").replace("Pipeline", "PAGPipeline"),
+                )
+            else:
+                text_2_image_cls = _get_task_class(
+                    AUTO_TEXT2IMAGE_PIPELINES_MAPPING,
+                    text_2_image_cls.__name__.replace("PAG", ""),
+                )
+
+        # define expected module and optional kwargs given the pipeline signature
+        expected_modules, optional_kwargs = text_2_image_cls._get_signature_keys(text_2_image_cls)
+
+        pretrained_model_name_or_path = original_config.pop("_name_or_path", None)
+
+        # allow users pass modules in `kwargs` to override the original pipeline's components
+        passed_class_obj = {k: kwargs.pop(k) for k in expected_modules if k in kwargs}
+        original_class_obj = {
+            k: pipeline.components[k]
+            for k, v in pipeline.components.items()
+            if k in expected_modules and k not in passed_class_obj
+        }
+
+        # allow users pass optional kwargs to override the original pipelines config attribute
+        passed_pipe_kwargs = {k: kwargs.pop(k) for k in optional_kwargs if k in kwargs}
+        original_pipe_kwargs = {
+            k: original_config[k]
+            for k, v in original_config.items()
+            if k in optional_kwargs and k not in passed_pipe_kwargs
+        }
+
+        # config that were not expected by original pipeline is stored as private attribute
+        # we will pass them as optional arguments if they can be accepted by the pipeline
+        additional_pipe_kwargs = [
+            k[1:]
+            for k in original_config.keys()
+            if k.startswith("_") and k[1:] in optional_kwargs and k[1:] not in passed_pipe_kwargs
+        ]
+        for k in additional_pipe_kwargs:
+            original_pipe_kwargs[k] = original_config.pop(f"_{k}")
+
+        text_2_image_kwargs = {**passed_class_obj, **original_class_obj, **passed_pipe_kwargs, **original_pipe_kwargs}
+
+        # store unused config as private attribute
+        unused_original_config = {
+            f"{'' if k.startswith('_') else '_'}{k}": original_config[k]
+            for k, v in original_config.items()
+            if k not in text_2_image_kwargs
+        }
+
+        missing_modules = (
+            set(expected_modules) - set(text_2_image_cls._optional_components) - set(text_2_image_kwargs.keys())
+        )
+
+        if len(missing_modules) > 0:
+            raise ValueError(
+                f"Pipeline {text_2_image_cls} expected {expected_modules}, but only {set(list(passed_class_obj.keys()) + list(original_class_obj.keys()))} were passed"
+            )
+
+        model = text_2_image_cls(**text_2_image_kwargs)
+        model.register_to_config(_name_or_path=pretrained_model_name_or_path)
+        model.register_to_config(**unused_original_config)
+
+        return model
 
 class AutoPipelineForImage2Image(ConfigMixin):
-    r"""
 
-    [`AutoPipelineForImage2Image`] is a generic pipeline class that instantiates an image-to-image pipeline class. The
-    specific underlying pipeline class is automatically selected from either the
-    [`~AutoPipelineForImage2Image.from_pretrained`] or [`~AutoPipelineForImage2Image.from_pipe`] methods.
-
-    This class cannot be instantiated using `__init__()` (throws an error).
-
-    Class attributes:
-
-        - **config_name** (`str`) -- The configuration filename that stores the class and module names of all the
-          diffusion pipeline's components.
-
-    """
 
     config_name = "model_index.json"
 
@@ -649,10 +655,59 @@ class AutoPipelineForImage2Image(ConfigMixin):
     @classmethod
     @validate_hf_hub_args
     def from_pretrained(cls, pretrained_model_or_path, **kwargs):
-        r"""
-        Instantiates a image-to-image Pytorch diffusion pipeline from pretrained pipeline weight.
+        
+        """r"""
+        cache_dir = kwargs.pop("cache_dir", None)
+        force_download = kwargs.pop("force_download", False)
+        proxies = kwargs.pop("proxies", None)
+        token = kwargs.pop("token", None)
+        local_files_only = kwargs.pop("local_files_only", False)
+        revision = kwargs.pop("revision", None)
 
-        The from_pretrained() method takes care of returning the correct pipeline class instance by:
+        load_config_kwargs = {
+            "cache_dir": cache_dir,
+            "force_download": force_download,
+            "proxies": proxies,
+            "token": token,
+            "local_files_only": local_files_only,
+            "revision": revision,
+        }
+
+        config = cls.load_config(pretrained_model_or_path, **load_config_kwargs)
+        orig_class_name = config["_class_name"]
+
+        # the `orig_class_name` can be:
+        # `- *Pipeline` (for regular text-to-image checkpoint)
+        #  - `*ControlPipeline` (for Flux tools specific checkpoint)
+        # `- *Img2ImgPipeline` (for refiner checkpoint)
+        if "Img2Img" in orig_class_name:
+            to_replace = "Img2ImgPipeline"
+        elif "ControlPipeline" in orig_class_name:
+            to_replace = "ControlPipeline"
+        else:
+            to_replace = "Pipeline"
+
+        if "controlnet" in kwargs:
+            if isinstance(kwargs["controlnet"], ControlNetUnionModel):
+                orig_class_name = orig_class_name.replace(to_replace, "ControlNetUnion" + to_replace)
+            else:
+                orig_class_name = orig_class_name.replace(to_replace, "ControlNet" + to_replace)
+        if "enable_pag" in kwargs:
+            enable_pag = kwargs.pop("enable_pag")
+            if enable_pag:
+                orig_class_name = orig_class_name.replace(to_replace, "PAG" + to_replace)
+
+        if to_replace == "ControlPipeline":
+            orig_class_name = orig_class_name.replace(to_replace, "ControlImg2ImgPipeline")
+
+        image_2_image_cls = _get_task_class(AUTO_IMAGE2IMAGE_PIPELINES_MAPPING, orig_class_name)
+
+        kwargs = {**load_config_kwargs, **kwargs}
+        return image_2_image_cls.from_pretrained(pretrained_model_or_path, **kwargs)
+
+    @classmethod
+    def from_pipe(cls, pipeline, **kwargs):
+        class instance by:
             1. Detect the pipeline class of the pretrained_model_or_path based on the _class_name property of its
                config object
             2. Find the image-to-image pipeline linked to the pipeline class using pattern matching on pipeline class
@@ -670,10 +725,6 @@ class AutoPipelineForImage2Image(ConfigMixin):
         - conv_in.weight: found shape torch.Size([320, 4, 3, 3]) in the checkpoint and torch.Size([320, 9, 3, 3]) in the model instantiated
         You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
         ```
-
-        Parameters:
-            pretrained_model_or_path (`str` or `os.PathLike`, *optional*):
-                Can be either:
 
                     - A string, the *repo id* (for example `CompVis/ldm-text2im-large-256`) of a pretrained pipeline
                       hosted on the Hub.
@@ -747,94 +798,7 @@ class AutoPipelineForImage2Image(ConfigMixin):
 
         > [!TIP] > To use private or [gated](https://huggingface.co/docs/hub/models-gated#gated-models) models, log-in
         with `hf > auth login`.
-
-        Examples:
-
-        ```py
-        >>> from diffusers import AutoPipelineForImage2Image
-
-        >>> pipeline = AutoPipelineForImage2Image.from_pretrained("stable-diffusion-v1-5/stable-diffusion-v1-5")
-        >>> image = pipeline(prompt, image).images[0]
-        ```
-        """
-        cache_dir = kwargs.pop("cache_dir", None)
-        force_download = kwargs.pop("force_download", False)
-        proxies = kwargs.pop("proxies", None)
-        token = kwargs.pop("token", None)
-        local_files_only = kwargs.pop("local_files_only", False)
-        revision = kwargs.pop("revision", None)
-
-        load_config_kwargs = {
-            "cache_dir": cache_dir,
-            "force_download": force_download,
-            "proxies": proxies,
-            "token": token,
-            "local_files_only": local_files_only,
-            "revision": revision,
-        }
-
-        config = cls.load_config(pretrained_model_or_path, **load_config_kwargs)
-        orig_class_name = config["_class_name"]
-
-        # the `orig_class_name` can be:
-        # `- *Pipeline` (for regular text-to-image checkpoint)
-        #  - `*ControlPipeline` (for Flux tools specific checkpoint)
-        # `- *Img2ImgPipeline` (for refiner checkpoint)
-        if "Img2Img" in orig_class_name:
-            to_replace = "Img2ImgPipeline"
-        elif "ControlPipeline" in orig_class_name:
-            to_replace = "ControlPipeline"
-        else:
-            to_replace = "Pipeline"
-
-        if "controlnet" in kwargs:
-            if isinstance(kwargs["controlnet"], ControlNetUnionModel):
-                orig_class_name = orig_class_name.replace(to_replace, "ControlNetUnion" + to_replace)
-            else:
-                orig_class_name = orig_class_name.replace(to_replace, "ControlNet" + to_replace)
-        if "enable_pag" in kwargs:
-            enable_pag = kwargs.pop("enable_pag")
-            if enable_pag:
-                orig_class_name = orig_class_name.replace(to_replace, "PAG" + to_replace)
-
-        if to_replace == "ControlPipeline":
-            orig_class_name = orig_class_name.replace(to_replace, "ControlImg2ImgPipeline")
-
-        image_2_image_cls = _get_task_class(AUTO_IMAGE2IMAGE_PIPELINES_MAPPING, orig_class_name)
-
-        kwargs = {**load_config_kwargs, **kwargs}
-        return image_2_image_cls.from_pretrained(pretrained_model_or_path, **kwargs)
-
-    @classmethod
-    def from_pipe(cls, pipeline, **kwargs):
-        r"""
-        Instantiates a image-to-image Pytorch diffusion pipeline from another instantiated diffusion pipeline class.
-
-        The from_pipe() method takes care of returning the correct pipeline class instance by finding the
-        image-to-image pipeline linked to the pipeline class using pattern matching on pipeline class name.
-
-        All the modules the pipeline contains will be used to initialize the new pipeline without reallocating
-        additional memory.
-
-        The pipeline is set in evaluation mode (`model.eval()`) by default.
-
-        Parameters:
-            pipeline (`DiffusionPipeline`):
-                an instantiated `DiffusionPipeline` object
-
-        Examples:
-
-        ```py
-        >>> from diffusers import AutoPipelineForText2Image, AutoPipelineForImage2Image
-
-        >>> pipe_t2i = AutoPipelineForText2Image.from_pretrained(
-        ...     "stable-diffusion-v1-5/stable-diffusion-v1-5", requires_safety_checker=False
-        ... )
-
-        >>> pipe_i2i = AutoPipelineForImage2Image.from_pipe(pipe_t2i)
-        >>> image = pipe_i2i(prompt, image).images[0]
-        ```
-        """
+        使用示例见文档
 
         original_config = dict(pipeline.config)
         original_cls_name = pipeline.__class__.__name__
@@ -893,7 +857,7 @@ class AutoPipelineForImage2Image(ConfigMixin):
             if k in optional_kwargs and k not in passed_pipe_kwargs
         }
 
-        # config attribute that were not expected by original pipeline is stored as its private attribute
+        # config attribute that were not expected...
         # we will pass them as optional arguments if they can be accepted by the pipeline
         additional_pipe_kwargs = [
             k[1:]
@@ -927,22 +891,97 @@ class AutoPipelineForImage2Image(ConfigMixin):
 
         return model
 
+class AutoPipelineForInpainting(ConfigMixin):
+    class to instantiate
+        image_2_image_cls = _get_task_class(AUTO_IMAGE2IMAGE_PIPELINES_MAPPING, original_cls_name)
+
+        if "controlnet" in kwargs:
+            if kwargs["controlnet"] is not None:
+                to_replace = "Img2ImgPipeline"
+                if "PAG" in image_2_image_cls.__name__:
+                    to_replace = "PAG" + to_replace
+                image_2_image_cls = _get_task_class(
+                    AUTO_IMAGE2IMAGE_PIPELINES_MAPPING,
+                    image_2_image_cls.__name__.replace("ControlNet", "").replace(
+                        to_replace, "ControlNet" + to_replace
+                    ),
+                )
+            else:
+                image_2_image_cls = _get_task_class(
+                    AUTO_IMAGE2IMAGE_PIPELINES_MAPPING,
+                    image_2_image_cls.__name__.replace("ControlNet", ""),
+                )
+
+        if "enable_pag" in kwargs:
+            enable_pag = kwargs.pop("enable_pag")
+            if enable_pag:
+                image_2_image_cls = _get_task_class(
+                    AUTO_IMAGE2IMAGE_PIPELINES_MAPPING,
+                    image_2_image_cls.__name__.replace("PAG", "").replace("Img2ImgPipeline", "PAGImg2ImgPipeline"),
+                )
+            else:
+                image_2_image_cls = _get_task_class(
+                    AUTO_IMAGE2IMAGE_PIPELINES_MAPPING,
+                    image_2_image_cls.__name__.replace("PAG", ""),
+                )
+
+        # define expected module and optional kwargs given the pipeline signature
+        expected_modules, optional_kwargs = image_2_image_cls._get_signature_keys(image_2_image_cls)
+
+        pretrained_model_name_or_path = original_config.pop("_name_or_path", None)
+
+        # allow users pass modules in `kwargs` to override the original pipeline's components
+        passed_class_obj = {k: kwargs.pop(k) for k in expected_modules if k in kwargs}
+        original_class_obj = {
+            k: pipeline.components[k]
+            for k, v in pipeline.components.items()
+            if k in expected_modules and k not in passed_class_obj
+        }
+
+        # allow users pass optional kwargs to override the original pipelines config attribute
+        passed_pipe_kwargs = {k: kwargs.pop(k) for k in optional_kwargs if k in kwargs}
+        original_pipe_kwargs = {
+            k: original_config[k]
+            for k, v in original_config.items()
+            if k in optional_kwargs and k not in passed_pipe_kwargs
+        }
+
+        # config attribute that were not expected...
+        # we will pass them as optional arguments if they can be accepted by the pipeline
+        additional_pipe_kwargs = [
+            k[1:]
+            for k in original_config.keys()
+            if k.startswith("_") and k[1:] in optional_kwargs and k[1:] not in passed_pipe_kwargs
+        ]
+        for k in additional_pipe_kwargs:
+            original_pipe_kwargs[k] = original_config.pop(f"_{k}")
+
+        image_2_image_kwargs = {**passed_class_obj, **original_class_obj, **passed_pipe_kwargs, **original_pipe_kwargs}
+
+        # store unused config as private attribute
+        unused_original_config = {
+            f"{'' if k.startswith('_') else '_'}{k}": original_config[k]
+            for k, v in original_config.items()
+            if k not in image_2_image_kwargs
+        }
+
+        missing_modules = (
+            set(expected_modules) - set(image_2_image_cls._optional_components) - set(image_2_image_kwargs.keys())
+        )
+
+        if len(missing_modules) > 0:
+            raise ValueError(
+                f"Pipeline {image_2_image_cls} expected {expected_modules}, but only {set(list(passed_class_obj.keys()) + list(original_class_obj.keys()))} were passed"
+            )
+
+        model = image_2_image_cls(**image_2_image_kwargs)
+        model.register_to_config(_name_or_path=pretrained_model_name_or_path)
+        model.register_to_config(**unused_original_config)
+
+        return model
 
 class AutoPipelineForInpainting(ConfigMixin):
-    r"""
 
-    [`AutoPipelineForInpainting`] is a generic pipeline class that instantiates an inpainting pipeline class. The
-    specific underlying pipeline class is automatically selected from either the
-    [`~AutoPipelineForInpainting.from_pretrained`] or [`~AutoPipelineForInpainting.from_pipe`] methods.
-
-    This class cannot be instantiated using `__init__()` (throws an error).
-
-    Class attributes:
-
-        - **config_name** (`str`) -- The configuration filename that stores the class and module names of all the
-          diffusion pipeline's components.
-
-    """
 
     config_name = "model_index.json"
 
@@ -956,10 +995,57 @@ class AutoPipelineForInpainting(ConfigMixin):
     @classmethod
     @validate_hf_hub_args
     def from_pretrained(cls, pretrained_model_or_path, **kwargs):
-        r"""
-        Instantiates a inpainting Pytorch diffusion pipeline from pretrained pipeline weight.
+        
+        """r"""
+        cache_dir = kwargs.pop("cache_dir", None)
+        force_download = kwargs.pop("force_download", False)
+        proxies = kwargs.pop("proxies", None)
+        token = kwargs.pop("token", None)
+        local_files_only = kwargs.pop("local_files_only", False)
+        revision = kwargs.pop("revision", None)
 
-        The from_pretrained() method takes care of returning the correct pipeline class instance by:
+        load_config_kwargs = {
+            "cache_dir": cache_dir,
+            "force_download": force_download,
+            "proxies": proxies,
+            "token": token,
+            "local_files_only": local_files_only,
+            "revision": revision,
+        }
+
+        config = cls.load_config(pretrained_model_or_path, **load_config_kwargs)
+        orig_class_name = config["_class_name"]
+
+        # The `orig_class_name`` can be:
+        # `- *InpaintPipeline` (for inpaint-specific checkpoint)
+        #  - `*ControlPipeline` (for Flux tools specific checkpoint)
+        #  - or *Pipeline (for regular text-to-image checkpoint)
+        if "Inpaint" in orig_class_name:
+            to_replace = "InpaintPipeline"
+        elif "ControlPipeline" in orig_class_name:
+            to_replace = "ControlPipeline"
+        else:
+            to_replace = "Pipeline"
+
+        if "controlnet" in kwargs:
+            if isinstance(kwargs["controlnet"], ControlNetUnionModel):
+                orig_class_name = orig_class_name.replace(to_replace, "ControlNetUnion" + to_replace)
+            else:
+                orig_class_name = orig_class_name.replace(to_replace, "ControlNet" + to_replace)
+        if "enable_pag" in kwargs:
+            enable_pag = kwargs.pop("enable_pag")
+            if enable_pag:
+                orig_class_name = orig_class_name.replace(to_replace, "PAG" + to_replace)
+        if to_replace == "ControlPipeline":
+            orig_class_name = orig_class_name.replace(to_replace, "ControlInpaintPipeline")
+        inpainting_cls = _get_task_class(AUTO_INPAINT_PIPELINES_MAPPING, orig_class_name)
+
+        kwargs = {**load_config_kwargs, **kwargs}
+        return inpainting_cls.from_pretrained(pretrained_model_or_path, **kwargs)
+
+    @classmethod
+    def from_pipe(cls, pipeline, **kwargs):
+        class instance by:
             1. Detect the pipeline class of the pretrained_model_or_path based on the _class_name property of its
                config object
             2. Find the inpainting pipeline linked to the pipeline class using pattern matching on pipeline class name.
@@ -976,10 +1062,6 @@ class AutoPipelineForInpainting(ConfigMixin):
         - conv_in.weight: found shape torch.Size([320, 4, 3, 3]) in the checkpoint and torch.Size([320, 9, 3, 3]) in the model instantiated
         You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
         ```
-
-        Parameters:
-            pretrained_model_or_path (`str` or `os.PathLike`, *optional*):
-                Can be either:
 
                     - A string, the *repo id* (for example `CompVis/ldm-text2im-large-256`) of a pretrained pipeline
                       hosted on the Hub.
@@ -1053,92 +1135,8 @@ class AutoPipelineForInpainting(ConfigMixin):
 
         > [!TIP] > To use private or [gated](https://huggingface.co/docs/hub/models-gated#gated-models) models, log-in
         with `hf > auth login`.
+        使用示例见文档
 
-        Examples:
-
-        ```py
-        >>> from diffusers import AutoPipelineForInpainting
-
-        >>> pipeline = AutoPipelineForInpainting.from_pretrained("stable-diffusion-v1-5/stable-diffusion-v1-5")
-        >>> image = pipeline(prompt, image=init_image, mask_image=mask_image).images[0]
-        ```
-        """
-        cache_dir = kwargs.pop("cache_dir", None)
-        force_download = kwargs.pop("force_download", False)
-        proxies = kwargs.pop("proxies", None)
-        token = kwargs.pop("token", None)
-        local_files_only = kwargs.pop("local_files_only", False)
-        revision = kwargs.pop("revision", None)
-
-        load_config_kwargs = {
-            "cache_dir": cache_dir,
-            "force_download": force_download,
-            "proxies": proxies,
-            "token": token,
-            "local_files_only": local_files_only,
-            "revision": revision,
-        }
-
-        config = cls.load_config(pretrained_model_or_path, **load_config_kwargs)
-        orig_class_name = config["_class_name"]
-
-        # The `orig_class_name`` can be:
-        # `- *InpaintPipeline` (for inpaint-specific checkpoint)
-        #  - `*ControlPipeline` (for Flux tools specific checkpoint)
-        #  - or *Pipeline (for regular text-to-image checkpoint)
-        if "Inpaint" in orig_class_name:
-            to_replace = "InpaintPipeline"
-        elif "ControlPipeline" in orig_class_name:
-            to_replace = "ControlPipeline"
-        else:
-            to_replace = "Pipeline"
-
-        if "controlnet" in kwargs:
-            if isinstance(kwargs["controlnet"], ControlNetUnionModel):
-                orig_class_name = orig_class_name.replace(to_replace, "ControlNetUnion" + to_replace)
-            else:
-                orig_class_name = orig_class_name.replace(to_replace, "ControlNet" + to_replace)
-        if "enable_pag" in kwargs:
-            enable_pag = kwargs.pop("enable_pag")
-            if enable_pag:
-                orig_class_name = orig_class_name.replace(to_replace, "PAG" + to_replace)
-        if to_replace == "ControlPipeline":
-            orig_class_name = orig_class_name.replace(to_replace, "ControlInpaintPipeline")
-        inpainting_cls = _get_task_class(AUTO_INPAINT_PIPELINES_MAPPING, orig_class_name)
-
-        kwargs = {**load_config_kwargs, **kwargs}
-        return inpainting_cls.from_pretrained(pretrained_model_or_path, **kwargs)
-
-    @classmethod
-    def from_pipe(cls, pipeline, **kwargs):
-        r"""
-        Instantiates a inpainting Pytorch diffusion pipeline from another instantiated diffusion pipeline class.
-
-        The from_pipe() method takes care of returning the correct pipeline class instance by finding the inpainting
-        pipeline linked to the pipeline class using pattern matching on pipeline class name.
-
-        All the modules the pipeline class contain will be used to initialize the new pipeline without reallocating
-        additional memory.
-
-        The pipeline is set in evaluation mode (`model.eval()`) by default.
-
-        Parameters:
-            pipeline (`DiffusionPipeline`):
-                an instantiated `DiffusionPipeline` object
-
-        Examples:
-
-        ```py
-        >>> from diffusers import AutoPipelineForText2Image, AutoPipelineForInpainting
-
-        >>> pipe_t2i = AutoPipelineForText2Image.from_pretrained(
-        ...     "DeepFloyd/IF-I-XL-v1.0", requires_safety_checker=False
-        ... )
-
-        >>> pipe_inpaint = AutoPipelineForInpainting.from_pipe(pipe_t2i)
-        >>> image = pipe_inpaint(prompt, image=init_image, mask_image=mask_image).images[0]
-        ```
-        """
         original_config = dict(pipeline.config)
         original_cls_name = pipeline.__class__.__name__
 

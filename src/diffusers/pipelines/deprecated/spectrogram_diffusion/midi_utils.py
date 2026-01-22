@@ -1,18 +1,3 @@
-# Copyright 2022 The Music Spectrogram Diffusion Authors.
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import dataclasses
 import math
 import os
@@ -25,12 +10,10 @@ import torch.nn.functional as F
 from ....utils import is_note_seq_available
 from .pipeline_spectrogram_diffusion import TARGET_FEATURE_LENGTH
 
-
 if is_note_seq_available():
     import note_seq
 else:
     raise ImportError("Please install note-seq via `pip install note-seq`")
-
 
 INPUT_FEATURE_LENGTH = 2048
 
@@ -79,14 +62,12 @@ SLAKH_CLASS_PROGRAMS = {
     "Synth Pad": 88,
 }
 
-
 @dataclasses.dataclass
 class NoteRepresentationConfig:
-    """Configuration note representations."""
+
 
     onsets_only: bool
     include_ties: bool
-
 
 @dataclasses.dataclass
 class NoteEventData:
@@ -96,14 +77,21 @@ class NoteEventData:
     is_drum: Optional[bool] = None
     instrument: Optional[int] = None
 
+@dataclasses.dataclass
+class NoteEncodingState:
+    class NoteEventData:
+    pitch: int
+    velocity: Optional[int] = None
+    program: Optional[int] = None
+    is_drum: Optional[bool] = None
+    instrument: Optional[int] = None
 
 @dataclasses.dataclass
 class NoteEncodingState:
-    """Encoding state for note transcription, keeping track of active pitches."""
+
 
     # velocity bin for active pitches and programs
     active_pitches: MutableMapping[Tuple[int, int], int] = dataclasses.field(default_factory=dict)
-
 
 @dataclasses.dataclass
 class EventRange:
@@ -111,12 +99,10 @@ class EventRange:
     min_value: int
     max_value: int
 
-
 @dataclasses.dataclass
 class Event:
     type: str
     value: int
-
 
 class Tokenizer:
     def __init__(self, regular_ids: int):
@@ -141,27 +127,45 @@ class Tokenizer:
 
         return encoded
 
+class Codec:
+    class EventRange:
+    type: str
+    min_value: int
+    max_value: int
+
+@dataclasses.dataclass
+class Event:
+    type: str
+    value: int
+
+class Tokenizer:
+    def __init__(self, regular_ids: int):
+        # The special tokens: 0=PAD, 1=EOS, and 2=UNK
+        self._num_special_tokens = 3
+        self._num_regular_tokens = regular_ids
+
+    def encode(self, token_ids):
+        encoded = []
+        for token_id in token_ids:
+            if not 0 <= token_id < self._num_regular_tokens:
+                raise ValueError(
+                    f"token_id {token_id} does not fall within valid range of [0, {self._num_regular_tokens})"
+                )
+            encoded.append(token_id + self._num_special_tokens)
+
+        # Add EOS token
+        encoded.append(1)
+
+        # Pad to till INPUT_FEATURE_LENGTH
+        encoded = encoded + [0] * (INPUT_FEATURE_LENGTH - len(encoded))
+
+        return encoded
 
 class Codec:
-    """Encode and decode events.
 
-    Useful for declaring what certain ranges of a vocabulary should be used for. This is intended to be used from
-    Python before encoding or after decoding with GenericTokenVocabulary. This class is more lightweight and does not
-    include things like EOS or UNK token handling.
-
-    To ensure that 'shift' events are always the first block of the vocab and start at 0, that event type is required
-    and specified separately.
-    """
 
     def __init__(self, max_shift_steps: int, steps_per_second: float, event_ranges: List[EventRange]):
-        """Define Codec.
 
-        Args:
-          max_shift_steps: Maximum number of shift steps that can be encoded.
-          steps_per_second: Shift steps will be interpreted as having a duration of
-              1 / steps_per_second.
-          event_ranges: Other supported event types and their ranges.
-        """
         self.steps_per_second = steps_per_second
         self._shift_range = EventRange(type="shift", min_value=0, max_value=max_shift_steps)
         self._event_ranges = [self._shift_range] + event_ranges
@@ -183,7 +187,7 @@ class Codec:
         return self._shift_range.max_value
 
     def encode_event(self, event: Event) -> int:
-        """Encode an event to an index."""
+
         offset = 0
         for er in self._event_ranges:
             if event.type == er.type:
@@ -198,7 +202,7 @@ class Codec:
         raise ValueError(f"Unknown event type: {event.type}")
 
     def event_type_range(self, event_type: str) -> Tuple[int, int]:
-        """Return [min_id, max_id] for an event type."""
+
         offset = 0
         for er in self._event_ranges:
             if event_type == er.type:
@@ -208,7 +212,7 @@ class Codec:
         raise ValueError(f"Unknown event type: {event_type}")
 
     def decode_event_index(self, index: int) -> Event:
-        """Decode an event index to an Event."""
+
         offset = 0
         for er in self._event_ranges:
             if offset <= index <= offset + er.max_value - er.min_value:
@@ -217,26 +221,28 @@ class Codec:
 
         raise ValueError(f"Unknown event index: {index}")
 
-
 @dataclasses.dataclass
 class ProgramGranularity:
     # both tokens_map_fn and program_map_fn should be idempotent
     tokens_map_fn: Callable[[Sequence[int], Codec], Sequence[int]]
     program_map_fn: Callable[[int], int]
 
+def drop_programs(tokens, codec: Codec):
+    class ProgramGranularity:
+    # both tokens_map_fn and program_map_fn should be idempotent
+    tokens_map_fn: Callable[[Sequence[int], Codec], Sequence[int]]
+    program_map_fn: Callable[[int], int]
 
 def drop_programs(tokens, codec: Codec):
-    """Drops program change events from a token sequence."""
+
     min_program_id, max_program_id = codec.event_type_range("program")
     return tokens[(tokens < min_program_id) | (tokens > max_program_id)]
 
-
 def programs_to_midi_classes(tokens, codec):
-    """Modifies program events to be the first program in the MIDI class."""
+
     min_program_id, max_program_id = codec.event_type_range("program")
     is_program = (tokens >= min_program_id) & (tokens <= max_program_id)
     return np.where(is_program, min_program_id + 8 * ((tokens - min_program_id) // 8), tokens)
-
 
 PROGRAM_GRANULARITIES = {
     # "flat" granularity; drop program change tokens and set NoteSequence
@@ -250,11 +256,8 @@ PROGRAM_GRANULARITIES = {
     "full": ProgramGranularity(tokens_map_fn=lambda tokens, codec: tokens, program_map_fn=lambda program: program),
 }
 
-
 def frame(signal, frame_length, frame_step, pad_end=False, pad_value=0, axis=-1):
-    """
-    equivalent of tf.signal.frame
-    """
+
     signal_length = signal.shape[axis]
     if pad_end:
         frames_overlap = frame_length - frame_step
@@ -268,20 +271,18 @@ def frame(signal, frame_length, frame_step, pad_end=False, pad_value=0, axis=-1)
     frames = signal.unfold(axis, frame_length, frame_step)
     return frames
 
-
 def program_to_slakh_program(program):
     # this is done very hackily, probably should use a custom mapping
     for slakh_program in sorted(SLAKH_CLASS_PROGRAMS.values(), reverse=True):
         if program >= slakh_program:
             return slakh_program
 
-
 def audio_to_frames(
     samples,
     hop_size: int,
     frame_rate: int,
 ) -> Tuple[Sequence[Sequence[int]], torch.Tensor]:
-    """Convert audio samples to non-overlapping frames and frame times."""
+
     frame_size = hop_size
     samples = np.pad(samples, [0, frame_size - len(samples) % frame_size], mode="constant")
 
@@ -298,22 +299,10 @@ def audio_to_frames(
     times = np.arange(num_frames) / frame_rate
     return frames, times
 
-
 def note_sequence_to_onsets_and_offsets_and_programs(
     ns: note_seq.NoteSequence,
 ) -> Tuple[Sequence[float], Sequence[NoteEventData]]:
-    """Extract onset & offset times and pitches & programs from a NoteSequence.
 
-    The onset & offset times will not necessarily be in sorted order.
-
-    Args:
-      ns: NoteSequence from which to extract onsets and offsets.
-
-    Returns:
-      times: A list of note onset and offset times. values: A list of NoteEventData objects where velocity is zero for
-      note
-          offsets.
-    """
     # Sort by program and pitch and put offsets before onsets as a tiebreaker for
     # subsequent stable sort.
     notes = sorted(ns.notes, key=lambda note: (note.is_drum, note.program, note.pitch))
@@ -328,17 +317,14 @@ def note_sequence_to_onsets_and_offsets_and_programs(
     ]
     return times, values
 
-
 def num_velocity_bins_from_codec(codec: Codec):
-    """Get number of velocity bins from event codec."""
+
     lo, hi = codec.event_type_range("velocity")
     return hi - lo
-
 
 # segment an array into segments of length n
 def segment(a, n):
     return [a[i : i + n] for i in range(0, len(a), n)]
-
 
 def velocity_to_bin(velocity, num_velocity_bins):
     if velocity == 0:
@@ -346,13 +332,12 @@ def velocity_to_bin(velocity, num_velocity_bins):
     else:
         return math.ceil(num_velocity_bins * velocity / note_seq.MAX_MIDI_VELOCITY)
 
-
 def note_event_data_to_events(
     state: Optional[NoteEncodingState],
     value: NoteEventData,
     codec: Codec,
 ) -> Sequence[Event]:
-    """Convert note event data to a sequence of events."""
+
     if value.velocity is None:
         # onsets only, no program or velocity
         return [Event("pitch", value.pitch)]
@@ -378,9 +363,8 @@ def note_event_data_to_events(
                     Event("pitch", value.pitch),
                 ]
 
-
 def note_encoding_state_to_events(state: NoteEncodingState) -> Sequence[Event]:
-    """Output program and pitch events for active notes plus a final tie event."""
+
     events = []
     for pitch, program in sorted(state.active_pitches.keys(), key=lambda k: k[::-1]):
         if state.active_pitches[(pitch, program)]:
@@ -388,40 +372,10 @@ def note_encoding_state_to_events(state: NoteEncodingState) -> Sequence[Event]:
     events.append(Event("tie", 0))
     return events
 
-
 def encode_and_index_events(
     state, event_times, event_values, codec, frame_times, encode_event_fn, encoding_state_to_events_fn=None
 ):
-    """Encode a sequence of timed events and index to audio frame times.
 
-    Encodes time shifts as repeated single step shifts for later run length encoding.
-
-    Optionally, also encodes a sequence of "state events", keeping track of the current encoding state at each audio
-    frame. This can be used e.g. to prepend events representing the current state to a targets segment.
-
-    Args:
-      state: Initial event encoding state.
-      event_times: Sequence of event times.
-      event_values: Sequence of event values.
-      encode_event_fn: Function that transforms event value into a sequence of one
-          or more Event objects.
-      codec: An Codec object that maps Event objects to indices.
-      frame_times: Time for every audio frame.
-      encoding_state_to_events_fn: Function that transforms encoding state into a
-          sequence of one or more Event objects.
-
-    Returns:
-      events: Encoded events and shifts. event_start_indices: Corresponding start event index for every audio frame.
-          Note: one event can correspond to multiple audio indices due to sampling rate differences. This makes
-          splitting sequences tricky because the same event can appear at the end of one sequence and the beginning of
-          another.
-      event_end_indices: Corresponding end event index for every audio frame. Used
-          to ensure when slicing that one chunk ends where the next begins. Should always be true that
-          event_end_indices[i] = event_start_indices[i + 1].
-      state_events: Encoded "state" events representing the encoding state before
-          each event.
-      state_event_indices: Corresponding state event index for every audio frame.
-    """
     indices = np.argsort(event_times, kind="stable")
     event_steps = [round(event_times[i] * codec.steps_per_second) for i in indices]
     event_values = [event_values[i] for i in indices]
@@ -494,9 +448,8 @@ def encode_and_index_events(
 
     return outputs
 
-
 def extract_sequence_with_indices(features, state_events_end_token=None, feature_key="inputs"):
-    """Extract target sequence corresponding to audio token segment."""
+
     features = features.copy()
     start_idx = features["event_start_indices"][0]
     end_idx = features["event_end_indices"][-1]
@@ -520,16 +473,14 @@ def extract_sequence_with_indices(features, state_events_end_token=None, feature
 
     return features
 
-
 def map_midi_programs(
     feature, codec: Codec, granularity_type: str = "full", feature_key: str = "inputs"
 ) -> Mapping[str, Any]:
-    """Apply MIDI program map to token sequences."""
+
     granularity = PROGRAM_GRANULARITIES[granularity_type]
 
     feature[feature_key] = granularity.tokens_map_fn(feature[feature_key], codec)
     return feature
-
 
 def run_length_encode_shifts_fn(
     features,
@@ -537,29 +488,11 @@ def run_length_encode_shifts_fn(
     feature_key: str = "inputs",
     state_change_event_types: Sequence[str] = (),
 ) -> Callable[[Mapping[str, Any]], Mapping[str, Any]]:
-    """Return a function that run-length encodes shifts for a given codec.
 
-    Args:
-      codec: The Codec to use for shift events.
-      feature_key: The feature key for which to run-length encode shifts.
-      state_change_event_types: A list of event types that represent state
-          changes; tokens corresponding to these event types will be interpreted as state changes and redundant ones
-          will be removed.
-
-    Returns:
-      A preprocessing function that run-length encodes single-step shifts.
-    """
     state_change_event_ranges = [codec.event_type_range(event_type) for event_type in state_change_event_types]
 
     def run_length_encode_shifts(features: MutableMapping[str, Any]) -> Mapping[str, Any]:
-        """Combine leading/interior shifts, trim trailing shifts.
 
-        Args:
-          features: Dict of features to process.
-
-        Returns:
-          A dict of features.
-        """
         events = features[feature_key]
 
         shift_steps = 0
@@ -600,7 +533,6 @@ def run_length_encode_shifts_fn(
 
     return run_length_encode_shifts(features)
 
-
 def note_representation_processor_chain(features, codec: Codec, note_representation_config: NoteRepresentationConfig):
     tie_token = codec.encode_event(Event("tie", 0))
     state_events_end_token = tie_token if note_representation_config.include_ties else None
@@ -614,7 +546,6 @@ def note_representation_processor_chain(features, codec: Codec, note_representat
     features = run_length_encode_shifts_fn(features, codec, state_change_event_types=["velocity", "program"])
 
     return features
-
 
 class MidiProcessor:
     def __init__(self):

@@ -1,18 +1,3 @@
-# Copyright 2025 The CogVideoX team, Tsinghua University & ZhipuAI and The HuggingFace Team.
-# All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import inspect
 import re
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -32,13 +17,11 @@ from ...utils import is_torch_xla_available, is_transformers_version, logging, r
 from ...utils.torch_utils import randn_tensor
 from .pipeline_output import GlmImagePipelineOutput
 
-
 # Because it's not released in stable as of 13/01/2026. So this is just a proxy.
 GlmImageProcessor = ProcessorMixin
 GlmImageForConditionalGeneration = PreTrainedModel
 if is_transformers_version(">=", "5.0.0.dev0"):
     from transformers import GlmImageForConditionalGeneration, GlmImageProcessor
-
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
@@ -50,101 +33,14 @@ else:
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 EXAMPLE_DOC_STRING = """
-    Examples:
-        ```python
-        >>> import torch
-        >>> from diffusers import GlmImagePipeline
+        使用示例见文档
 
-        >>> pipe = GlmImagePipeline.from_pretrained("zai-org/GLM-Image", torch_dtype=torch.bfloat16)
-        >>> pipe.to("cuda")
-
-        >>> prompt = "A photo of an astronaut riding a horse on mars"
-        >>> image = pipe(prompt).images[0]
-        >>> image.save("output.png")
-        ```
-"""
-
-
-def calculate_shift(
-    image_seq_len,
-    base_seq_len: int = 256,
-    base_shift: float = 0.25,
-    max_shift: float = 0.75,
-) -> float:
-    m = (image_seq_len / base_seq_len) ** 0.5
-    mu = m * max_shift + base_shift
-    return mu
-
-
-# Copied from diffusers.pipelines.cogview4.pipeline_cogview4.retrieve_timesteps
-def retrieve_timesteps(
-    scheduler,
-    num_inference_steps: Optional[int] = None,
-    device: Optional[Union[str, torch.device]] = None,
-    timesteps: Optional[List[int]] = None,
-    sigmas: Optional[List[float]] = None,
-    **kwargs,
-):
-    r"""
     Calls the scheduler's `set_timesteps` method and retrieves timesteps from the scheduler after the call. Handles
     custom timesteps. Any kwargs will be supplied to `scheduler.set_timesteps`.
-
-    Args:
-        scheduler (`SchedulerMixin`):
-            The scheduler to get timesteps from.
-        num_inference_steps (`int`):
-            The number of diffusion steps used when generating samples with a pre-trained model. If used, `timesteps`
-            must be `None`.
-        device (`str` or `torch.device`, *optional*):
-            The device to which the timesteps should be moved to. If `None`, the timesteps are not moved.
-        timesteps (`List[int]`, *optional*):
-            Custom timesteps used to override the timestep spacing strategy of the scheduler. If `timesteps` is passed,
             `num_inference_steps` and `sigmas` must be `None`.
         sigmas (`List[float]`, *optional*):
             Custom sigmas used to override the timestep spacing strategy of the scheduler. If `sigmas` is passed,
             `num_inference_steps` and `timesteps` must be `None`.
-
-    Returns:
-        `Tuple[torch.Tensor, int]`: A tuple where the first element is the timestep schedule from the scheduler and the
-        second element is the number of inference steps.
-    """
-    accepts_timesteps = "timesteps" in set(inspect.signature(scheduler.set_timesteps).parameters.keys())
-    accepts_sigmas = "sigmas" in set(inspect.signature(scheduler.set_timesteps).parameters.keys())
-
-    if timesteps is not None and sigmas is not None:
-        if not accepts_timesteps and not accepts_sigmas:
-            raise ValueError(
-                f"The current scheduler class {scheduler.__class__}'s `set_timesteps` does not support custom"
-                f" timestep or sigma schedules. Please check whether you are using the correct scheduler."
-            )
-        scheduler.set_timesteps(timesteps=timesteps, sigmas=sigmas, device=device, **kwargs)
-        timesteps = scheduler.timesteps
-        num_inference_steps = len(timesteps)
-    elif timesteps is not None and sigmas is None:
-        if not accepts_timesteps:
-            raise ValueError(
-                f"The current scheduler class {scheduler.__class__}'s `set_timesteps` does not support custom"
-                f" timestep schedules. Please check whether you are using the correct scheduler."
-            )
-        scheduler.set_timesteps(timesteps=timesteps, device=device, **kwargs)
-        timesteps = scheduler.timesteps
-        num_inference_steps = len(timesteps)
-    elif timesteps is None and sigmas is not None:
-        if not accepts_sigmas:
-            raise ValueError(
-                f"The current scheduler class {scheduler.__class__}'s `set_timesteps` does not support custom"
-                f" sigmas schedules. Please check whether you are using the correct scheduler."
-            )
-        scheduler.set_timesteps(sigmas=sigmas, device=device, **kwargs)
-        timesteps = scheduler.timesteps
-        num_inference_steps = len(timesteps)
-    else:
-        scheduler.set_timesteps(num_inference_steps, device=device, **kwargs)
-        timesteps = scheduler.timesteps
-    return timesteps, num_inference_steps
-
-
-# Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img.retrieve_latents
 def retrieve_latents(
     encoder_output: torch.Tensor, generator: Optional[torch.Generator] = None, sample_mode: str = "sample"
 ):
@@ -157,30 +53,8 @@ def retrieve_latents(
     else:
         raise AttributeError("Could not access latents of provided encoder_output")
 
-
 class GlmImagePipeline(DiffusionPipeline):
-    r"""
-    Pipeline for text-to-image generation using GLM-Image.
 
-    This pipeline integrates both the AR (autoregressive) model for token generation and the DiT (diffusion
-    transformer) model for image decoding.
-
-    Args:
-        tokenizer (`PreTrainedTokenizer`):
-            Tokenizer for the text encoder.
-        processor (`AutoProcessor`):
-            Processor for the AR model to handle chat templates and tokenization.
-        text_encoder ([`T5EncoderModel`]):
-            Frozen text-encoder for glyph embeddings.
-        vision_language_encoder ([`GlmImageForConditionalGeneration`]):
-            The AR model that generates image tokens from text prompts.
-        vae ([`AutoencoderKL`]):
-            Variational Auto-Encoder (VAE) Model to encode and decode images to and from latent representations.
-        transformer ([`GlmImageTransformer2DModel`]):
-            A text conditioned transformer to denoise the encoded image latents (DiT).
-        scheduler ([`SchedulerMixin`]):
-            A scheduler to be used in combination with `transformer` to denoise the encoded image latents.
-    """
 
     _optional_components = []
     model_cpu_offload_seq = "vision_language_encoder->text_encoder->transformer->vae"
@@ -368,26 +242,8 @@ class GlmImagePipeline(DiffusionPipeline):
         dtype: Optional[torch.dtype] = None,
         max_sequence_length: int = 2048,
     ):
-        r"""
-        Encodes the prompt into text encoder hidden states.
-
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                prompt to be encoded
-            do_classifier_free_guidance (`bool`, *optional*, defaults to `True`):
-                Whether to use classifier free guidance or not.
-            num_images_per_prompt (`int`, *optional*, defaults to 1):
-                Number of images that should be generated per prompt. torch device to place the resulting embeddings on
-            prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt weighting. If not
-                provided, text embeddings will be generated from `prompt` input argument.
-            device: (`torch.device`, *optional*):
-                torch device
-            dtype: (`torch.dtype`, *optional*):
-                torch dtype
-            max_sequence_length (`int`, defaults to `2048`):
-                Maximum sequence length in encoded prompt. Can be set to other values but may lead to poorer results.
-        """
+        
+        """r"""
         device = device or self._execution_device
 
         prompt = [prompt] if isinstance(prompt, str) else prompt
@@ -527,7 +383,7 @@ class GlmImagePipeline(DiffusionPipeline):
     @replace_example_docstring(EXAMPLE_DOC_STRING)
     def __call__(
         self,
-        prompt: Optional[Union[str, List[str]]] = None,
+        prompt: Optional[str] = None,
         image: Optional[
             Union[
                 torch.Tensor, PIL.Image.Image, np.ndarray, List[torch.Tensor], List[PIL.Image.Image], List[np.ndarray]
@@ -540,7 +396,7 @@ class GlmImagePipeline(DiffusionPipeline):
         sigmas: Optional[List[float]] = None,
         guidance_scale: float = 1.5,
         num_images_per_prompt: int = 1,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+        generator: Optional[torch.Generator] = None,
         latents: Optional[torch.FloatTensor] = None,
         prompt_embeds: Optional[torch.Tensor] = None,
         negative_prompt_embeds: Optional[torch.Tensor] = None,
@@ -556,35 +412,7 @@ class GlmImagePipeline(DiffusionPipeline):
         callback_on_step_end_tensor_inputs: List[str] = ["latents"],
         max_sequence_length: int = 2048,
     ) -> Union[GlmImagePipelineOutput, Tuple]:
-        """
-        Function invoked when calling the pipeline for generation.
 
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to guide the image generation. Must contain shape info in the format '<sop>H
-                W<eop>' where H and W are token dimensions (d32). Example: "A beautiful sunset<sop>36 24<eop>"
-                generates a 1152x768 image.
-            image: Optional condition images for image-to-image generation.
-            height (`int`, *optional*):
-                The height in pixels. If not provided, derived from prompt shape info.
-            width (`int`, *optional*):
-                The width in pixels. If not provided, derived from prompt shape info.
-            num_inference_steps (`int`, *optional*, defaults to `50`):
-                The number of denoising steps for DiT.
-            guidance_scale (`float`, *optional*, defaults to `1.5`):
-                Guidance scale for classifier-free guidance.
-            num_images_per_prompt (`int`, *optional*, defaults to `1`):
-                The number of images to generate per prompt.
-            generator (`torch.Generator`, *optional*):
-                Random generator for reproducibility.
-            output_type (`str`, *optional*, defaults to `"pil"`):
-                Output format: "pil", "np", or "latent".
-
-        Examples:
-
-        Returns:
-            [`GlmImagePipelineOutput`] or `tuple`: Generated images.
-        """
 
         if isinstance(callback_on_step_end, (PipelineCallback, MultiPipelineCallbacks)):
             callback_on_step_end_tensor_inputs = callback_on_step_end.tensor_inputs

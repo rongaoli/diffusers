@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import contextlib
 import functools
 import inspect
@@ -21,7 +7,6 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
-
 
 if torch.distributed.is_available():
     import torch.distributed._functional_collectives as funcol
@@ -45,7 +30,6 @@ from ..utils import (
 )
 from ..utils.constants import DIFFUSERS_ATTN_BACKEND, DIFFUSERS_ATTN_CHECKS
 
-
 if TYPE_CHECKING:
     from ._modeling_parallel import ParallelConfig
 
@@ -65,7 +49,6 @@ _CAN_USE_NPU_ATTN = is_torch_npu_available()
 _CAN_USE_XLA_ATTN = is_torch_xla_available() and is_torch_xla_version(">=", _REQUIRED_XLA_VERSION)
 _CAN_USE_XFORMERS_ATTN = is_xformers_available() and is_xformers_version(">=", _REQUIRED_XFORMERS_VERSION)
 
-
 if _CAN_USE_FLASH_ATTN:
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.flash_attn_interface import _wrapped_flash_attn_backward, _wrapped_flash_attn_forward
@@ -74,7 +57,6 @@ else:
     flash_attn_varlen_func = None
     _wrapped_flash_attn_backward = None
     _wrapped_flash_attn_forward = None
-
 
 if _CAN_USE_FLASH_ATTN_3:
     from flash_attn_interface import flash_attn_func as flash_attn_3_func
@@ -105,25 +87,21 @@ else:
     sageattn_qk_int8_pv_fp8_cuda_sm90 = None
     sageattn_varlen = None
 
-
 if _CAN_USE_FLEX_ATTN:
-    # We cannot import the flex_attention function from the package directly because it is expected (from the
-    # pytorch documentation) that the user may compile it. If we import directly, we will not have access to the
+    # We cannot import the flex_attention function...
+    # pytorch documentation) that the user may com...
     # compiled function.
     import torch.nn.attention.flex_attention as flex_attention
-
 
 if _CAN_USE_NPU_ATTN:
     from torch_npu import npu_fusion_attention
 else:
     npu_fusion_attention = None
 
-
 if _CAN_USE_XLA_ATTN:
     from torch_xla.experimental.custom_kernel import flash_attention as xla_flash_attention
 else:
     xla_flash_attention = None
-
 
 if _CAN_USE_XFORMERS_ATTN:
     import xformers.ops as xops
@@ -151,7 +129,6 @@ else:
     _custom_op = custom_op_no_op
     _register_fake = register_fake_no_op
 
-
 logger = get_logger(__name__)  # pylint: disable=invalid-name
 
 # TODO(aryan): Add support for the following:
@@ -159,7 +136,6 @@ logger = get_logger(__name__)  # pylint: disable=invalid-name
 # - block sparse, radial and other attention methods
 # - CP with sage attention, flex, xformers, other missing backends
 # - Add support for normal and CP training with backends that don't support it yet
-
 
 class AttentionBackendName(str, Enum):
     # EAGER = "eager"
@@ -201,7 +177,6 @@ class AttentionBackendName(str, Enum):
 
     # `xformers`
     XFORMERS = "xformers"
-
 
 class _AttentionBackendRegistry:
     _backends = {}
@@ -251,16 +226,105 @@ class _AttentionBackendRegistry:
         supports_context_parallel = backend.value in cls._supports_context_parallel
         return supports_context_parallel
 
+@dataclass
+class _HubKernelConfig:
+    class AttentionBackendName(str, Enum):
+    # EAGER = "eager"
+
+    # `flash-attn`
+    FLASH = "flash"
+    FLASH_HUB = "flash_hub"
+    FLASH_VARLEN = "flash_varlen"
+    FLASH_VARLEN_HUB = "flash_varlen_hub"
+    _FLASH_3 = "_flash_3"
+    _FLASH_VARLEN_3 = "_flash_varlen_3"
+    _FLASH_3_HUB = "_flash_3_hub"
+    _FLASH_3_VARLEN_HUB = "_flash_3_varlen_hub"
+
+    # `aiter`
+    AITER = "aiter"
+
+    # PyTorch native
+    FLEX = "flex"
+    NATIVE = "native"
+    _NATIVE_CUDNN = "_native_cudnn"
+    _NATIVE_EFFICIENT = "_native_efficient"
+    _NATIVE_FLASH = "_native_flash"
+    _NATIVE_MATH = "_native_math"
+    _NATIVE_NPU = "_native_npu"
+    _NATIVE_XLA = "_native_xla"
+
+    # `sageattention`
+    SAGE = "sage"
+    SAGE_HUB = "sage_hub"
+    SAGE_VARLEN = "sage_varlen"
+    _SAGE_QK_INT8_PV_FP8_CUDA = "_sage_qk_int8_pv_fp8_cuda"
+    _SAGE_QK_INT8_PV_FP8_CUDA_SM90 = "_sage_qk_int8_pv_fp8_cuda_sm90"
+    _SAGE_QK_INT8_PV_FP16_CUDA = "_sage_qk_int8_pv_fp16_cuda"
+    _SAGE_QK_INT8_PV_FP16_TRITON = "_sage_qk_int8_pv_fp16_triton"
+    # TODO: let's not add support for Sparge Attention now because it requires tuning per model
+    # We can look into supporting something "autotune"-ing in the future
+    # SPARGE = "sparge"
+
+    # `xformers`
+    XFORMERS = "xformers"
+
+class _AttentionBackendRegistry:
+    _backends = {}
+    _constraints = {}
+    _supported_arg_names = {}
+    _supports_context_parallel = set()
+    _active_backend = AttentionBackendName(DIFFUSERS_ATTN_BACKEND)
+    _checks_enabled = DIFFUSERS_ATTN_CHECKS
+
+    @classmethod
+    def register(
+        cls,
+        backend: AttentionBackendName,
+        constraints: Optional[List[Callable]] = None,
+        supports_context_parallel: bool = False,
+    ):
+        logger.debug(f"Registering attention backend: {backend} with constraints: {constraints}")
+
+        def decorator(func):
+            cls._backends[backend] = func
+            cls._constraints[backend] = constraints or []
+            cls._supported_arg_names[backend] = set(inspect.signature(func).parameters.keys())
+            if supports_context_parallel:
+                cls._supports_context_parallel.add(backend.value)
+
+            return func
+
+        return decorator
+
+    @classmethod
+    def get_active_backend(cls):
+        return cls._active_backend, cls._backends[cls._active_backend]
+
+    @classmethod
+    def set_active_backend(cls, backend: str):
+        cls._active_backend = backend
+
+    @classmethod
+    def list_backends(cls):
+        return list(cls._backends.keys())
+
+    @classmethod
+    def _is_context_parallel_available(
+        cls,
+        backend: AttentionBackendName,
+    ) -> bool:
+        supports_context_parallel = backend.value in cls._supports_context_parallel
+        return supports_context_parallel
 
 @dataclass
 class _HubKernelConfig:
-    """Configuration for downloading and using a hub-based attention kernel."""
+
 
     repo_id: str
     function_attr: str
     revision: Optional[str] = None
     kernel_fn: Optional[Callable] = None
-
 
 # Registry for hub-based attention kernels
 _HUB_KERNELS_REGISTRY: Dict["AttentionBackendName", _HubKernelConfig] = {
@@ -284,12 +348,9 @@ _HUB_KERNELS_REGISTRY: Dict["AttentionBackendName", _HubKernelConfig] = {
     ),
 }
 
-
 @contextlib.contextmanager
 def attention_backend(backend: Union[str, AttentionBackendName] = AttentionBackendName.NATIVE):
-    """
-    Context manager to set the active attention backend.
-    """
+
     if backend not in _AttentionBackendRegistry._backends:
         raise ValueError(f"Backend {backend} is not registered.")
 
@@ -304,7 +365,6 @@ def attention_backend(backend: Union[str, AttentionBackendName] = AttentionBacke
         yield
     finally:
         _AttentionBackendRegistry.set_active_backend(old_backend)
-
 
 def dispatch_attention_fn(
     query: torch.Tensor,
@@ -323,8 +383,8 @@ def dispatch_attention_fn(
     attention_kwargs = attention_kwargs or {}
 
     if backend is None:
-        # If no backend is specified, we either use the default backend (set via the DIFFUSERS_ATTN_BACKEND environment
-        # variable), or we use a custom backend based on whether user is using the `attention_backend` context manager
+        # If no backend is specified, we either us...
+        # variable), or we use a custom backend ba...
         backend_name, backend_fn = _AttentionBackendRegistry.get_active_backend()
     else:
         backend_name = AttentionBackendName(backend)
@@ -355,15 +415,12 @@ def dispatch_attention_fn(
 
     return backend_fn(**kwargs)
 
-
 # ===== Checks =====
 # A list of very simple functions to catch common errors quickly when debugging.
-
 
 def _check_attn_mask_or_causal(attn_mask: Optional[torch.Tensor], is_causal: bool, **kwargs) -> None:
     if attn_mask is not None and is_causal:
         raise ValueError("`is_causal` cannot be True when `attn_mask` is not None.")
-
 
 def _check_device(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, **kwargs) -> None:
     if query.device != key.device or query.device != value.device:
@@ -371,12 +428,10 @@ def _check_device(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, *
     if query.dtype != key.dtype or query.dtype != value.dtype:
         raise ValueError("Query, key, and value must have the same dtype.")
 
-
 def _check_device_cuda(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, **kwargs) -> None:
     _check_device(query, key, value)
     if query.device.type != "cuda":
         raise ValueError("Query, key, and value must be on a CUDA device.")
-
 
 def _check_device_cuda_atleast_smXY(major: int, minor: int) -> Callable:
     def check_device_cuda(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, **kwargs) -> None:
@@ -388,19 +443,16 @@ def _check_device_cuda_atleast_smXY(major: int, minor: int) -> Callable:
 
     return check_device_cuda
 
-
 def _check_qkv_dtype_match(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, **kwargs) -> None:
     if query.dtype != key.dtype:
         raise ValueError("Query and key must have the same dtype.")
     if query.dtype != value.dtype:
         raise ValueError("Query and value must have the same dtype.")
 
-
 def _check_qkv_dtype_bf16_or_fp16(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, **kwargs) -> None:
     _check_qkv_dtype_match(query, key, value)
     if query.dtype not in (torch.bfloat16, torch.float16):
         raise ValueError("Query, key, and value must be either bfloat16 or float16.")
-
 
 def _check_shape(
     query: torch.Tensor,
@@ -422,9 +474,7 @@ def _check_shape(
     if attn_mask is not None and attn_mask.shape[-1] != key.shape[-3]:
         raise ValueError("Attention mask must match the key's sequence length.")
 
-
 # ===== Helper functions =====
-
 
 def _check_attention_backend_requirements(backend: AttentionBackendName) -> None:
     if backend in [AttentionBackendName.FLASH, AttentionBackendName.FLASH_VARLEN]:
@@ -494,7 +544,6 @@ def _check_attention_backend_requirements(backend: AttentionBackendName) -> None
                 f"Xformers Attention backend '{backend.value}' is not usable because of missing package or the version is too old. Please install `xformers>={_REQUIRED_XFORMERS_VERSION}`."
             )
 
-
 @functools.lru_cache(maxsize=128)
 def _prepare_for_flash_attn_or_sage_varlen_without_mask(
     batch_size: int,
@@ -512,7 +561,6 @@ def _prepare_for_flash_attn_or_sage_varlen_without_mask(
     max_seqlen_k = seqlens_k.max().item()
     return (seqlens_q, seqlens_k), (cu_seqlens_q, cu_seqlens_k), (max_seqlen_q, max_seqlen_k)
 
-
 def _prepare_for_flash_attn_or_sage_varlen_with_mask(
     batch_size: int,
     seq_len_q: int,
@@ -529,7 +577,6 @@ def _prepare_for_flash_attn_or_sage_varlen_with_mask(
     max_seqlen_k = seqlens_k.max().item()
     return (seqlens_q, seqlens_k), (cu_seqlens_q, cu_seqlens_k), (max_seqlen_q, max_seqlen_k)
 
-
 def _prepare_for_flash_attn_or_sage_varlen(
     batch_size: int,
     seq_len_q: int,
@@ -541,14 +588,8 @@ def _prepare_for_flash_attn_or_sage_varlen(
         return _prepare_for_flash_attn_or_sage_varlen_without_mask(batch_size, seq_len_q, seq_len_kv, device)
     return _prepare_for_flash_attn_or_sage_varlen_with_mask(batch_size, seq_len_q, attn_mask, device)
 
-
 def _normalize_attn_mask(attn_mask: torch.Tensor, batch_size: int, seq_len_k: int) -> torch.Tensor:
-    """
-    Normalize an attention mask to shape [batch_size, seq_len_k] (bool) suitable for inferring seqlens_[q|k] in
-    FlashAttention/Sage varlen.
 
-    Supports 1D to 4D shapes and common broadcasting patterns.
-    """
     if attn_mask.dtype != torch.bool:
         raise ValueError(f"Attention mask must be of type bool, got {attn_mask.dtype}.")
 
@@ -566,7 +607,7 @@ def _normalize_attn_mask(attn_mask: torch.Tensor, batch_size: int, seq_len_k: in
 
     elif attn_mask.ndim == 3:
         # [batch_size, seq_len_q, seq_len_k] -> reduce over query dimension
-        # We do this reduction because we know that arbitrary QK masks is not supported in Flash/Sage varlen.
+        # We do this reduction because we know tha...
         if attn_mask.size(0) not in [1, batch_size]:
             raise ValueError(
                 f"attn_mask.shape[0] ({attn_mask.shape[0]}) must be 1 or {batch_size} for 3D attention mask."
@@ -593,10 +634,8 @@ def _normalize_attn_mask(attn_mask: torch.Tensor, batch_size: int, seq_len_k: in
 
     return attn_mask
 
-
 def _flex_attention_causal_mask_mod(batch_idx, head_idx, q_idx, kv_idx):
     return q_idx >= kv_idx
-
 
 # ===== Helpers for downloading kernels =====
 def _maybe_download_kernel_for_backend(backend: AttentionBackendName) -> None:
@@ -619,7 +658,6 @@ def _maybe_download_kernel_for_backend(backend: AttentionBackendName) -> None:
     except Exception as e:
         logger.error(f"An error occurred while fetching kernel '{config.repo_id}' from the Hub: {e}")
         raise
-
 
 # ===== torch op registrations =====
 # Registrations are required for fullgraph tracing compatibility
@@ -666,7 +704,6 @@ def _wrapped_flash_attn_3(
     lse = lse.permute(0, 2, 1)
     return out, lse
 
-
 @_register_fake("_diffusers_flash_attn_3::_flash_attn_forward")
 def _(
     q: torch.Tensor,
@@ -692,9 +729,7 @@ def _(
     lse_shape = (batch_size, seq_len, num_heads)
     return torch.empty_like(q), q.new_empty(lse_shape)
 
-
 # ===== Helper functions to use attention backends with templated CP autograd functions =====
-
 
 def _native_attention_forward_op(
     ctx: torch.autograd.function.FunctionCtx,
@@ -738,7 +773,6 @@ def _native_attention_forward_op(
 
     return out
 
-
 def _native_attention_backward_op(
     ctx: torch.autograd.function.FunctionCtx,
     grad_out: torch.Tensor,
@@ -775,10 +809,9 @@ def _native_attention_backward_op(
 
     return grad_query, grad_key, grad_value
 
-
-# https://github.com/pytorch/pytorch/blob/8904ba638726f8c9a5aff5977c4aa76c9d2edfa6/aten/src/ATen/native/native_functions.yaml#L14958
+# https://github.com/pytorch/pytorch/blob/8904ba63...
 # forward declaration:
-#   aten::_scaled_dot_product_cudnn_attention(Tensor query, Tensor key, Tensor value, Tensor? attn_bias, bool compute_log_sumexp, float dropout_p=0., bool is_causal=False, bool return_debug_mask=False, *, float? scale=None) -> (Tensor output, Tensor logsumexp, Tensor cum_seq_q, Tensor cum_seq_k, SymInt max_q, SymInt max_k, Tensor philox_seed, Tensor philox_offset, Tensor debug_attn_mask)
+#   aten::_scaled_dot_product_cudnn_attention(Tens...
 def _cudnn_attention_forward_op(
     ctx: torch.autograd.function.FunctionCtx,
     query: torch.Tensor,
@@ -834,9 +867,8 @@ def _cudnn_attention_forward_op(
         lse = lse.transpose(1, 2).contiguous()
     return (out, lse) if return_lse else out
 
-
 # backward declaration:
-#   aten::_scaled_dot_product_cudnn_attention_backward(Tensor grad_out, Tensor query, Tensor key, Tensor value, Tensor out, Tensor logsumexp, Tensor philox_seed, Tensor philox_offset, Tensor attn_bias, Tensor cum_seq_q, Tensor cum_seq_k, SymInt max_q, SymInt max_k, float dropout_p, bool is_causal, *, float? scale=None) -> (Tensor, Tensor, Tensor)
+#   aten::_scaled_dot_product_cudnn_attention_back...
 def _cudnn_attention_backward_op(
     ctx: torch.autograd.function.FunctionCtx,
     grad_out: torch.Tensor,
@@ -849,7 +881,7 @@ def _cudnn_attention_backward_op(
     key = key.transpose(1, 2).contiguous()
     value = value.transpose(1, 2).contiguous()
 
-    # Cannot pass first 5 arguments as kwargs because: https://github.com/pytorch/pytorch/blob/d26ca5de058dbcf56ac52bb43e84dd98df2ace97/torch/_dynamo/variables/torch.py#L1341
+    # Cannot pass first 5 arguments as kwargs beca...
     grad_query, grad_key, grad_value = torch.ops.aten._scaled_dot_product_cudnn_attention_backward(
         grad_out,
         query,
@@ -872,10 +904,9 @@ def _cudnn_attention_backward_op(
 
     return grad_query, grad_key, grad_value
 
-
-# https://github.com/pytorch/pytorch/blob/e33fa0ece36a93dbc8ff19b0251b8d99f8ae8668/aten/src/ATen/native/native_functions.yaml#L15135
+# https://github.com/pytorch/pytorch/blob/e33fa0ec...
 # forward declaration:
-#   aten::_scaled_dot_product_flash_attention(Tensor query, Tensor key, Tensor value, float dropout_p=0.0, bool is_causal=False, bool return_debug_mask=False, *, float? scale=None) -> (Tensor output, Tensor logsumexp, Tensor cum_seq_q, Tensor cum_seq_k, SymInt max_q, SymInt max_k, Tensor rng_state, Tensor unused, Tensor debug_attn_mask)
+#   aten::_scaled_dot_product_flash_attention(Tens...
 def _native_flash_attention_forward_op(
     ctx: torch.autograd.function.FunctionCtx,
     query: torch.Tensor,
@@ -926,10 +957,9 @@ def _native_flash_attention_forward_op(
         lse = lse.transpose(1, 2).contiguous()
     return (out, lse) if return_lse else out
 
-
-# https://github.com/pytorch/pytorch/blob/e33fa0ece36a93dbc8ff19b0251b8d99f8ae8668/aten/src/ATen/native/native_functions.yaml#L15153
+# https://github.com/pytorch/pytorch/blob/e33fa0ec...
 # backward declaration:
-#   aten::_scaled_dot_product_flash_attention_backward(Tensor grad_out, Tensor query, Tensor key, Tensor value, Tensor out, Tensor logsumexp, Tensor cum_seq_q, Tensor cum_seq_k, SymInt max_q, SymInt max_k, float dropout_p, bool is_causal, Tensor philox_seed, Tensor philox_offset, *, float? scale=None) -> (Tensor grad_query, Tensor grad_key, Tensor grad_value)
+#   aten::_scaled_dot_product_flash_attention_back...
 def _native_flash_attention_backward_op(
     ctx: torch.autograd.function.FunctionCtx,
     grad_out: torch.Tensor,
@@ -963,8 +993,7 @@ def _native_flash_attention_backward_op(
 
     return grad_query, grad_key, grad_value
 
-
-# Adapted from: https://github.com/Dao-AILab/flash-attention/blob/fd2fc9d85c8e54e5c20436465bca709bc1a6c5a1/flash_attn/flash_attn_interface.py#L807
+# Adapted from: https://github.com/Dao-AILab/flash...
 def _flash_attention_forward_op(
     ctx: torch.autograd.function.FunctionCtx,
     query: torch.Tensor,
@@ -1026,7 +1055,6 @@ def _flash_attention_forward_op(
 
     return (out, lse) if return_lse else out
 
-
 def _flash_attention_backward_op(
     ctx: torch.autograd.function.FunctionCtx,
     grad_out: torch.Tensor,
@@ -1063,7 +1091,6 @@ def _flash_attention_backward_op(
     grad_value = grad_value[..., : grad_out.shape[-1]]
 
     return grad_query, grad_key, grad_value
-
 
 def _sage_attention_forward_op(
     ctx: torch.autograd.function.FunctionCtx,
@@ -1102,14 +1129,12 @@ def _sage_attention_forward_op(
 
     return (out, lse) if return_lse else out
 
-
 def _sage_attention_backward_op(
     ctx: torch.autograd.function.FunctionCtx,
     grad_out: torch.Tensor,
     *args,
 ):
     raise NotImplementedError("Backward pass is not implemented for Sage attention.")
-
 
 def _npu_attention_forward_op(
     ctx: torch.autograd.function.FunctionCtx,
@@ -1145,7 +1170,6 @@ def _npu_attention_forward_op(
 
     return out
 
-
 # Not implemented yet.
 def _npu_attention_backward_op(
     ctx: torch.autograd.function.FunctionCtx,
@@ -1155,19 +1179,16 @@ def _npu_attention_backward_op(
 ):
     raise NotImplementedError("Backward pass is not implemented for Npu Fusion Attention.")
 
-
 # ===== Context parallel =====
 
-
 # Reference:
-# - https://github.com/pytorch/pytorch/blob/f58a680d09e13658a52c6ba05c63c15759846bcc/torch/distributed/_functional_collectives.py#L827
-# - https://github.com/pytorch/pytorch/blob/f58a680d09e13658a52c6ba05c63c15759846bcc/torch/distributed/_functional_collectives.py#L246
+# - https://github.com/pytorch/pytorch/blob/f58a68...
+# - https://github.com/pytorch/pytorch/blob/f58a68...
 # For fullgraph=True tracing compatibility (since FakeTensor does not have a `wait` method):
 def _wait_tensor(tensor):
     if isinstance(tensor, funcol.AsyncCollectiveTensor):
         tensor = tensor.wait()
     return tensor
-
 
 def _all_to_all_single(x: torch.Tensor, group) -> torch.Tensor:
     shape = x.shape
@@ -1181,994 +1202,17 @@ def _all_to_all_single(x: torch.Tensor, group) -> torch.Tensor:
     x = _wait_tensor(x)
     return x
 
-
 def _all_to_all_dim_exchange(x: torch.Tensor, scatter_idx: int = 2, gather_idx: int = 1, group=None) -> torch.Tensor:
-    """
-    Perform dimension sharding / reassembly across processes using _all_to_all_single.
 
-    This utility reshapes and redistributes tensor `x` across the given process group, across sequence dimension or
-    head dimension flexibly by accepting scatter_idx and gather_idx.
-
-    Args:
-        x (torch.Tensor):
-            Input tensor. Expected shapes:
-            - When scatter_idx=2, gather_idx=1: (batch_size, seq_len_local, num_heads, head_dim)
-            - When scatter_idx=1, gather_idx=2: (batch_size, seq_len, num_heads_local, head_dim)
-        scatter_idx (int) :
-            Dimension along which the tensor is partitioned before all-to-all.
-        gather_idx (int):
-            Dimension along which the output is reassembled after all-to-all.
-        group :
-            Distributed process group for the Ulysses group.
-
-    Returns:
-        torch.Tensor: Tensor with globally exchanged dimensions.
-            - For (scatter_idx=2 → gather_idx=1): (batch_size, seq_len, num_heads_local, head_dim)
-            - For (scatter_idx=1 → gather_idx=2): (batch_size, seq_len_local, num_heads, head_dim)
-    """
-    group_world_size = torch.distributed.get_world_size(group)
-
-    if scatter_idx == 2 and gather_idx == 1:
-        # Used before Ulysses sequence parallel (SP) attention. Scatters the gathers sequence
-        # dimension and scatters head dimension
-        batch_size, seq_len_local, num_heads, head_dim = x.shape
-        seq_len = seq_len_local * group_world_size
-        num_heads_local = num_heads // group_world_size
-
-        # B, S_LOCAL, H, D -> group_world_size, S_LOCAL, B, H_LOCAL, D
-        x_temp = (
-            x.reshape(batch_size, seq_len_local, group_world_size, num_heads_local, head_dim)
-            .transpose(0, 2)
-            .contiguous()
-        )
-
-        if group_world_size > 1:
-            out = _all_to_all_single(x_temp, group=group)
-        else:
-            out = x_temp
-        # group_world_size, S_LOCAL, B, H_LOCAL, D -> B, S, H_LOCAL, D
-        out = out.reshape(seq_len, batch_size, num_heads_local, head_dim).permute(1, 0, 2, 3).contiguous()
-        out = out.reshape(batch_size, seq_len, num_heads_local, head_dim)
-        return out
-    elif scatter_idx == 1 and gather_idx == 2:
-        # Used after ulysses sequence parallel in unified SP. gathers the head dimension
-        # scatters back the sequence dimension.
-        batch_size, seq_len, num_heads_local, head_dim = x.shape
-        num_heads = num_heads_local * group_world_size
-        seq_len_local = seq_len // group_world_size
-
-        # B, S, H_LOCAL, D -> group_world_size, H_LOCAL, S_LOCAL, B, D
-        x_temp = (
-            x.reshape(batch_size, group_world_size, seq_len_local, num_heads_local, head_dim)
-            .permute(1, 3, 2, 0, 4)
-            .reshape(group_world_size, num_heads_local, seq_len_local, batch_size, head_dim)
-        )
-
-        if group_world_size > 1:
-            output = _all_to_all_single(x_temp, group)
-        else:
-            output = x_temp
-        output = output.reshape(num_heads, seq_len_local, batch_size, head_dim).transpose(0, 2).contiguous()
-        output = output.reshape(batch_size, seq_len_local, num_heads, head_dim)
-        return output
-    else:
-        raise ValueError("Invalid scatter/gather indices for _all_to_all_dim_exchange.")
-
-
-class SeqAllToAllDim(torch.autograd.Function):
-    """
-    all_to_all operation for unified sequence parallelism. uses _all_to_all_dim_exchange, see _all_to_all_dim_exchange
-    for more info.
-    """
-
-    @staticmethod
-    def forward(ctx, group, input, scatter_id=2, gather_id=1):
-        ctx.group = group
-        ctx.scatter_id = scatter_id
-        ctx.gather_id = gather_id
-        return _all_to_all_dim_exchange(input, scatter_id, gather_id, group)
-
-    @staticmethod
-    def backward(ctx, grad_outputs):
-        grad_input = SeqAllToAllDim.apply(
-            ctx.group,
-            grad_outputs,
-            ctx.gather_id,  # reversed
-            ctx.scatter_id,  # reversed
-        )
-        return (None, grad_input, None, None)
-
-
-class TemplatedRingAttention(torch.autograd.Function):
-    @staticmethod
-    def forward(
-        ctx: torch.autograd.function.FunctionCtx,
-        query: torch.Tensor,
-        key: torch.Tensor,
-        value: torch.Tensor,
-        attn_mask: Optional[torch.Tensor],
-        dropout_p: float,
-        is_causal: bool,
-        scale: Optional[float],
-        enable_gqa: bool,
-        return_lse: bool,
-        forward_op,
-        backward_op,
-        _parallel_config: Optional["ParallelConfig"] = None,
-    ):
-        ring_mesh = _parallel_config.context_parallel_config._ring_mesh
-        rank = _parallel_config.context_parallel_config._ring_local_rank
-        world_size = _parallel_config.context_parallel_config.ring_degree
-        next_rank = (rank + 1) % world_size
-        prev_out = prev_lse = None
-
-        ctx.forward_op = forward_op
-        ctx.backward_op = backward_op
-        ctx.q_shape = query.shape
-        ctx.kv_shape = key.shape
-        ctx._parallel_config = _parallel_config
-
-        kv_buffer = torch.cat([key.flatten(), value.flatten()]).contiguous()
-        kv_buffer = funcol.all_gather_tensor(kv_buffer, gather_dim=0, group=ring_mesh.get_group())
-        kv_buffer = kv_buffer.chunk(world_size)
-
-        for i in range(world_size):
-            if i > 0:
-                kv = kv_buffer[next_rank]
-                key_numel = key.numel()
-                key = kv[:key_numel].reshape_as(key)
-                value = kv[key_numel:].reshape_as(value)
-                next_rank = (next_rank + 1) % world_size
-
-            out, lse = forward_op(
-                ctx,
-                query,
-                key,
-                value,
-                attn_mask,
-                dropout_p,
-                is_causal,
-                scale,
-                enable_gqa,
-                True,
-                _save_ctx=i == 0,
-                _parallel_config=_parallel_config,
-            )
-
-            if _parallel_config.context_parallel_config.convert_to_fp32:
-                out = out.to(torch.float32)
-                lse = lse.to(torch.float32)
-
-            # Refer to:
-            # https://github.com/huggingface/diffusers/pull/12693#issuecomment-3627519544
-            if is_torch_version("<", "2.9.0"):
-                lse = lse.unsqueeze(-1)
-            if prev_out is not None:
-                out = prev_out - torch.nn.functional.sigmoid(lse - prev_lse) * (prev_out - out)
-                lse = prev_lse - torch.nn.functional.logsigmoid(prev_lse - lse)
-            prev_out = out
-            prev_lse = lse
-
-        out = out.to(query.dtype)
-        lse = lse.squeeze(-1)
-
-        return (out, lse) if return_lse else out
-
-    @staticmethod
-    def backward(
-        ctx: torch.autograd.function.FunctionCtx,
-        grad_out: torch.Tensor,
-        *args,
-    ):
-        ring_mesh = ctx._parallel_config.context_parallel_config._ring_mesh
-        rank = ctx._parallel_config.context_parallel_config._ring_local_rank
-        world_size = ctx._parallel_config.context_parallel_config.ring_degree
-        next_rank = (rank + 1) % world_size
-        next_ranks = list(range(1, world_size)) + [0]
-
-        accum_dtype = torch.float32 if ctx._parallel_config.context_parallel_config.convert_to_fp32 else grad_out.dtype
-        grad_query = torch.zeros(ctx.q_shape, dtype=accum_dtype, device=grad_out.device)
-        grad_key = torch.zeros(ctx.kv_shape, dtype=accum_dtype, device=grad_out.device)
-        grad_value = torch.zeros(ctx.kv_shape, dtype=accum_dtype, device=grad_out.device)
-        next_grad_kv = None
-
-        query, key, value, *_ = ctx.saved_tensors
-        kv_buffer = torch.cat([key.flatten(), value.flatten()]).contiguous()
-        kv_buffer = funcol.all_gather_tensor(kv_buffer, gather_dim=0, group=ring_mesh.get_group())
-        kv_buffer = kv_buffer.chunk(world_size)
-
-        for i in range(world_size):
-            if i > 0:
-                kv = kv_buffer[next_rank]
-                key_numel = key.numel()
-                key = kv[:key_numel].reshape_as(key)
-                value = kv[key_numel:].reshape_as(value)
-                next_rank = (next_rank + 1) % world_size
-
-            grad_query_op, grad_key_op, grad_value_op, *_ = ctx.backward_op(ctx, grad_out)
-
-            if i > 0:
-                grad_kv_buffer = _wait_tensor(next_grad_kv)
-                grad_key_numel = grad_key.numel()
-                grad_key = grad_kv_buffer[:grad_key_numel].reshape_as(grad_key)
-                grad_value = grad_kv_buffer[grad_key_numel:].reshape_as(grad_value)
-
-            grad_query += grad_query_op
-            grad_key += grad_key_op
-            grad_value += grad_value_op
-
-            if i < world_size - 1:
-                grad_kv_buffer = torch.cat([grad_key.flatten(), grad_value.flatten()]).contiguous()
-                next_grad_kv = funcol.permute_tensor(grad_kv_buffer, next_ranks, group=ring_mesh.get_group())
-
-        grad_query, grad_key, grad_value = (x.to(grad_out.dtype) for x in (grad_query, grad_key, grad_value))
-
-        return grad_query, grad_key, grad_value, None, None, None, None, None, None, None, None, None
-
-
-class TemplatedUlyssesAttention(torch.autograd.Function):
-    @staticmethod
-    def forward(
-        ctx: torch.autograd.function.FunctionCtx,
-        query: torch.Tensor,
-        key: torch.Tensor,
-        value: torch.Tensor,
-        attn_mask: Optional[torch.Tensor],
-        dropout_p: float,
-        is_causal: bool,
-        scale: Optional[float],
-        enable_gqa: bool,
-        return_lse: bool,
-        forward_op,
-        backward_op,
-        _parallel_config: Optional["ParallelConfig"] = None,
-    ):
-        ulysses_mesh = _parallel_config.context_parallel_config._ulysses_mesh
-        world_size = _parallel_config.context_parallel_config.ulysses_degree
-        group = ulysses_mesh.get_group()
-
-        ctx.forward_op = forward_op
-        ctx.backward_op = backward_op
-        ctx._parallel_config = _parallel_config
-
-        B, S_Q_LOCAL, H, D = query.shape
-        _, S_KV_LOCAL, _, _ = key.shape
-        H_LOCAL = H // world_size
-        query = query.reshape(B, S_Q_LOCAL, world_size, H_LOCAL, D).permute(2, 1, 0, 3, 4).contiguous()
-        key = key.reshape(B, S_KV_LOCAL, world_size, H_LOCAL, D).permute(2, 1, 0, 3, 4).contiguous()
-        value = value.reshape(B, S_KV_LOCAL, world_size, H_LOCAL, D).permute(2, 1, 0, 3, 4).contiguous()
-        query, key, value = (_all_to_all_single(x, group) for x in (query, key, value))
-        query, key, value = (x.flatten(0, 1).permute(1, 0, 2, 3).contiguous() for x in (query, key, value))
-
-        out = forward_op(
-            ctx,
-            query,
-            key,
-            value,
-            attn_mask,
-            dropout_p,
-            is_causal,
-            scale,
-            enable_gqa,
-            return_lse,
-            _save_ctx=True,
-            _parallel_config=_parallel_config,
-        )
-        if return_lse:
-            out, lse, *_ = out
-
-        out = out.reshape(B, world_size, S_Q_LOCAL, H_LOCAL, D).permute(1, 3, 0, 2, 4).contiguous()
-        out = _all_to_all_single(out, group)
-        out = out.flatten(0, 1).permute(1, 2, 0, 3).contiguous()
-
-        if return_lse:
-            lse = lse.reshape(B, world_size, S_Q_LOCAL, H_LOCAL).permute(1, 3, 0, 2).contiguous()
-            lse = _all_to_all_single(lse, group)
-            lse = lse.flatten(0, 1).permute(1, 2, 0).contiguous()
-        else:
-            lse = None
-
-        return (out, lse) if return_lse else out
-
-    @staticmethod
-    def backward(
-        ctx: torch.autograd.function.FunctionCtx,
-        grad_out: torch.Tensor,
-        *args,
-    ):
-        ulysses_mesh = ctx._parallel_config.context_parallel_config._ulysses_mesh
-        world_size = ctx._parallel_config.context_parallel_config.ulysses_degree
-        group = ulysses_mesh.get_group()
-
-        B, S_LOCAL, H, D = grad_out.shape
-        H_LOCAL = H // world_size
-
-        grad_out = grad_out.reshape(B, S_LOCAL, world_size, H_LOCAL, D).permute(2, 1, 0, 3, 4).contiguous()
-        grad_out = _all_to_all_single(grad_out, group)
-        grad_out = grad_out.flatten(0, 1).permute(1, 0, 2, 3).contiguous()
-
-        grad_query_op, grad_key_op, grad_value_op, *_ = ctx.backward_op(ctx, grad_out)
-
-        grad_query, grad_key, grad_value = (
-            x.reshape(B, world_size, S_LOCAL, H_LOCAL, D).permute(1, 3, 0, 2, 4).contiguous()
-            for x in (grad_query_op, grad_key_op, grad_value_op)
-        )
-        grad_query, grad_key, grad_value = (_all_to_all_single(x, group) for x in (grad_query, grad_key, grad_value))
-        grad_query, grad_key, grad_value = (
-            x.flatten(0, 1).permute(1, 2, 0, 3).contiguous() for x in (grad_query, grad_key, grad_value)
-        )
-
-        return grad_query, grad_key, grad_value, None, None, None, None, None, None, None, None, None
-
-
-def _templated_unified_attention(
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attn_mask: Optional[torch.Tensor],
-    dropout_p: float,
-    is_causal: bool,
-    scale: Optional[float],
-    enable_gqa: bool,
-    return_lse: bool,
-    forward_op,
-    backward_op,
-    _parallel_config: Optional["ParallelConfig"] = None,
-    scatter_idx: int = 2,
-    gather_idx: int = 1,
-):
-    """
     Unified Sequence Parallelism attention combining Ulysses and ring attention. See: https://arxiv.org/abs/2405.07719
-    """
-    ulysses_mesh = _parallel_config.context_parallel_config._ulysses_mesh
-    ulysses_group = ulysses_mesh.get_group()
 
-    query = SeqAllToAllDim.apply(ulysses_group, query, scatter_idx, gather_idx)
-    key = SeqAllToAllDim.apply(ulysses_group, key, scatter_idx, gather_idx)
-    value = SeqAllToAllDim.apply(ulysses_group, value, scatter_idx, gather_idx)
-    out = TemplatedRingAttention.apply(
-        query,
-        key,
-        value,
-        attn_mask,
-        dropout_p,
-        is_causal,
-        scale,
-        enable_gqa,
-        return_lse,
-        forward_op,
-        backward_op,
-        _parallel_config,
-    )
-    if return_lse:
-        context_layer, lse, *_ = out
-    else:
-        context_layer = out
-    # context_layer is of shape (B, S, H_LOCAL, D)
-    output = SeqAllToAllDim.apply(
-        ulysses_group,
-        context_layer,
-        gather_idx,
-        scatter_idx,
-    )
-    if return_lse:
-        # lse is of shape (B, S, H_LOCAL, 1)
-        # Refer to:
-        # https://github.com/huggingface/diffusers/pull/12693#issuecomment-3627519544
-        if is_torch_version("<", "2.9.0"):
-            lse = lse.unsqueeze(-1)  # (B, S, H_LOCAL, 1)
-        lse = SeqAllToAllDim.apply(ulysses_group, lse, gather_idx, scatter_idx)
-        lse = lse.squeeze(-1)
-        return (output, lse)
-    return output
-
-
-def _templated_context_parallel_attention(
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attn_mask: Optional[torch.Tensor] = None,
-    dropout_p: float = 0.0,
-    is_causal: bool = False,
-    scale: Optional[float] = None,
-    enable_gqa: bool = False,
-    return_lse: bool = False,
-    *,
-    forward_op,
-    backward_op,
-    _parallel_config: Optional["ParallelConfig"] = None,
-):
-    if is_causal:
-        raise ValueError("Causal attention is not yet supported for templated attention.")
-    if enable_gqa:
-        raise ValueError("GQA is not yet supported for templated attention.")
-
-    # TODO: add support for unified attention with ring/ulysses degree both being > 1
-    if (
-        _parallel_config.context_parallel_config.ring_degree > 1
-        and _parallel_config.context_parallel_config.ulysses_degree > 1
-    ):
-        return _templated_unified_attention(
-            query,
-            key,
-            value,
-            attn_mask,
-            dropout_p,
-            is_causal,
-            scale,
-            enable_gqa,
-            return_lse,
-            forward_op,
-            backward_op,
-            _parallel_config,
-        )
-    elif _parallel_config.context_parallel_config.ring_degree > 1:
-        return TemplatedRingAttention.apply(
-            query,
-            key,
-            value,
-            attn_mask,
-            dropout_p,
-            is_causal,
-            scale,
-            enable_gqa,
-            return_lse,
-            forward_op,
-            backward_op,
-            _parallel_config,
-        )
-    elif _parallel_config.context_parallel_config.ulysses_degree > 1:
-        return TemplatedUlyssesAttention.apply(
-            query,
-            key,
-            value,
-            attn_mask,
-            dropout_p,
-            is_causal,
-            scale,
-            enable_gqa,
-            return_lse,
-            forward_op,
-            backward_op,
-            _parallel_config,
-        )
-    else:
-        raise ValueError("Reaching this branch of code is unexpected. Please report a bug.")
-
-
-# ===== Attention backends =====
-
-
-@_AttentionBackendRegistry.register(
-    AttentionBackendName.FLASH,
-    constraints=[_check_device, _check_qkv_dtype_bf16_or_fp16, _check_shape],
-    supports_context_parallel=True,
-)
-def _flash_attention(
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attn_mask: Optional[torch.Tensor] = None,
-    dropout_p: float = 0.0,
-    is_causal: bool = False,
-    scale: Optional[float] = None,
-    return_lse: bool = False,
-    _parallel_config: Optional["ParallelConfig"] = None,
-) -> torch.Tensor:
-    lse = None
-    if attn_mask is not None:
-        raise ValueError("`attn_mask` is not supported for flash-attn 2.")
-
-    if _parallel_config is None:
-        out = flash_attn_func(
-            q=query,
-            k=key,
-            v=value,
-            dropout_p=dropout_p,
-            softmax_scale=scale,
-            causal=is_causal,
-            return_attn_probs=return_lse,
-        )
-        if return_lse:
-            out, lse, *_ = out
-    else:
-        out = _templated_context_parallel_attention(
-            query,
-            key,
-            value,
-            None,
-            dropout_p,
-            is_causal,
-            scale,
-            False,
-            return_lse,
-            forward_op=_flash_attention_forward_op,
-            backward_op=_flash_attention_backward_op,
-            _parallel_config=_parallel_config,
-        )
-        if return_lse:
-            out, lse = out
-
-    return (out, lse) if return_lse else out
-
-
-@_AttentionBackendRegistry.register(
-    AttentionBackendName.FLASH_HUB,
-    constraints=[_check_device, _check_qkv_dtype_bf16_or_fp16, _check_shape],
-    supports_context_parallel=False,
-)
-def _flash_attention_hub(
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attn_mask: Optional[torch.Tensor] = None,
-    dropout_p: float = 0.0,
-    is_causal: bool = False,
-    scale: Optional[float] = None,
-    return_lse: bool = False,
-    _parallel_config: Optional["ParallelConfig"] = None,
-) -> torch.Tensor:
-    lse = None
-    if attn_mask is not None:
-        raise ValueError("`attn_mask` is not supported for flash-attn 2.")
-
-    func = _HUB_KERNELS_REGISTRY[AttentionBackendName.FLASH_HUB].kernel_fn
-    out = func(
-        q=query,
-        k=key,
-        v=value,
-        dropout_p=dropout_p,
-        softmax_scale=scale,
-        causal=is_causal,
-        return_attn_probs=return_lse,
-    )
-    if return_lse:
-        out, lse, *_ = out
-
-    return (out, lse) if return_lse else out
-
-
-@_AttentionBackendRegistry.register(
-    AttentionBackendName.FLASH_VARLEN_HUB,
-    constraints=[_check_device, _check_qkv_dtype_bf16_or_fp16, _check_shape],
-    supports_context_parallel=False,
-)
-def _flash_varlen_attention_hub(
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attn_mask: Optional[torch.Tensor] = None,
-    dropout_p: float = 0.0,
-    scale: Optional[float] = None,
-    is_causal: bool = False,
-    return_lse: bool = False,
-    _parallel_config: Optional["ParallelConfig"] = None,
-) -> torch.Tensor:
-    batch_size, seq_len_q, _, _ = query.shape
-    _, seq_len_kv, _, _ = key.shape
-
-    if attn_mask is not None:
-        attn_mask = _normalize_attn_mask(attn_mask, batch_size, seq_len_kv)
-
-    (_, seqlens_k), (cu_seqlens_q, cu_seqlens_k), (max_seqlen_q, max_seqlen_k) = (
-        _prepare_for_flash_attn_or_sage_varlen(
-            batch_size, seq_len_q, seq_len_kv, attn_mask=attn_mask, device=query.device
-        )
-    )
-
-    key_valid, value_valid = [], []
-    for b in range(batch_size):
-        valid_len = seqlens_k[b]
-        key_valid.append(key[b, :valid_len])
-        value_valid.append(value[b, :valid_len])
-
-    query_packed = query.flatten(0, 1)
-    key_packed = torch.cat(key_valid, dim=0)
-    value_packed = torch.cat(value_valid, dim=0)
-
-    func = _HUB_KERNELS_REGISTRY[AttentionBackendName.FLASH_VARLEN_HUB].kernel_fn
-    out = func(
-        q=query_packed,
-        k=key_packed,
-        v=value_packed,
-        cu_seqlens_q=cu_seqlens_q,
-        cu_seqlens_k=cu_seqlens_k,
-        max_seqlen_q=max_seqlen_q,
-        max_seqlen_k=max_seqlen_k,
-        dropout_p=dropout_p,
-        softmax_scale=scale,
-        causal=is_causal,
-        return_attn_probs=return_lse,
-    )
-    out = out.unflatten(0, (batch_size, -1))
-
-    return out
-
-
-@_AttentionBackendRegistry.register(
-    AttentionBackendName.FLASH_VARLEN,
-    constraints=[_check_device, _check_qkv_dtype_bf16_or_fp16, _check_shape],
-)
-def _flash_varlen_attention(
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attn_mask: Optional[torch.Tensor] = None,
-    dropout_p: float = 0.0,
-    scale: Optional[float] = None,
-    is_causal: bool = False,
-    return_lse: bool = False,
-    _parallel_config: Optional["ParallelConfig"] = None,
-) -> torch.Tensor:
-    batch_size, seq_len_q, _, _ = query.shape
-    _, seq_len_kv, _, _ = key.shape
-
-    if attn_mask is not None:
-        attn_mask = _normalize_attn_mask(attn_mask, batch_size, seq_len_kv)
-
-    (_, seqlens_k), (cu_seqlens_q, cu_seqlens_k), (max_seqlen_q, max_seqlen_k) = (
-        _prepare_for_flash_attn_or_sage_varlen(
-            batch_size, seq_len_q, seq_len_kv, attn_mask=attn_mask, device=query.device
-        )
-    )
-
-    key_valid, value_valid = [], []
-    for b in range(batch_size):
-        valid_len = seqlens_k[b]
-        key_valid.append(key[b, :valid_len])
-        value_valid.append(value[b, :valid_len])
-
-    query_packed = query.flatten(0, 1)
-    key_packed = torch.cat(key_valid, dim=0)
-    value_packed = torch.cat(value_valid, dim=0)
-
-    out = flash_attn_varlen_func(
-        q=query_packed,
-        k=key_packed,
-        v=value_packed,
-        cu_seqlens_q=cu_seqlens_q,
-        cu_seqlens_k=cu_seqlens_k,
-        max_seqlen_q=max_seqlen_q,
-        max_seqlen_k=max_seqlen_k,
-        dropout_p=dropout_p,
-        softmax_scale=scale,
-        causal=is_causal,
-        return_attn_probs=return_lse,
-    )
-    out = out.unflatten(0, (batch_size, -1))
-
-    return out
-
-
-@_AttentionBackendRegistry.register(
-    AttentionBackendName._FLASH_3,
-    constraints=[_check_device, _check_qkv_dtype_bf16_or_fp16, _check_shape],
-)
-def _flash_attention_3(
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attn_mask: Optional[torch.Tensor] = None,
-    scale: Optional[float] = None,
-    is_causal: bool = False,
-    return_lse: bool = False,
-    _parallel_config: Optional["ParallelConfig"] = None,
-) -> torch.Tensor:
-    if attn_mask is not None:
-        raise ValueError("`attn_mask` is not supported for flash-attn 3.")
-
-    out, lse = _wrapped_flash_attn_3(
-        q=query,
-        k=key,
-        v=value,
-        softmax_scale=scale,
-        causal=is_causal,
-    )
-    return (out, lse) if return_lse else out
-
-
-@_AttentionBackendRegistry.register(
-    AttentionBackendName._FLASH_3_HUB,
-    constraints=[_check_device, _check_qkv_dtype_bf16_or_fp16, _check_shape],
-    supports_context_parallel=False,
-)
-def _flash_attention_3_hub(
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attn_mask: Optional[torch.Tensor] = None,
-    scale: Optional[float] = None,
-    is_causal: bool = False,
-    window_size: Tuple[int, int] = (-1, -1),
-    softcap: float = 0.0,
-    deterministic: bool = False,
-    return_attn_probs: bool = False,
-    _parallel_config: Optional["ParallelConfig"] = None,
-) -> torch.Tensor:
-    if _parallel_config:
-        raise NotImplementedError(f"{AttentionBackendName._FLASH_3_HUB.value} is not implemented for parallelism yet.")
-    if attn_mask is not None:
-        raise ValueError("`attn_mask` is not supported for flash-attn 3.")
-
-    func = _HUB_KERNELS_REGISTRY[AttentionBackendName._FLASH_3_HUB].kernel_fn
-    out = func(
-        q=query,
-        k=key,
-        v=value,
-        softmax_scale=scale,
-        causal=is_causal,
-        qv=None,
-        q_descale=None,
-        k_descale=None,
-        v_descale=None,
-        window_size=window_size,
-        softcap=softcap,
-        num_splits=1,
-        pack_gqa=None,
-        deterministic=deterministic,
-        sm_margin=0,
-        return_attn_probs=return_attn_probs,
-    )
-    # When `return_attn_probs` is True, the above returns a tuple of
-    # actual outputs and lse.
-    return (out[0], out[1]) if return_attn_probs else out
-
-
-@_AttentionBackendRegistry.register(
-    AttentionBackendName._FLASH_3_VARLEN_HUB,
-    constraints=[_check_device, _check_qkv_dtype_bf16_or_fp16, _check_shape],
-    supports_context_parallel=False,
-)
-def _flash_attention_3_varlen_hub(
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attn_mask: Optional[torch.Tensor] = None,
-    scale: Optional[float] = None,
-    is_causal: bool = False,
-    return_lse: bool = False,
-    _parallel_config: Optional["ParallelConfig"] = None,
-) -> torch.Tensor:
-    batch_size, seq_len_q, _, _ = query.shape
-    _, seq_len_kv, _, _ = key.shape
-
-    if attn_mask is not None:
-        attn_mask = _normalize_attn_mask(attn_mask, batch_size, seq_len_kv)
-
-    (_, seqlens_k), (cu_seqlens_q, cu_seqlens_k), (max_seqlen_q, max_seqlen_k) = (
-        _prepare_for_flash_attn_or_sage_varlen(
-            batch_size, seq_len_q, seq_len_kv, attn_mask=attn_mask, device=query.device
-        )
-    )
-
-    key_valid, value_valid = [], []
-    for b in range(batch_size):
-        valid_len = seqlens_k[b]
-        key_valid.append(key[b, :valid_len])
-        value_valid.append(value[b, :valid_len])
-
-    query_packed = query.flatten(0, 1)
-    key_packed = torch.cat(key_valid, dim=0)
-    value_packed = torch.cat(value_valid, dim=0)
-
-    func = _HUB_KERNELS_REGISTRY[AttentionBackendName._FLASH_3_VARLEN_HUB].kernel_fn
-    out, lse, *_ = func(
-        q=query_packed,
-        k=key_packed,
-        v=value_packed,
-        cu_seqlens_q=cu_seqlens_q,
-        cu_seqlens_k=cu_seqlens_k,
-        max_seqlen_q=max_seqlen_q,
-        max_seqlen_k=max_seqlen_k,
-        softmax_scale=scale,
-        causal=is_causal,
-    )
-    out = out.unflatten(0, (batch_size, -1))
-
-    return (out, lse) if return_lse else out
-
-
-@_AttentionBackendRegistry.register(
-    AttentionBackendName._FLASH_VARLEN_3,
-    constraints=[_check_device, _check_qkv_dtype_bf16_or_fp16, _check_shape],
-)
-def _flash_varlen_attention_3(
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attn_mask: Optional[torch.Tensor] = None,
-    scale: Optional[float] = None,
-    is_causal: bool = False,
-    return_lse: bool = False,
-    _parallel_config: Optional["ParallelConfig"] = None,
-) -> torch.Tensor:
-    batch_size, seq_len_q, _, _ = query.shape
-    _, seq_len_kv, _, _ = key.shape
-
-    if attn_mask is not None:
-        attn_mask = _normalize_attn_mask(attn_mask, batch_size, seq_len_kv)
-
-    (_, seqlens_k), (cu_seqlens_q, cu_seqlens_k), (max_seqlen_q, max_seqlen_k) = (
-        _prepare_for_flash_attn_or_sage_varlen(
-            batch_size, seq_len_q, seq_len_kv, attn_mask=attn_mask, device=query.device
-        )
-    )
-
-    key_valid, value_valid = [], []
-    for b in range(batch_size):
-        valid_len = seqlens_k[b]
-        key_valid.append(key[b, :valid_len])
-        value_valid.append(value[b, :valid_len])
-
-    query_packed = query.flatten(0, 1)
-    key_packed = torch.cat(key_valid, dim=0)
-    value_packed = torch.cat(value_valid, dim=0)
-
-    out, lse, *_ = flash_attn_3_varlen_func(
-        q=query_packed,
-        k=key_packed,
-        v=value_packed,
-        cu_seqlens_q=cu_seqlens_q,
-        cu_seqlens_k=cu_seqlens_k,
-        max_seqlen_q=max_seqlen_q,
-        max_seqlen_k=max_seqlen_k,
-        softmax_scale=scale,
-        causal=is_causal,
-    )
-    out = out.unflatten(0, (batch_size, -1))
-
-    return (out, lse) if return_lse else out
-
-
-@_AttentionBackendRegistry.register(
-    AttentionBackendName.AITER,
-    constraints=[_check_device_cuda, _check_qkv_dtype_bf16_or_fp16, _check_shape],
-)
-def _aiter_flash_attention(
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attn_mask: Optional[torch.Tensor] = None,
-    dropout_p: float = 0.0,
-    is_causal: bool = False,
-    scale: Optional[float] = None,
-    return_lse: bool = False,
-    _parallel_config: Optional["ParallelConfig"] = None,
-) -> torch.Tensor:
-    if attn_mask is not None:
-        raise ValueError("`attn_mask` is not supported for aiter attention")
-
-    if not return_lse and torch.is_grad_enabled():
-        # aiter requires return_lse=True by assertion when gradients are enabled.
-        out, lse, *_ = aiter_flash_attn_func(
-            q=query,
-            k=key,
-            v=value,
-            dropout_p=dropout_p,
-            softmax_scale=scale,
-            causal=is_causal,
-            return_lse=True,
-        )
-    else:
-        out = aiter_flash_attn_func(
-            q=query,
-            k=key,
-            v=value,
-            dropout_p=dropout_p,
-            softmax_scale=scale,
-            causal=is_causal,
-            return_lse=return_lse,
-        )
-        if return_lse:
-            out, lse, *_ = out
-
-    return (out, lse) if return_lse else out
-
-
-@_AttentionBackendRegistry.register(
-    AttentionBackendName.FLEX,
-    constraints=[_check_attn_mask_or_causal, _check_device, _check_shape],
-)
-def _native_flex_attention(
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attn_mask: Optional[Union[torch.Tensor, "flex_attention.BlockMask"]] = None,
-    is_causal: bool = False,
-    scale: Optional[float] = None,
-    enable_gqa: bool = False,
-    return_lse: bool = False,
-    _parallel_config: Optional["ParallelConfig"] = None,
-) -> torch.Tensor:
-    # TODO: should we LRU cache the block mask creation?
-    score_mod = None
-    block_mask = None
-    batch_size, seq_len_q, num_heads, _ = query.shape
-    _, seq_len_kv, _, _ = key.shape
-
-    if attn_mask is None or isinstance(attn_mask, flex_attention.BlockMask):
-        block_mask = attn_mask
-    elif is_causal:
-        block_mask = flex_attention.create_block_mask(
-            _flex_attention_causal_mask_mod, batch_size, num_heads, seq_len_q, seq_len_kv, query.device
-        )
-    elif torch.is_tensor(attn_mask):
-        if attn_mask.ndim == 2:
-            attn_mask = attn_mask.view(attn_mask.size(0), 1, attn_mask.size(1), 1)
-
-        attn_mask = attn_mask.expand(batch_size, num_heads, seq_len_q, seq_len_kv)
-
-        if attn_mask.dtype == torch.bool:
-            # TODO: this probably does not work but verify!
-            def mask_mod(batch_idx, head_idx, q_idx, kv_idx):
-                return attn_mask[batch_idx, head_idx, q_idx, kv_idx]
-
-            block_mask = flex_attention.create_block_mask(
-                mask_mod, batch_size, None, seq_len_q, seq_len_kv, query.device
-            )
-        else:
-
-            def score_mod(score, batch_idx, head_idx, q_idx, kv_idx):
-                return score + attn_mask[batch_idx, head_idx, q_idx, kv_idx]
-    else:
-        raise ValueError("Attention mask must be either None, a BlockMask, or a 2D/4D tensor.")
-
-    query, key, value = (x.permute(0, 2, 1, 3) for x in (query, key, value))
-    out = flex_attention.flex_attention(
-        query=query,
-        key=key,
-        value=value,
-        score_mod=score_mod,
-        block_mask=block_mask,
-        scale=scale,
-        enable_gqa=enable_gqa,
-        return_lse=return_lse,
-    )
-    out = out.permute(0, 2, 1, 3)
-    return out
-
-
-def _prepare_additive_attn_mask(
-    attn_mask: torch.Tensor, target_dtype: torch.dtype, reshape_4d: bool = True
-) -> torch.Tensor:
-    """
     Convert a 2D attention mask to an additive mask, optionally reshaping to 4D for SDPA.
 
     This helper is used by both native SDPA and xformers backends to handle both boolean and additive masks.
-
-    Args:
-        attn_mask: 2D tensor [batch_size, seq_len_k]
                    - Boolean: True means attend, False means mask out
                    - Additive: 0.0 means attend, -inf means mask out
         target_dtype: The dtype to convert the mask to (usually query.dtype)
         reshape_4d: If True, reshape from [batch_size, seq_len_k] to [batch_size, 1, 1, seq_len_k] for broadcasting
-
-    Returns:
-        Additive mask tensor where 0.0 means attend and -inf means mask out. Shape is [batch_size, seq_len_k] if
-        reshape_4d=False, or [batch_size, 1, 1, seq_len_k] if reshape_4d=True.
-    """
-    # Check if the mask is boolean or already additive
-    if attn_mask.dtype == torch.bool:
-        # Convert boolean to additive: True -> 0.0, False -> -inf
-        attn_mask = torch.where(attn_mask, 0.0, float("-inf"))
-        # Convert to target dtype
-        attn_mask = attn_mask.to(dtype=target_dtype)
-    else:
-        # Already additive mask - just ensure correct dtype
-        attn_mask = attn_mask.to(dtype=target_dtype)
-
-    # Optionally reshape to 4D for broadcasting in attention mechanisms
-    if reshape_4d:
-        batch_size, seq_len_k = attn_mask.shape
-        attn_mask = attn_mask.view(batch_size, 1, 1, seq_len_k)
-
-    return attn_mask
-
-
-@_AttentionBackendRegistry.register(
-    AttentionBackendName.NATIVE,
-    constraints=[_check_device, _check_shape],
-    supports_context_parallel=True,
 )
 def _native_attention(
     query: torch.Tensor,
@@ -2228,7 +1272,6 @@ def _native_attention(
 
     return out
 
-
 @_AttentionBackendRegistry.register(
     AttentionBackendName._NATIVE_CUDNN,
     constraints=[_check_device, _check_qkv_dtype_bf16_or_fp16, _check_shape],
@@ -2281,7 +1324,6 @@ def _native_cudnn_attention(
 
     return (out, lse) if return_lse else out
 
-
 @_AttentionBackendRegistry.register(
     AttentionBackendName._NATIVE_EFFICIENT,
     constraints=[_check_device, _check_shape],
@@ -2314,7 +1356,6 @@ def _native_efficient_attention(
         )
     out = out.permute(0, 2, 1, 3)
     return out
-
 
 @_AttentionBackendRegistry.register(
     AttentionBackendName._NATIVE_FLASH,
@@ -2371,7 +1412,6 @@ def _native_flash_attention(
 
     return (out, lse) if return_lse else out
 
-
 @_AttentionBackendRegistry.register(
     AttentionBackendName._NATIVE_MATH,
     constraints=[_check_device, _check_shape],
@@ -2404,7 +1444,6 @@ def _native_math_attention(
         )
     out = out.permute(0, 2, 1, 3)
     return out
-
 
 @_AttentionBackendRegistry.register(
     AttentionBackendName._NATIVE_NPU,
@@ -2457,8 +1496,7 @@ def _native_npu_attention(
         )
     return out
 
-
-# Reference: https://github.com/pytorch/xla/blob/06c5533de6588f6b90aa1655d9850bcf733b90b4/torch_xla/experimental/custom_kernel.py#L853
+# Reference: https://github.com/pytorch/xla/blob/0...
 @_AttentionBackendRegistry.register(
     AttentionBackendName._NATIVE_XLA,
     constraints=[_check_device, _check_shape],
@@ -2486,7 +1524,6 @@ def _native_xla_attention(
     )
     out = out.permute(0, 2, 1, 3)
     return out
-
 
 @_AttentionBackendRegistry.register(
     AttentionBackendName.SAGE,
@@ -2538,7 +1575,6 @@ def _sage_attention(
 
     return (out, lse) if return_lse else out
 
-
 @_AttentionBackendRegistry.register(
     AttentionBackendName.SAGE_HUB,
     constraints=[_check_device_cuda, _check_qkv_dtype_bf16_or_fp16, _check_shape],
@@ -2572,7 +1608,6 @@ def _sage_attention_hub(
             out, lse, *_ = out
 
     return (out, lse) if return_lse else out
-
 
 @_AttentionBackendRegistry.register(
     AttentionBackendName.SAGE_VARLEN,
@@ -2628,7 +1663,6 @@ def _sage_varlen_attention(
 
     return out
 
-
 @_AttentionBackendRegistry.register(
     AttentionBackendName._SAGE_QK_INT8_PV_FP8_CUDA,
     constraints=[_check_device_cuda_atleast_smXY(9, 0), _check_shape],
@@ -2654,7 +1688,6 @@ def _sage_qk_int8_pv_fp8_cuda_attention(
         sm_scale=scale,
         return_lse=return_lse,
     )
-
 
 @_AttentionBackendRegistry.register(
     AttentionBackendName._SAGE_QK_INT8_PV_FP8_CUDA_SM90,
@@ -2682,7 +1715,6 @@ def _sage_qk_int8_pv_fp8_cuda_sm90_attention(
         return_lse=return_lse,
     )
 
-
 @_AttentionBackendRegistry.register(
     AttentionBackendName._SAGE_QK_INT8_PV_FP16_CUDA,
     constraints=[_check_device_cuda_atleast_smXY(8, 0), _check_shape],
@@ -2709,7 +1741,6 @@ def _sage_qk_int8_pv_fp16_cuda_attention(
         return_lse=return_lse,
     )
 
-
 @_AttentionBackendRegistry.register(
     AttentionBackendName._SAGE_QK_INT8_PV_FP16_TRITON,
     constraints=[_check_device_cuda_atleast_smXY(8, 0), _check_shape],
@@ -2735,7 +1766,6 @@ def _sage_qk_int8_pv_fp16_triton_attention(
         sm_scale=scale,
         return_lse=return_lse,
     )
-
 
 @_AttentionBackendRegistry.register(
     AttentionBackendName.XFORMERS,

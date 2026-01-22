@@ -6,7 +6,6 @@ from packaging import version
 
 from ..utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 # Mapping for deprecated Transformers classes to their replacements
@@ -25,17 +24,24 @@ _TRANSFORMERS_CLASS_REMAPPING = {
     },
 }
 
+def _maybe_remap_transformers_class(class_name: str) -> Optional[str]:
+    class names in their configs
+# Reference: https://github.com/huggingface/transformers/issues/40822
+# Format: {
+#     "DeprecatedClassName": {
+#         "new_class": "NewClassName",
+#         "transformers_version": (">=", "5.0.0"),  # (operation, version) tuple
+#     }
+# }
+_TRANSFORMERS_CLASS_REMAPPING = {
+    "CLIPFeatureExtractor": {
+        "new_class": "CLIPImageProcessor",
+        "transformers_version": (">", "4.57.0"),
+    },
+}
 
 def _maybe_remap_transformers_class(class_name: str) -> Optional[str]:
-    """
-    Check if a Transformers class should be remapped to a newer version.
 
-    Args:
-        class_name: The name of the class to check
-
-    Returns:
-        The new class name if remapping should occur, None otherwise
-    """
     if class_name not in _TRANSFORMERS_CLASS_REMAPPING:
         return None
 
@@ -51,7 +57,6 @@ def _maybe_remap_transformers_class(class_name: str) -> Optional[str]:
         return mapping["new_class"]
 
     return None
-
 
 def deprecate(*args, take_from: Optional[Union[Dict, Any]] = None, standard_warn=True, stacklevel=2):
     from .. import __version__

@@ -1,19 +1,3 @@
-# Copyright 2025 TSAIL Team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# DISCLAIMER: This file is strongly influenced by https://github.com/LuChengTHU/dpm-solver and https://github.com/NVlabs/edm
-
 import math
 from typing import List, Optional, Tuple, Union
 
@@ -24,66 +8,10 @@ from ..configuration_utils import ConfigMixin, register_to_config
 from ..utils.torch_utils import randn_tensor
 from .scheduling_utils import SchedulerMixin, SchedulerOutput
 
-
 class EDMDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
-    """
-    Implements DPMSolverMultistepScheduler in EDM formulation as presented in Karras et al. 2022 [1].
-    `EDMDPMSolverMultistepScheduler` is a fast dedicated high-order solver for diffusion ODEs.
+    
+    class EDMDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
 
-    [1] Karras, Tero, et al. "Elucidating the Design Space of Diffusion-Based Generative Models."
-    https://huggingface.co/papers/2206.00364
-
-    This model inherits from [`SchedulerMixin`] and [`ConfigMixin`]. Check the superclass documentation for the generic
-    methods the library implements for all schedulers such as loading and saving.
-
-    Args:
-        sigma_min (`float`, *optional*, defaults to 0.002):
-            Minimum noise magnitude in the sigma schedule. This was set to 0.002 in the EDM paper [1]; a reasonable
-            range is [0, 10].
-        sigma_max (`float`, *optional*, defaults to 80.0):
-            Maximum noise magnitude in the sigma schedule. This was set to 80.0 in the EDM paper [1]; a reasonable
-            range is [0.2, 80.0].
-        sigma_data (`float`, *optional*, defaults to 0.5):
-            The standard deviation of the data distribution. This is set to 0.5 in the EDM paper [1].
-        sigma_schedule (`str`, *optional*, defaults to `karras`):
-            Sigma schedule to compute the `sigmas`. By default, we the schedule introduced in the EDM paper
-            (https://huggingface.co/papers/2206.00364). Other acceptable value is "exponential". The exponential
-            schedule was incorporated in this model: https://huggingface.co/stabilityai/cosxl.
-        num_train_timesteps (`int`, defaults to 1000):
-            The number of diffusion steps to train the model.
-        solver_order (`int`, defaults to 2):
-            The DPMSolver order which can be `1` or `2` or `3`. It is recommended to use `solver_order=2` for guided
-            sampling, and `solver_order=3` for unconditional sampling.
-        prediction_type (`str`, defaults to `epsilon`, *optional*):
-            Prediction type of the scheduler function; can be `epsilon` (predicts the noise of the diffusion process),
-            `sample` (directly predicts the noisy sample`) or `v_prediction` (see section 2.4 of [Imagen
-            Video](https://huggingface.co/papers/2210.02303) paper).
-        thresholding (`bool`, defaults to `False`):
-            Whether to use the "dynamic thresholding" method. This is unsuitable for latent-space diffusion models such
-            as Stable Diffusion.
-        dynamic_thresholding_ratio (`float`, defaults to 0.995):
-            The ratio for the dynamic thresholding method. Valid only when `thresholding=True`.
-        sample_max_value (`float`, defaults to 1.0):
-            The threshold value for dynamic thresholding. Valid only when `thresholding=True` and
-            `algorithm_type="dpmsolver++"`.
-        algorithm_type (`str`, defaults to `dpmsolver++`):
-            Algorithm type for the solver; can be `dpmsolver++` or `sde-dpmsolver++`. The `dpmsolver++` type implements
-            the algorithms in the [DPMSolver++](https://huggingface.co/papers/2211.01095) paper. It is recommended to
-            use `dpmsolver++` or `sde-dpmsolver++` with `solver_order=2` for guided sampling like in Stable Diffusion.
-        solver_type (`str`, defaults to `midpoint`):
-            Solver type for the second-order solver; can be `midpoint` or `heun`. The solver type slightly affects the
-            sample quality, especially for a small number of steps. It is recommended to use `midpoint` solvers.
-        lower_order_final (`bool`, defaults to `True`):
-            Whether to use lower-order solvers in the final steps. Only valid for < 15 inference steps. This can
-            stabilize the sampling of DPMSolver for steps < 15, especially for steps <= 10.
-        euler_at_final (`bool`, defaults to `False`):
-            Whether to use Euler's method in the final step. It is a trade-off between numerical stability and detail
-            richness. This can stabilize the sampling of the SDE variant of DPMSolver for small number of inference
-            steps, but sometimes may result in blurring.
-        final_sigmas_type (`str`, defaults to `"zero"`):
-            The final `sigma` value for the noise schedule during the sampling process. If `"sigma_min"`, the final
-            sigma is the same as the last sigma in the training schedule. If `zero`, the final sigma is set to 0.
-    """
 
     _compatibles = []
     order = 1
@@ -151,61 +79,29 @@ class EDMDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
 
     @property
     def step_index(self):
-        """
-        The index counter for current timestep. It will increase 1 after each scheduler step.
-        """
+
         return self._step_index
 
     @property
     def begin_index(self):
-        """
-        The index for the first timestep. It should be set from pipeline with `set_begin_index` method.
-        """
+
         return self._begin_index
 
-    # Copied from diffusers.schedulers.scheduling_dpmsolver_multistep.DPMSolverMultistepScheduler.set_begin_index
+    # Copied from diffusers.schedulers.scheduling_...
     def set_begin_index(self, begin_index: int = 0):
-        """
-        Sets the begin index for the scheduler. This function should be run from pipeline before the inference.
 
-        Args:
-            begin_index (`int`, defaults to `0`):
-                The begin index for the scheduler.
-        """
         self._begin_index = begin_index
 
     # Copied from diffusers.schedulers.scheduling_edm_euler.EDMEulerScheduler.precondition_inputs
     def precondition_inputs(self, sample: torch.Tensor, sigma: Union[float, torch.Tensor]) -> torch.Tensor:
-        """
-        Precondition the input sample by scaling it according to the EDM formulation.
 
-        Args:
-            sample (`torch.Tensor`):
-                The input sample tensor to precondition.
-            sigma (`float` or `torch.Tensor`):
-                The current sigma (noise level) value.
-
-        Returns:
-            `torch.Tensor`:
-                The scaled input sample.
-        """
         c_in = self._get_conditioning_c_in(sigma)
         scaled_sample = sample * c_in
         return scaled_sample
 
     # Copied from diffusers.schedulers.scheduling_edm_euler.EDMEulerScheduler.precondition_noise
     def precondition_noise(self, sigma: Union[float, torch.Tensor]) -> torch.Tensor:
-        """
-        Precondition the noise level by applying a logarithmic transformation.
 
-        Args:
-            sigma (`float` or `torch.Tensor`):
-                The sigma (noise level) value to precondition.
-
-        Returns:
-            `torch.Tensor`:
-                The preconditioned noise value computed as `0.25 * log(sigma)`.
-        """
         if not isinstance(sigma, torch.Tensor):
             sigma = torch.tensor([sigma])
 
@@ -220,21 +116,7 @@ class EDMDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         model_output: torch.Tensor,
         sigma: Union[float, torch.Tensor],
     ) -> torch.Tensor:
-        """
-        Precondition the model outputs according to the EDM formulation.
 
-        Args:
-            sample (`torch.Tensor`):
-                The input sample tensor.
-            model_output (`torch.Tensor`):
-                The direct output from the learned diffusion model.
-            sigma (`float` or `torch.Tensor`):
-                The current sigma (noise level) value.
-
-        Returns:
-            `torch.Tensor`:
-                The denoised sample computed by combining the skip connection and output scaling.
-        """
         sigma_data = self.config.sigma_data
         c_skip = sigma_data**2 / (sigma**2 + sigma_data**2)
 
@@ -251,20 +133,7 @@ class EDMDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
 
     # Copied from diffusers.schedulers.scheduling_edm_euler.EDMEulerScheduler.scale_model_input
     def scale_model_input(self, sample: torch.Tensor, timestep: Union[float, torch.Tensor]) -> torch.Tensor:
-        """
-        Scale the denoising model input to match the Euler algorithm. Ensures interchangeability with schedulers that
-        need to scale the denoising model input depending on the current timestep.
 
-        Args:
-            sample (`torch.Tensor`):
-                The input sample tensor.
-            timestep (`float` or `torch.Tensor`):
-                The current timestep in the diffusion chain.
-
-        Returns:
-            `torch.Tensor`:
-                A scaled input sample.
-        """
         if self.step_index is None:
             self._init_step_index(timestep)
 
@@ -275,15 +144,7 @@ class EDMDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         return sample
 
     def set_timesteps(self, num_inference_steps: int = None, device: Union[str, torch.device] = None):
-        """
-        Sets the discrete timesteps used for the diffusion chain (to be run before inference).
 
-        Args:
-            num_inference_steps (`int`):
-                The number of diffusion steps used when generating samples with a pre-trained model.
-            device (`str` or `torch.device`, *optional*):
-                The device to which the timesteps should be moved to. If `None`, the timesteps are not moved.
-        """
 
         self.num_inference_steps = num_inference_steps
 
@@ -324,21 +185,7 @@ class EDMDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         sigma_min: Optional[float] = None,
         sigma_max: Optional[float] = None,
     ) -> torch.Tensor:
-        """
-        Construct the noise schedule of [Karras et al. (2022)](https://huggingface.co/papers/2206.00364).
 
-        Args:
-            ramp (`torch.Tensor`):
-                A tensor of values in [0, 1] representing the interpolation positions.
-            sigma_min (`float`, *optional*):
-                Minimum sigma value. If `None`, uses `self.config.sigma_min`.
-            sigma_max (`float`, *optional*):
-                Maximum sigma value. If `None`, uses `self.config.sigma_max`.
-
-        Returns:
-            `torch.Tensor`:
-                The computed Karras sigma schedule.
-        """
         sigma_min = sigma_min or self.config.sigma_min
         sigma_max = sigma_max or self.config.sigma_max
 
@@ -348,29 +195,14 @@ class EDMDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         sigmas = (max_inv_rho + ramp * (min_inv_rho - max_inv_rho)) ** rho
         return sigmas
 
-    # Copied from diffusers.schedulers.scheduling_edm_euler.EDMEulerScheduler._compute_exponential_sigmas
+    # Copied from diffusers.schedulers.scheduling_...
     def _compute_exponential_sigmas(
         self,
         ramp: torch.Tensor,
         sigma_min: Optional[float] = None,
         sigma_max: Optional[float] = None,
     ) -> torch.Tensor:
-        """
-        Compute the exponential sigma schedule. Implementation closely follows k-diffusion:
-        https://github.com/crowsonkb/k-diffusion/blob/6ab5146d4a5ef63901326489f31f1d8e7dd36b48/k_diffusion/sampling.py#L26
 
-        Args:
-            ramp (`torch.Tensor`):
-                A tensor of values representing the interpolation positions.
-            sigma_min (`float`, *optional*):
-                Minimum sigma value. If `None`, uses `self.config.sigma_min`.
-            sigma_max (`float`, *optional*):
-                Maximum sigma value. If `None`, uses `self.config.sigma_max`.
-
-        Returns:
-            `torch.Tensor`:
-                The computed exponential sigma schedule.
-        """
         sigma_min = sigma_min or self.config.sigma_min
         sigma_max = sigma_max or self.config.sigma_max
         sigmas = torch.linspace(math.log(sigma_min), math.log(sigma_max), len(ramp)).exp().flip(0)
@@ -378,25 +210,7 @@ class EDMDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
 
     # Copied from diffusers.schedulers.scheduling_ddpm.DDPMScheduler._threshold_sample
     def _threshold_sample(self, sample: torch.Tensor) -> torch.Tensor:
-        """
-        Apply dynamic thresholding to the predicted sample.
 
-        "Dynamic thresholding: At each sampling step we set s to a certain percentile absolute pixel value in xt0 (the
-        prediction of x_0 at timestep t), and if s > 1, then we threshold xt0 to the range [-s, s] and then divide by
-        s. Dynamic thresholding pushes saturated pixels (those near -1 and 1) inwards, thereby actively preventing
-        pixels from saturation at each step. We find that dynamic thresholding results in significantly better
-        photorealism as well as better image-text alignment, especially when using very large guidance weights."
-
-        https://huggingface.co/papers/2205.11487
-
-        Args:
-            sample (`torch.Tensor`):
-                The predicted sample to be thresholded.
-
-        Returns:
-            `torch.Tensor`:
-                The thresholded sample.
-        """
         dtype = sample.dtype
         batch_size, channels, *remaining_dims = sample.shape
 
@@ -422,19 +236,7 @@ class EDMDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
 
     # Copied from diffusers.schedulers.scheduling_euler_discrete.EulerDiscreteScheduler._sigma_to_t
     def _sigma_to_t(self, sigma, log_sigmas):
-        """
-        Convert sigma values to corresponding timestep values through interpolation.
 
-        Args:
-            sigma (`np.ndarray`):
-                The sigma value(s) to convert to timestep(s).
-            log_sigmas (`np.ndarray`):
-                The logarithm of the sigma schedule used for interpolation.
-
-        Returns:
-            `np.ndarray`:
-                The interpolated timestep value(s) corresponding to the input sigma(s).
-        """
         # get log sigma
         log_sigma = np.log(np.maximum(sigma, 1e-10))
 
@@ -468,24 +270,7 @@ class EDMDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         model_output: torch.Tensor,
         sample: torch.Tensor = None,
     ) -> torch.Tensor:
-        """
-        Convert the model output to the corresponding type the DPMSolver/DPMSolver++ algorithm needs. DPM-Solver is
-        designed to discretize an integral of the noise prediction model, and DPM-Solver++ is designed to discretize an
-        integral of the data prediction model.
 
-        > [!TIP] > The algorithm and model type are decoupled. You can use either DPMSolver or DPMSolver++ for both
-        noise > prediction and data prediction models.
-
-        Args:
-            model_output (`torch.Tensor`):
-                The direct output from the learned diffusion model.
-            sample (`torch.Tensor`):
-                A current instance of a sample created by the diffusion process.
-
-        Returns:
-            `torch.Tensor`:
-                The converted model output.
-        """
         sigma = self.sigmas[self.step_index]
         x0_pred = self.precondition_outputs(sample, model_output, sigma)
 
@@ -500,19 +285,7 @@ class EDMDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         sample: torch.Tensor = None,
         noise: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        """
-        One step for the first-order DPMSolver (equivalent to DDIM).
 
-        Args:
-            model_output (`torch.Tensor`):
-                The direct output from the learned diffusion model.
-            sample (`torch.Tensor`):
-                A current instance of a sample created by the diffusion process.
-
-        Returns:
-            `torch.Tensor`:
-                The sample tensor at the previous timestep.
-        """
         sigma_t, sigma_s = (
             self.sigmas[self.step_index + 1],
             self.sigmas[self.step_index],
@@ -541,19 +314,7 @@ class EDMDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         sample: torch.Tensor = None,
         noise: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        """
-        One step for the second-order multistep DPMSolver.
 
-        Args:
-            model_output_list (`List[torch.Tensor]`):
-                The direct outputs from learned diffusion model at current and latter timesteps.
-            sample (`torch.Tensor`):
-                A current instance of a sample created by the diffusion process.
-
-        Returns:
-            `torch.Tensor`:
-                The sample tensor at the previous timestep.
-        """
         sigma_t, sigma_s0, sigma_s1 = (
             self.sigmas[self.step_index + 1],
             self.sigmas[self.step_index],
@@ -611,19 +372,7 @@ class EDMDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         model_output_list: List[torch.Tensor],
         sample: torch.Tensor = None,
     ) -> torch.Tensor:
-        """
-        One step for the third-order multistep DPMSolver.
 
-        Args:
-            model_output_list (`List[torch.Tensor]`):
-                The direct outputs from learned diffusion model at current and latter timesteps.
-            sample (`torch.Tensor`):
-                A current instance of a sample created by diffusion process.
-
-        Returns:
-            `torch.Tensor`:
-                The sample tensor at the previous timestep.
-        """
         sigma_t, sigma_s0, sigma_s1, sigma_s2 = (
             self.sigmas[self.step_index + 1],
             self.sigmas[self.step_index],
@@ -660,23 +409,11 @@ class EDMDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
 
         return x_t
 
-    # Copied from diffusers.schedulers.scheduling_dpmsolver_multistep.DPMSolverMultistepScheduler.index_for_timestep
+    # Copied from diffusers.schedulers.scheduling_...
     def index_for_timestep(
         self, timestep: Union[int, torch.Tensor], schedule_timesteps: Optional[torch.Tensor] = None
     ) -> int:
-        """
-        Find the index for a given timestep in the schedule.
 
-        Args:
-            timestep (`int` or `torch.Tensor`):
-                The timestep for which to find the index.
-            schedule_timesteps (`torch.Tensor`, *optional*):
-                The timestep schedule to search in. If `None`, uses `self.timesteps`.
-
-        Returns:
-            `int`:
-                The index of the timestep in the schedule.
-        """
         if schedule_timesteps is None:
             schedule_timesteps = self.timesteps
 
@@ -695,15 +432,9 @@ class EDMDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
 
         return step_index
 
-    # Copied from diffusers.schedulers.scheduling_dpmsolver_multistep.DPMSolverMultistepScheduler._init_step_index
+    # Copied from diffusers.schedulers.scheduling_...
     def _init_step_index(self, timestep):
-        """
-        Initialize the step_index counter for the scheduler.
 
-        Args:
-            timestep (`int` or `torch.Tensor`):
-                The current timestep for which to initialize the step index.
-        """
 
         if self.begin_index is None:
             if isinstance(timestep, torch.Tensor):
@@ -720,28 +451,7 @@ class EDMDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         generator=None,
         return_dict: bool = True,
     ) -> Union[SchedulerOutput, Tuple]:
-        """
-        Predict the sample from the previous timestep by reversing the SDE. This function propagates the sample with
-        the multistep DPMSolver.
 
-        Args:
-            model_output (`torch.Tensor`):
-                The direct output from learned diffusion model.
-            timestep (`int`):
-                The current discrete timestep in the diffusion chain.
-            sample (`torch.Tensor`):
-                A current instance of a sample created by the diffusion process.
-            generator (`torch.Generator`, *optional*):
-                A random number generator.
-            return_dict (`bool`):
-                Whether or not to return a [`~schedulers.scheduling_utils.SchedulerOutput`] or `tuple`.
-
-        Returns:
-            [`~schedulers.scheduling_utils.SchedulerOutput`] or `tuple`:
-                If return_dict is `True`, [`~schedulers.scheduling_utils.SchedulerOutput`] is returned, otherwise a
-                tuple is returned where the first element is the sample tensor.
-
-        """
         if self.num_inference_steps is None:
             raise ValueError(
                 "Number of inference steps is 'None', you need to run 'set_timesteps' after creating the scheduler"
@@ -800,21 +510,7 @@ class EDMDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         noise: torch.Tensor,
         timesteps: torch.Tensor,
     ) -> torch.Tensor:
-        """
-        Add noise to the original samples according to the noise schedule at the specified timesteps.
 
-        Args:
-            original_samples (`torch.Tensor`):
-                The original samples to which noise will be added.
-            noise (`torch.Tensor`):
-                The noise tensor to add to the original samples.
-            timesteps (`torch.Tensor`):
-                The timesteps at which to add noise, determining the noise level from the schedule.
-
-        Returns:
-            `torch.Tensor`:
-                The noisy samples with added noise scaled according to the timestep schedule.
-        """
         # Make sure sigmas and timesteps have the same device and dtype as original_samples
         sigmas = self.sigmas.to(device=original_samples.device, dtype=original_samples.dtype)
         if original_samples.device.type == "mps" and torch.is_floating_point(timesteps):
@@ -825,7 +521,7 @@ class EDMDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
             schedule_timesteps = self.timesteps.to(original_samples.device)
             timesteps = timesteps.to(original_samples.device)
 
-        # self.begin_index is None when scheduler is used for training, or pipeline does not implement set_begin_index
+        # self.begin_index is None when scheduler...
         if self.begin_index is None:
             step_indices = [self.index_for_timestep(t, schedule_timesteps) for t in timesteps]
         elif self.step_index is not None:
@@ -844,17 +540,7 @@ class EDMDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
 
     # Copied from diffusers.schedulers.scheduling_edm_euler.EDMEulerScheduler._get_conditioning_c_in
     def _get_conditioning_c_in(self, sigma: Union[float, torch.Tensor]) -> Union[float, torch.Tensor]:
-        """
-        Compute the input conditioning factor for the EDM formulation.
 
-        Args:
-            sigma (`float` or `torch.Tensor`):
-                The current sigma (noise level) value.
-
-        Returns:
-            `float` or `torch.Tensor`:
-                The input conditioning factor `c_in`.
-        """
         c_in = 1 / ((sigma**2 + self.config.sigma_data**2) ** 0.5)
         return c_in
 

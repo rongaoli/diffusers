@@ -1,18 +1,3 @@
-# Copyright 2025 The Lightricks team and The HuggingFace Team.
-# All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import inspect
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Union
@@ -38,9 +23,7 @@ from ..embeddings import PixArtAlphaCombinedTimestepSizeEmbeddings, PixArtAlphaT
 from ..modeling_utils import ModelMixin
 from ..normalization import RMSNorm
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 def apply_interleaved_rotary_emb(x: torch.Tensor, freqs: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
     cos, sin = freqs
@@ -48,7 +31,6 @@ def apply_interleaved_rotary_emb(x: torch.Tensor, freqs: Tuple[torch.Tensor, tor
     x_rotated = torch.stack([-x_imag, x_real], dim=-1).flatten(2)
     out = (x.float() * cos + x_rotated.float() * sin).to(x.dtype)
     return out
-
 
 def apply_split_rotary_emb(x: torch.Tensor, freqs: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
     cos, sin = freqs
@@ -92,40 +74,15 @@ def apply_split_rotary_emb(x: torch.Tensor, freqs: Tuple[torch.Tensor, torch.Ten
     out = out.to(dtype=x_dtype)
     return out
 
-
 @dataclass
 class AudioVisualModelOutput(BaseOutput):
-    r"""
-    Holds the output of an audiovisual model which produces both visual (e.g. video) and audio outputs.
 
-    Args:
-        sample (`torch.Tensor` of shape `(batch_size, num_channels, num_frames, height, width)`):
-            The hidden states output conditioned on the `encoder_hidden_states` input, representing the visual output
-            of the model. This is typically a video (spatiotemporal) output.
-        audio_sample (`torch.Tensor` of shape `(batch_size, TODO)`):
-            The audio output of the audiovisual model.
-    """
 
     sample: "torch.Tensor"  # noqa: F821
     audio_sample: "torch.Tensor"  # noqa: F821
 
-
 class LTX2AdaLayerNormSingle(nn.Module):
-    r"""
-    Norm layer adaptive layer norm single (adaLN-single).
 
-    As proposed in PixArt-Alpha (see: https://huggingface.co/papers/2310.00426; Section 2.3) and adapted by the LTX-2.0
-    model. In particular, the number of modulation parameters to be calculated is now configurable.
-
-    Parameters:
-        embedding_dim (`int`): The size of each embedding vector.
-        num_mod_params (`int`, *optional*, defaults to `6`):
-            The number of modulation parameters which will be calculated in the first return argument. The default of 6
-            is standard, but sometimes we may want to have a different (usually smaller) number of modulation
-            parameters.
-        use_additional_conditions (`bool`, *optional*, defaults to `False`):
-            Whether to use additional conditions for normalization or not.
-    """
 
     def __init__(self, embedding_dim: int, num_mod_params: int = 6, use_additional_conditions: bool = False):
         super().__init__()
@@ -150,13 +107,8 @@ class LTX2AdaLayerNormSingle(nn.Module):
         embedded_timestep = self.emb(timestep, **added_cond_kwargs, batch_size=batch_size, hidden_dtype=hidden_dtype)
         return self.linear(self.silu(embedded_timestep)), embedded_timestep
 
-
 class LTX2AudioVideoAttnProcessor:
-    r"""
-    Processor for implementing attention (SDPA is used by default if you're using PyTorch 2.0) for the LTX-2.0 model.
-    Compared to the LTX-1.0 model, we allow the RoPE embeddings for the queries and keys to be separate so that we can
-    support audio-to-video (a2v) and video-to-audio (v2a) cross attention.
-    """
+
 
     _attention_backend = None
     _parallel_config = None
@@ -225,12 +177,8 @@ class LTX2AudioVideoAttnProcessor:
         hidden_states = attn.to_out[1](hidden_states)
         return hidden_states
 
-
 class LTX2Attention(torch.nn.Module, AttentionModuleMixin):
-    r"""
-    Attention class for all LTX-2.0 attention layers. Compared to LTX-1.0, this supports specifying the query and key
-    RoPE embeddings separately for audio-to-video (a2v) and video-to-audio (v2a) cross-attention.
-    """
+
 
     _default_processor_cls = LTX2AudioVideoAttnProcessor
     _available_processors = [LTX2AudioVideoAttnProcessor]
@@ -300,25 +248,8 @@ class LTX2Attention(torch.nn.Module, AttentionModuleMixin):
         )
         return hidden_states
 
-
 class LTX2VideoTransformerBlock(nn.Module):
-    r"""
-    Transformer block used in [LTX-2.0](https://huggingface.co/Lightricks/LTX-Video).
 
-    Args:
-        dim (`int`):
-            The number of channels in the input and output.
-        num_attention_heads (`int`):
-            The number of heads to use for multi-head attention.
-        attention_head_dim (`int`):
-            The number of channels in each head.
-        qk_norm (`str`, defaults to `"rms_norm"`):
-            The normalization layer to use.
-        activation_fn (`str`, defaults to `"gelu-approximate"`):
-            Activation function to use in feed-forward.
-        eps (`float`, defaults to `1e-6`):
-            Epsilon value for normalization layers.
-    """
 
     def __init__(
         self,
@@ -600,16 +531,8 @@ class LTX2VideoTransformerBlock(nn.Module):
 
         return hidden_states, audio_hidden_states
 
-
 class LTX2AudioVideoRotaryPosEmbed(nn.Module):
-    """
-    Video and audio rotary positional embeddings (RoPE) for the LTX-2.0 model.
 
-    Args:
-        causal_offset (`int`, *optional*, defaults to `1`):
-            Offset in the temporal axis for causal VAE modeling. This is typically 1 (for causal modeling where the VAE
-            treats the very first frame differently), but could also be 0 (for non-causal modeling).
-    """
 
     def __init__(
         self,
@@ -669,29 +592,7 @@ class LTX2AudioVideoRotaryPosEmbed(nn.Module):
         device: torch.device,
         fps: float = 24.0,
     ) -> torch.Tensor:
-        """
-        Create per-dimension bounds [inclusive start, exclusive end) for each patch with respect to the original pixel
-        space video grid (num_frames, height, width). This will ultimately have shape (batch_size, 3, num_patches, 2)
-        where
-            - axis 1 (size 3) enumerates (frame, height, width) dimensions (e.g. idx 0 corresponds to frames)
-            - axis 3 (size 2) stores `[start, end)` indices within each dimension
 
-        Args:
-            batch_size (`int`):
-                Batch size of the video latents.
-            num_frames (`int`):
-                Number of latent frames in the video latents.
-            height (`int`):
-                Latent height of the video latents.
-            width (`int`):
-                Latent width of the video latents.
-            device (`torch.device`):
-                Device on which to create the video grid.
-
-        Returns:
-            `torch.Tensor`:
-                Per-dimension patch boundaries tensor of shape [batch_size, 3, num_patches, 2].
-        """
 
         # 1. Generate grid coordinates for each spatiotemporal dimension (frames, height, width)
         # Always compute rope in fp32
@@ -721,7 +622,7 @@ class LTX2AudioVideoRotaryPosEmbed(nn.Module):
         # Apply per-axis scaling to convert latent coordinates to pixel space coordinates
         pixel_coords = latent_coords * scale_tensor.view(*broadcast_shape)
 
-        # As the VAE temporal stride for the first frame is 1 instead of self.vae_scale_factors[0], we need to shift
+        # As the VAE temporal stride for the first...
         # and clamp to keep the first-frame timestamps causal and non-negative.
         pixel_coords[:, 0, ...] = (pixel_coords[:, 0, ...] + self.causal_offset - self.scale_factors[0]).clamp(min=0)
 
@@ -737,27 +638,7 @@ class LTX2AudioVideoRotaryPosEmbed(nn.Module):
         device: torch.device,
         shift: int = 0,
     ) -> torch.Tensor:
-        """
-        Create per-dimension bounds [inclusive start, exclusive end) of start and end timestamps for each latent frame.
-        This will ultimately have shape (batch_size, 3, num_patches, 2) where
-            - axis 1 (size 1) represents the temporal dimension
-            - axis 3 (size 2) stores `[start, end)` indices within each dimension
 
-        Args:
-            batch_size (`int`):
-                Batch size of the audio latents.
-            num_frames (`int`):
-                Number of latent frames in the audio latents.
-            device (`torch.device`):
-                Device on which to create the audio grid.
-            shift (`int`, *optional*, defaults to `0`):
-                Offset on the latent indices. Different shift values correspond to different overlapping windows with
-                respect to the same underlying latent grid.
-
-        Returns:
-            `torch.Tensor`:
-                Per-dimension patch boundaries tensor of shape [batch_size, 1, num_patches, 2].
-        """
 
         # 1. Generate coordinates in the frame (time) dimension.
         # Always compute rope in fp32
@@ -798,7 +679,7 @@ class LTX2AudioVideoRotaryPosEmbed(nn.Module):
         # Number of spatiotemporal dimensions (3 for video, 1 (temporal) for audio and cross attn)
         num_pos_dims = coords.shape[1]
 
-        # 1. If the coords are patch boundaries [start, end), use the midpoint of these boundaries as the patch
+        # 1. If the coords are patch boundaries [s...
         # position index
         if coords.ndim == 4:
             coords_start, coords_end = coords.chunk(2, dim=-1)
@@ -812,7 +693,7 @@ class LTX2AudioVideoRotaryPosEmbed(nn.Module):
             max_positions = (self.base_num_frames,)
         # [B, num_pos_dims, num_patches] --> [B, num_patches, num_pos_dims]
         grid = torch.stack([coords[:, i] / max_positions[i] for i in range(num_pos_dims)], dim=-1).to(device)
-        # Number of spatiotemporal dimensions (3 for video, 1 for audio and cross attn) times 2 for cos, sin
+        # Number of spatiotemporal dimensions (3 f...
         num_rope_elems = num_pos_dims * 2
 
         # 3. Create a 1D grid of frequencies for RoPE
@@ -823,7 +704,7 @@ class LTX2AudioVideoRotaryPosEmbed(nn.Module):
         )
         freqs = (pow_indices * torch.pi / 2.0).to(dtype=torch.float32)
 
-        # 4. Tensor-vector outer product between pos ids tensor of shape (B, 3, num_patches) and freqs vector of shape
+        # 4. Tensor-vector outer product between p...
         # (self.dim // num_elems,)
         freqs = (grid.unsqueeze(-1) * 2 - 1) * freqs  # [B, num_patches, num_pos_dims, self.dim // num_elems]
         freqs = freqs.transpose(-1, -2).flatten(2)  # [B, num_patches, self.dim // 2]
@@ -867,35 +748,10 @@ class LTX2AudioVideoRotaryPosEmbed(nn.Module):
 
         return cos_freqs, sin_freqs
 
-
 class LTX2VideoTransformer3DModel(
     ModelMixin, ConfigMixin, AttentionMixin, FromOriginalModelMixin, PeftAdapterMixin, CacheMixin
 ):
-    r"""
-    A Transformer model for video-like data used in [LTX](https://huggingface.co/Lightricks/LTX-Video).
 
-    Args:
-        in_channels (`int`, defaults to `128`):
-            The number of channels in the input.
-        out_channels (`int`, defaults to `128`):
-            The number of channels in the output.
-        patch_size (`int`, defaults to `1`):
-            The size of the spatial patches to use in the patch embedding layer.
-        patch_size_t (`int`, defaults to `1`):
-            The size of the tmeporal patches to use in the patch embedding layer.
-        num_attention_heads (`int`, defaults to `32`):
-            The number of heads to use for multi-head attention.
-        attention_head_dim (`int`, defaults to `64`):
-            The number of channels in each head.
-        cross_attention_dim (`int`, defaults to `2048 `):
-            The number of channels for cross attention heads.
-        num_layers (`int`, defaults to `28`):
-            The number of layers of Transformer blocks to use.
-        activation_fn (`str`, defaults to `"gelu-approximate"`):
-            Activation function to use in feed-forward.
-        qk_norm (`str`, defaults to `"rms_norm_across_heads"`):
-            The normalization layer to use.
-    """
 
     _supports_gradient_checkpointing = True
     _skip_layerwise_casting_patterns = ["norm"]
@@ -971,17 +827,17 @@ class LTX2VideoTransformer3DModel(
         )
 
         # 3. Timestep Modulation Params and Embedding
-        # 3.1. Global Timestep Modulation Parameters (except for cross-attention) and timestep + size embedding
-        # time_embed and audio_time_embed calculate both the timestep embedding and (global) modulation parameters
+        # 3.1. Global Timestep Modulation Paramete...
+        # time_embed and audio_time_embed calculat...
         self.time_embed = LTX2AdaLayerNormSingle(inner_dim, num_mod_params=6, use_additional_conditions=False)
         self.audio_time_embed = LTX2AdaLayerNormSingle(
             audio_inner_dim, num_mod_params=6, use_additional_conditions=False
         )
 
         # 3.2. Global Cross Attention Modulation Parameters
-        # Used in the audio-to-video and video-to-audio cross attention layers as a global set of modulation params,
+        # Used in the audio-to-video and video-to-...
         # which are then further modified by per-block modulaton params in each transformer block.
-        # There are 2 sets of scale/shift parameters for each modality, 1 each for audio-to-video (a2v) and
+        # There are 2 sets of scale/shift paramete...
         # video-to-audio (v2a) cross attention
         self.av_cross_attn_video_scale_shift = LTX2AdaLayerNormSingle(
             inner_dim, num_mod_params=4, use_additional_conditions=False
@@ -989,12 +845,12 @@ class LTX2VideoTransformer3DModel(
         self.av_cross_attn_audio_scale_shift = LTX2AdaLayerNormSingle(
             audio_inner_dim, num_mod_params=4, use_additional_conditions=False
         )
-        # Gate param for audio-to-video (a2v) cross attn (where the video is the queries (Q) and the audio is the keys
+        # Gate param for audio-to-video (a2v) cros...
         # and values (KV))
         self.av_cross_attn_video_a2v_gate = LTX2AdaLayerNormSingle(
             inner_dim, num_mod_params=1, use_additional_conditions=False
         )
-        # Gate param for video-to-audio (v2a) cross attn (where the audio is the queries (Q) and the video is the keys
+        # Gate param for video-to-audio (v2a) cros...
         # and values (KV))
         self.av_cross_attn_audio_v2a_gate = LTX2AdaLayerNormSingle(
             audio_inner_dim, num_mod_params=1, use_additional_conditions=False
@@ -1121,20 +977,7 @@ class LTX2VideoTransformer3DModel(
         attention_kwargs: Optional[Dict[str, Any]] = None,
         return_dict: bool = True,
     ) -> torch.Tensor:
-        """
         Forward pass for LTX-2.0 audiovisual video transformer.
-
-        Args:
-            hidden_states (`torch.Tensor`):
-                Input patchified video latents of shape `(batch_size, num_video_tokens, in_channels)`.
-            audio_hidden_states (`torch.Tensor`):
-                Input patchified audio latents of shape `(batch_size, num_audio_tokens, audio_in_channels)`.
-            encoder_hidden_states (`torch.Tensor`):
-                Input video text embeddings of shape `(batch_size, text_seq_len, self.config.caption_channels)`.
-            audio_encoder_hidden_states (`torch.Tensor`):
-                Input audio text embeddings of shape `(batch_size, text_seq_len, self.config.caption_channels)`.
-            timestep (`torch.Tensor`):
-                Input timestep of shape `(batch_size, num_video_tokens)`. These should already be scaled by
                 `self.config.timestep_scale_multiplier`.
             audio_timestep (`torch.Tensor`, *optional*):
                 Input timestep of shape `(batch_size,)` or `(batch_size, num_audio_tokens)` for audio modulation
@@ -1164,187 +1007,3 @@ class LTX2VideoTransformer3DModel(
                 Optional dict of keyword args to be passed to the attention processor.
             return_dict (`bool`, *optional*, defaults to `True`):
                 Whether to return a dict-like structured output of type `AudioVisualModelOutput` or a tuple.
-
-        Returns:
-            `AudioVisualModelOutput` or `tuple`:
-                If `return_dict` is `True`, returns a structured output of type `AudioVisualModelOutput`, otherwise a
-                `tuple` is returned where the first element is the denoised video latent patch sequence and the second
-                element is the denoised audio latent patch sequence.
-        """
-        if attention_kwargs is not None:
-            attention_kwargs = attention_kwargs.copy()
-            lora_scale = attention_kwargs.pop("scale", 1.0)
-        else:
-            lora_scale = 1.0
-
-        if USE_PEFT_BACKEND:
-            # weight the lora layers by setting `lora_scale` for each PEFT layer
-            scale_lora_layers(self, lora_scale)
-        else:
-            if attention_kwargs is not None and attention_kwargs.get("scale", None) is not None:
-                logger.warning(
-                    "Passing `scale` via `attention_kwargs` when not using the PEFT backend is ineffective."
-                )
-
-        # Determine timestep for audio.
-        audio_timestep = audio_timestep if audio_timestep is not None else timestep
-
-        # convert encoder_attention_mask to a bias the same way we do for attention_mask
-        if encoder_attention_mask is not None and encoder_attention_mask.ndim == 2:
-            encoder_attention_mask = (1 - encoder_attention_mask.to(hidden_states.dtype)) * -10000.0
-            encoder_attention_mask = encoder_attention_mask.unsqueeze(1)
-
-        if audio_encoder_attention_mask is not None and audio_encoder_attention_mask.ndim == 2:
-            audio_encoder_attention_mask = (1 - audio_encoder_attention_mask.to(audio_hidden_states.dtype)) * -10000.0
-            audio_encoder_attention_mask = audio_encoder_attention_mask.unsqueeze(1)
-
-        batch_size = hidden_states.size(0)
-
-        # 1. Prepare RoPE positional embeddings
-        if video_coords is None:
-            video_coords = self.rope.prepare_video_coords(
-                batch_size, num_frames, height, width, hidden_states.device, fps=fps
-            )
-        if audio_coords is None:
-            audio_coords = self.audio_rope.prepare_audio_coords(
-                batch_size, audio_num_frames, audio_hidden_states.device
-            )
-
-        video_rotary_emb = self.rope(video_coords, device=hidden_states.device)
-        audio_rotary_emb = self.audio_rope(audio_coords, device=audio_hidden_states.device)
-
-        video_cross_attn_rotary_emb = self.cross_attn_rope(video_coords[:, 0:1, :], device=hidden_states.device)
-        audio_cross_attn_rotary_emb = self.cross_attn_audio_rope(
-            audio_coords[:, 0:1, :], device=audio_hidden_states.device
-        )
-
-        # 2. Patchify input projections
-        hidden_states = self.proj_in(hidden_states)
-        audio_hidden_states = self.audio_proj_in(audio_hidden_states)
-
-        # 3. Prepare timestep embeddings and modulation parameters
-        timestep_cross_attn_gate_scale_factor = (
-            self.config.cross_attn_timestep_scale_multiplier / self.config.timestep_scale_multiplier
-        )
-
-        # 3.1. Prepare global modality (video and audio) timestep embedding and modulation parameters
-        # temb is used in the transformer blocks (as expected), while embedded_timestep is used for the output layer
-        # modulation with scale_shift_table (and similarly for audio)
-        temb, embedded_timestep = self.time_embed(
-            timestep.flatten(),
-            batch_size=batch_size,
-            hidden_dtype=hidden_states.dtype,
-        )
-        temb = temb.view(batch_size, -1, temb.size(-1))
-        embedded_timestep = embedded_timestep.view(batch_size, -1, embedded_timestep.size(-1))
-
-        temb_audio, audio_embedded_timestep = self.audio_time_embed(
-            audio_timestep.flatten(),
-            batch_size=batch_size,
-            hidden_dtype=audio_hidden_states.dtype,
-        )
-        temb_audio = temb_audio.view(batch_size, -1, temb_audio.size(-1))
-        audio_embedded_timestep = audio_embedded_timestep.view(batch_size, -1, audio_embedded_timestep.size(-1))
-
-        # 3.2. Prepare global modality cross attention modulation parameters
-        video_cross_attn_scale_shift, _ = self.av_cross_attn_video_scale_shift(
-            timestep.flatten(),
-            batch_size=batch_size,
-            hidden_dtype=hidden_states.dtype,
-        )
-        video_cross_attn_a2v_gate, _ = self.av_cross_attn_video_a2v_gate(
-            timestep.flatten() * timestep_cross_attn_gate_scale_factor,
-            batch_size=batch_size,
-            hidden_dtype=hidden_states.dtype,
-        )
-        video_cross_attn_scale_shift = video_cross_attn_scale_shift.view(
-            batch_size, -1, video_cross_attn_scale_shift.shape[-1]
-        )
-        video_cross_attn_a2v_gate = video_cross_attn_a2v_gate.view(batch_size, -1, video_cross_attn_a2v_gate.shape[-1])
-
-        audio_cross_attn_scale_shift, _ = self.av_cross_attn_audio_scale_shift(
-            audio_timestep.flatten(),
-            batch_size=batch_size,
-            hidden_dtype=audio_hidden_states.dtype,
-        )
-        audio_cross_attn_v2a_gate, _ = self.av_cross_attn_audio_v2a_gate(
-            audio_timestep.flatten() * timestep_cross_attn_gate_scale_factor,
-            batch_size=batch_size,
-            hidden_dtype=audio_hidden_states.dtype,
-        )
-        audio_cross_attn_scale_shift = audio_cross_attn_scale_shift.view(
-            batch_size, -1, audio_cross_attn_scale_shift.shape[-1]
-        )
-        audio_cross_attn_v2a_gate = audio_cross_attn_v2a_gate.view(batch_size, -1, audio_cross_attn_v2a_gate.shape[-1])
-
-        # 4. Prepare prompt embeddings
-        encoder_hidden_states = self.caption_projection(encoder_hidden_states)
-        encoder_hidden_states = encoder_hidden_states.view(batch_size, -1, hidden_states.size(-1))
-
-        audio_encoder_hidden_states = self.audio_caption_projection(audio_encoder_hidden_states)
-        audio_encoder_hidden_states = audio_encoder_hidden_states.view(batch_size, -1, audio_hidden_states.size(-1))
-
-        # 5. Run transformer blocks
-        for block in self.transformer_blocks:
-            if torch.is_grad_enabled() and self.gradient_checkpointing:
-                hidden_states, audio_hidden_states = self._gradient_checkpointing_func(
-                    block,
-                    hidden_states,
-                    audio_hidden_states,
-                    encoder_hidden_states,
-                    audio_encoder_hidden_states,
-                    temb,
-                    temb_audio,
-                    video_cross_attn_scale_shift,
-                    audio_cross_attn_scale_shift,
-                    video_cross_attn_a2v_gate,
-                    audio_cross_attn_v2a_gate,
-                    video_rotary_emb,
-                    audio_rotary_emb,
-                    video_cross_attn_rotary_emb,
-                    audio_cross_attn_rotary_emb,
-                    encoder_attention_mask,
-                    audio_encoder_attention_mask,
-                )
-            else:
-                hidden_states, audio_hidden_states = block(
-                    hidden_states=hidden_states,
-                    audio_hidden_states=audio_hidden_states,
-                    encoder_hidden_states=encoder_hidden_states,
-                    audio_encoder_hidden_states=audio_encoder_hidden_states,
-                    temb=temb,
-                    temb_audio=temb_audio,
-                    temb_ca_scale_shift=video_cross_attn_scale_shift,
-                    temb_ca_audio_scale_shift=audio_cross_attn_scale_shift,
-                    temb_ca_gate=video_cross_attn_a2v_gate,
-                    temb_ca_audio_gate=audio_cross_attn_v2a_gate,
-                    video_rotary_emb=video_rotary_emb,
-                    audio_rotary_emb=audio_rotary_emb,
-                    ca_video_rotary_emb=video_cross_attn_rotary_emb,
-                    ca_audio_rotary_emb=audio_cross_attn_rotary_emb,
-                    encoder_attention_mask=encoder_attention_mask,
-                    audio_encoder_attention_mask=audio_encoder_attention_mask,
-                )
-
-        # 6. Output layers (including unpatchification)
-        scale_shift_values = self.scale_shift_table[None, None] + embedded_timestep[:, :, None]
-        shift, scale = scale_shift_values[:, :, 0], scale_shift_values[:, :, 1]
-
-        hidden_states = self.norm_out(hidden_states)
-        hidden_states = hidden_states * (1 + scale) + shift
-        output = self.proj_out(hidden_states)
-
-        audio_scale_shift_values = self.audio_scale_shift_table[None, None] + audio_embedded_timestep[:, :, None]
-        audio_shift, audio_scale = audio_scale_shift_values[:, :, 0], audio_scale_shift_values[:, :, 1]
-
-        audio_hidden_states = self.audio_norm_out(audio_hidden_states)
-        audio_hidden_states = audio_hidden_states * (1 + audio_scale) + audio_shift
-        audio_output = self.audio_proj_out(audio_hidden_states)
-
-        if USE_PEFT_BACKEND:
-            # remove `lora_scale` from each PEFT layer
-            unscale_lora_layers(self, lora_scale)
-
-        if not return_dict:
-            return (output, audio_output)
-        return AudioVisualModelOutput(sample=output, audio_sample=audio_output)

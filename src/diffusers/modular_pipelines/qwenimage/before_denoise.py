@@ -1,17 +1,3 @@
-# Copyright 2025 Qwen-Image Team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import inspect
 from typing import List, Optional, Tuple, Union
 
@@ -24,7 +10,6 @@ from ...utils.torch_utils import randn_tensor, unwrap_module
 from ..modular_pipeline import ModularPipelineBlocks, PipelineState
 from ..modular_pipeline_utils import ComponentSpec, InputParam, OutputParam
 from .modular_pipeline import QwenImageLayeredPachifier, QwenImageModularPipeline, QwenImagePachifier
-
 
 # Copied from diffusers.pipelines.qwenimage.pipeline_qwenimage.calculate_shift
 def calculate_shift(
@@ -39,7 +24,6 @@ def calculate_shift(
     mu = image_seq_len * m + b
     return mu
 
-
 # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.retrieve_timesteps
 def retrieve_timesteps(
     scheduler,
@@ -49,58 +33,13 @@ def retrieve_timesteps(
     sigmas: Optional[List[float]] = None,
     **kwargs,
 ):
-    r"""
+
     Calls the scheduler's `set_timesteps` method and retrieves timesteps from the scheduler after the call. Handles
     custom timesteps. Any kwargs will be supplied to `scheduler.set_timesteps`.
-
-    Args:
-        scheduler (`SchedulerMixin`):
-            The scheduler to get timesteps from.
-        num_inference_steps (`int`):
-            The number of diffusion steps used when generating samples with a pre-trained model. If used, `timesteps`
-            must be `None`.
-        device (`str` or `torch.device`, *optional*):
-            The device to which the timesteps should be moved to. If `None`, the timesteps are not moved.
-        timesteps (`List[int]`, *optional*):
-            Custom timesteps used to override the timestep spacing strategy of the scheduler. If `timesteps` is passed,
             `num_inference_steps` and `sigmas` must be `None`.
         sigmas (`List[float]`, *optional*):
             Custom sigmas used to override the timestep spacing strategy of the scheduler. If `sigmas` is passed,
             `num_inference_steps` and `timesteps` must be `None`.
-
-    Returns:
-        `Tuple[torch.Tensor, int]`: A tuple where the first element is the timestep schedule from the scheduler and the
-        second element is the number of inference steps.
-    """
-    if timesteps is not None and sigmas is not None:
-        raise ValueError("Only one of `timesteps` or `sigmas` can be passed. Please choose one to set custom values")
-    if timesteps is not None:
-        accepts_timesteps = "timesteps" in set(inspect.signature(scheduler.set_timesteps).parameters.keys())
-        if not accepts_timesteps:
-            raise ValueError(
-                f"The current scheduler class {scheduler.__class__}'s `set_timesteps` does not support custom"
-                f" timestep schedules. Please check whether you are using the correct scheduler."
-            )
-        scheduler.set_timesteps(timesteps=timesteps, device=device, **kwargs)
-        timesteps = scheduler.timesteps
-        num_inference_steps = len(timesteps)
-    elif sigmas is not None:
-        accept_sigmas = "sigmas" in set(inspect.signature(scheduler.set_timesteps).parameters.keys())
-        if not accept_sigmas:
-            raise ValueError(
-                f"The current scheduler class {scheduler.__class__}'s `set_timesteps` does not support custom"
-                f" sigmas schedules. Please check whether you are using the correct scheduler."
-            )
-        scheduler.set_timesteps(sigmas=sigmas, device=device, **kwargs)
-        timesteps = scheduler.timesteps
-        num_inference_steps = len(timesteps)
-    else:
-        scheduler.set_timesteps(num_inference_steps, device=device, **kwargs)
-        timesteps = scheduler.timesteps
-    return timesteps, num_inference_steps
-
-
-# modified from diffusers.pipelines.stable_diffusion_3.pipeline_stable_diffusion_3_img2img.StableDiffusion3Img2ImgPipeline.get_timesteps
 def get_timesteps(scheduler, num_inference_steps, strength):
     # get the original timestep using init_timestep
     init_timestep = min(num_inference_steps * strength, num_inference_steps)
@@ -112,11 +51,9 @@ def get_timesteps(scheduler, num_inference_steps, strength):
 
     return timesteps, num_inference_steps - t_start
 
-
 # ====================
 # 1. PREPARE LATENTS
 # ====================
-
 
 class QwenImagePrepareLatentsStep(ModularPipelineBlocks):
     model_name = "qwenimage"
@@ -207,7 +144,6 @@ class QwenImagePrepareLatentsStep(ModularPipelineBlocks):
 
         self.set_block_state(state, block_state)
         return components, state
-
 
 class QwenImageLayeredPrepareLatentsStep(ModularPipelineBlocks):
     model_name = "qwenimage-layered"
@@ -300,7 +236,6 @@ class QwenImageLayeredPrepareLatentsStep(ModularPipelineBlocks):
         self.set_block_state(state, block_state)
         return components, state
 
-
 class QwenImagePrepareLatentsWithStrengthStep(ModularPipelineBlocks):
     model_name = "qwenimage"
 
@@ -381,7 +316,6 @@ class QwenImagePrepareLatentsWithStrengthStep(ModularPipelineBlocks):
 
         return components, state
 
-
 class QwenImageCreateMaskLatentsStep(ModularPipelineBlocks):
     model_name = "qwenimage"
 
@@ -444,11 +378,9 @@ class QwenImageCreateMaskLatentsStep(ModularPipelineBlocks):
 
         return components, state
 
-
 # ====================
 # 2. SET TIMESTEPS
 # ====================
-
 
 class QwenImageSetTimestepsStep(ModularPipelineBlocks):
     model_name = "qwenimage"
@@ -515,7 +447,6 @@ class QwenImageSetTimestepsStep(ModularPipelineBlocks):
 
         return components, state
 
-
 class QwenImageLayeredSetTimestepsStep(ModularPipelineBlocks):
     model_name = "qwenimage-layered"
 
@@ -572,7 +503,6 @@ class QwenImageLayeredSetTimestepsStep(ModularPipelineBlocks):
 
         self.set_block_state(state, block_state)
         return components, state
-
 
 class QwenImageSetTimestepsWithStrengthStep(ModularPipelineBlocks):
     model_name = "qwenimage"
@@ -646,13 +576,11 @@ class QwenImageSetTimestepsWithStrengthStep(ModularPipelineBlocks):
 
         return components, state
 
-
 # ====================
 # 3. OTHER INPUTS FOR DENOISER
 # ====================
 
 ## RoPE inputs for denoiser
-
 
 class QwenImageRoPEInputsStep(ModularPipelineBlocks):
     model_name = "qwenimage"
@@ -700,7 +628,6 @@ class QwenImageRoPEInputsStep(ModularPipelineBlocks):
         self.set_block_state(state, block_state)
 
         return components, state
-
 
 class QwenImageEditRoPEInputsStep(ModularPipelineBlocks):
     model_name = "qwenimage"
@@ -754,7 +681,6 @@ class QwenImageEditRoPEInputsStep(ModularPipelineBlocks):
         self.set_block_state(state, block_state)
 
         return components, state
-
 
 class QwenImageEditPlusRoPEInputsStep(ModularPipelineBlocks):
     model_name = "qwenimage-edit-plus"
@@ -830,7 +756,6 @@ class QwenImageEditPlusRoPEInputsStep(ModularPipelineBlocks):
         self.set_block_state(state, block_state)
 
         return components, state
-
 
 class QwenImageLayeredRoPEInputsStep(ModularPipelineBlocks):
     model_name = "qwenimage-layered"
@@ -911,7 +836,6 @@ class QwenImageLayeredRoPEInputsStep(ModularPipelineBlocks):
 
         self.set_block_state(state, block_state)
         return components, state
-
 
 ## ControlNet inputs for denoiser
 class QwenImageControlNetBeforeDenoiserStep(ModularPipelineBlocks):

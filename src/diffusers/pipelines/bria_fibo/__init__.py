@@ -9,10 +9,8 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
-
 
 try:
     if not (is_transformers_available() and is_torch_available()):
@@ -24,7 +22,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["pipeline_bria_fibo"] = ["BriaFiboPipeline"]
     _import_structure["pipeline_bria_fibo_edit"] = ["BriaFiboEditPipeline"]
-
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:

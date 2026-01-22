@@ -3,9 +3,8 @@ import importlib
 import inspect
 import textwrap
 
-
 class ReturnNameVisitor(ast.NodeVisitor):
-    """Thanks to ChatGPT for pairing."""
+
 
     def __init__(self):
         self.return_names = []

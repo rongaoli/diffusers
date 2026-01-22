@@ -8,7 +8,6 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
 
@@ -33,7 +32,6 @@ else:
     _import_structure["pipeline_amused"] = ["AmusedPipeline"]
     _import_structure["pipeline_amused_img2img"] = ["AmusedImg2ImgPipeline"]
     _import_structure["pipeline_amused_inpaint"] = ["AmusedInpaintPipeline"]
-
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:

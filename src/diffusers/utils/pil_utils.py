@@ -5,7 +5,6 @@ import PIL.ImageOps
 from packaging import version
 from PIL import Image
 
-
 if version.parse(version.parse(PIL.__version__).base_version) >= version.parse("9.1.0"):
     PIL_INTERPOLATION = {
         "linear": PIL.Image.Resampling.BILINEAR,
@@ -23,21 +22,15 @@ else:
         "nearest": PIL.Image.NEAREST,
     }
 
-
 def pt_to_pil(images):
-    """
-    Convert a torch image to a PIL image.
-    """
+
     images = (images / 2 + 0.5).clamp(0, 1)
     images = images.cpu().permute(0, 2, 3, 1).float().numpy()
     images = numpy_to_pil(images)
     return images
 
-
 def numpy_to_pil(images):
-    """
-    Convert a numpy image or a batch of images to a PIL image.
-    """
+
     if images.ndim == 3:
         images = images[None, ...]
     images = (images * 255).round().astype("uint8")
@@ -49,11 +42,8 @@ def numpy_to_pil(images):
 
     return pil_images
 
-
 def make_image_grid(images: List[PIL.Image.Image], rows: int, cols: int, resize: int = None) -> PIL.Image.Image:
-    """
-    Prepares a single grid of images. Useful for visualization purposes.
-    """
+
     assert len(images) == rows * cols
 
     if resize is not None:

@@ -9,10 +9,8 @@ from ...utils import (
 )
 from ..base import DiffusersQuantizer
 
-
 if TYPE_CHECKING:
     from ...models.modeling_utils import ModelMixin
-
 
 if is_torch_available():
     import torch
@@ -21,14 +19,12 @@ if is_torch_available():
 if is_accelerate_available():
     from accelerate.utils import set_module_tensor_to_device
 
-
 logger = logging.get_logger(__name__)
 
-
 class NVIDIAModelOptQuantizer(DiffusersQuantizer):
-    r"""
-    Diffusers Quantizer for Nvidia-Model Optimizer
-    """
+    
+    class NVIDIAModelOptQuantizer(DiffusersQuantizer):
+
 
     use_keep_in_fp32_modules = True
     requires_calibration = False
@@ -83,9 +79,7 @@ class NVIDIAModelOptQuantizer(DiffusersQuantizer):
         *args,
         **kwargs,
     ):
-        """
-        Create the quantized parameter by calling .calibrate() after setting it to the module.
-        """
+
         # ModelOpt imports diffusers internally. This is here to prevent circular imports
         import modelopt.torch.quantization as mtq
 
@@ -117,10 +111,7 @@ class NVIDIAModelOptQuantizer(DiffusersQuantizer):
         return torch_dtype
 
     def get_conv_param_names(self, model: "ModelMixin") -> List[str]:
-        """
-        Get parameter names for all convolutional layers in a HuggingFace ModelMixin. Includes Conv1d/2d/3d and
-        ConvTranspose1d/2d/3d.
-        """
+
         conv_types = (
             nn.Conv1d,
             nn.Conv2d,

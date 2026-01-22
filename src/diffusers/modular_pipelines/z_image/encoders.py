@@ -1,17 +1,3 @@
-# Copyright 2025 Alibaba Z-Image Team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import List, Optional, Union
 
 import PIL
@@ -27,12 +13,10 @@ from ..modular_pipeline import ModularPipelineBlocks, PipelineState
 from ..modular_pipeline_utils import ComponentSpec, InputParam, OutputParam
 from .modular_pipeline import ZImageModularPipeline
 
-
 if is_ftfy_available():
     pass
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 def get_qwen_prompt_embeds(
     text_encoder: Qwen3Model,
@@ -79,8 +63,7 @@ def get_qwen_prompt_embeds(
 
     return prompt_embeds_list
 
-
-# Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img.retrieve_latents
+# Copied from diffusers.pipelines.stable_diffusion...
 def retrieve_latents(
     encoder_output: torch.Tensor, generator: Optional[torch.Generator] = None, sample_mode: str = "sample"
 ):
@@ -92,7 +75,6 @@ def retrieve_latents(
         return encoder_output.latents
     else:
         raise AttributeError("Could not access latents of provided encoder_output")
-
 
 def encode_vae_image(
     image_tensor: torch.Tensor,
@@ -124,7 +106,6 @@ def encode_vae_image(
     image_latents = (image_latents - vae.config.shift_factor) * vae.config.scaling_factor
 
     return image_latents
-
 
 class ZImageTextEncoderStep(ModularPipelineBlocks):
     model_name = "z-image"
@@ -187,23 +168,68 @@ class ZImageTextEncoderStep(ModularPipelineBlocks):
         negative_prompt: Optional[str] = None,
         max_sequence_length: int = 512,
     ):
-        r"""
-        Encodes the prompt into text encoder hidden states.
+        class ZImageTextEncoderStep(ModularPipelineBlocks):
+    model_name = "z-image"
 
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                prompt to be encoded
-            device: (`torch.device`):
-                torch device
-            prepare_unconditional_embeds (`bool`):
-                whether to use prepare unconditional embeddings or not
-            negative_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts not to guide the image generation. If not defined, one has to pass
-                `negative_prompt_embeds` instead. Ignored when not using guidance (i.e., ignored if `guidance_scale` is
-                less than `1`).
-            max_sequence_length (`int`, defaults to `512`):
-                The maximum number of text tokens to be used for the generation process.
-        """
+    @property
+    def description(self) -> str:
+        return "Text Encoder step that generate text_embeddings to guide the video generation"
+
+    @property
+    def expected_components(self) -> List[ComponentSpec]:
+        return [
+            ComponentSpec("text_encoder", Qwen3Model),
+            ComponentSpec("tokenizer", Qwen2Tokenizer),
+            ComponentSpec(
+                "guider",
+                ClassifierFreeGuidance,
+                config=FrozenDict({"guidance_scale": 5.0, "enabled": False}),
+                default_creation_method="from_config",
+            ),
+        ]
+
+    @property
+    def inputs(self) -> List[InputParam]:
+        return [
+            InputParam("prompt"),
+            InputParam("negative_prompt"),
+            InputParam("max_sequence_length", default=512),
+        ]
+
+    @property
+    def intermediate_outputs(self) -> List[OutputParam]:
+        return [
+            OutputParam(
+                "prompt_embeds",
+                type_hint=List[torch.Tensor],
+                kwargs_type="denoiser_input_fields",
+                description="text embeddings used to guide the image generation",
+            ),
+            OutputParam(
+                "negative_prompt_embeds",
+                type_hint=List[torch.Tensor],
+                kwargs_type="denoiser_input_fields",
+                description="negative text embeddings used to guide the image generation",
+            ),
+        ]
+
+    @staticmethod
+    def check_inputs(block_state):
+        if block_state.prompt is not None and (
+            not isinstance(block_state.prompt, str) and not isinstance(block_state.prompt, list)
+        ):
+            raise ValueError(f"`prompt` has to be of type `str` or `list` but is {type(block_state.prompt)}")
+
+    @staticmethod
+    def encode_prompt(
+        components,
+        prompt: str,
+        device: Optional[torch.device] = None,
+        prepare_unconditional_embeds: bool = True,
+        negative_prompt: Optional[str] = None,
+        max_sequence_length: int = 512,
+    ):
+
         device = device or components._execution_device
         if not isinstance(prompt, list):
             prompt = [prompt]
@@ -268,7 +294,6 @@ class ZImageTextEncoderStep(ModularPipelineBlocks):
         # Add outputs
         self.set_block_state(state, block_state)
         return components, state
-
 
 class ZImageVaeImageEncoderStep(ModularPipelineBlocks):
     model_name = "z-image"

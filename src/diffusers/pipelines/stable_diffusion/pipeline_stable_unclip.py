@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import inspect
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -38,7 +24,6 @@ from ...utils.torch_utils import randn_tensor
 from ..pipeline_utils import DiffusionPipeline, ImagePipelineOutput, StableDiffusionMixin
 from .stable_unclip_image_normalizer import StableUnCLIPImageNormalizer
 
-
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
@@ -48,65 +33,9 @@ else:
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 EXAMPLE_DOC_STRING = """
-    Examples:
-        ```py
-        >>> import torch
-        >>> from diffusers import StableUnCLIPPipeline
+        使用示例见文档
 
-        >>> pipe = StableUnCLIPPipeline.from_pretrained(
-        ...     "fusing/stable-unclip-2-1-l", torch_dtype=torch.float16
-        ... )  # TODO update model path
-        >>> pipe = pipe.to("cuda")
-
-        >>> prompt = "a photo of an astronaut riding a horse on mars"
-        >>> images = pipe(prompt).images
-        >>> images[0].save("astronaut_horse.png")
-        ```
-"""
-
-
-class StableUnCLIPPipeline(
-    DiffusionPipeline, StableDiffusionMixin, TextualInversionLoaderMixin, StableDiffusionLoraLoaderMixin
-):
-    """
-    Pipeline for text-to-image generation using stable unCLIP.
-
-    This model inherits from [`DiffusionPipeline`]. Check the superclass documentation for the generic methods
-    implemented for all pipelines (downloading, saving, running on a particular device, etc.).
-
-    The pipeline also inherits the following loading methods:
-        - [`~loaders.TextualInversionLoaderMixin.load_textual_inversion`] for loading textual inversion embeddings
-        - [`~loaders.StableDiffusionLoraLoaderMixin.load_lora_weights`] for loading LoRA weights
-        - [`~loaders.StableDiffusionLoraLoaderMixin.save_lora_weights`] for saving LoRA weights
-
-    Args:
-        prior_tokenizer ([`CLIPTokenizer`]):
-            A [`CLIPTokenizer`].
-        prior_text_encoder ([`CLIPTextModelWithProjection`]):
-            Frozen [`CLIPTextModelWithProjection`] text-encoder.
-        prior ([`PriorTransformer`]):
-            The canonical unCLIP prior to approximate the image embedding from the text embedding.
-        prior_scheduler ([`KarrasDiffusionSchedulers`]):
-            Scheduler used in the prior denoising process.
-        image_normalizer ([`StableUnCLIPImageNormalizer`]):
-            Used to normalize the predicted image embeddings before the noise is applied and un-normalize the image
-            embeddings after the noise has been applied.
-        image_noising_scheduler ([`KarrasDiffusionSchedulers`]):
-            Noise schedule for adding noise to the predicted image embeddings. The amount of noise to add is determined
-            by the `noise_level`.
-        tokenizer ([`CLIPTokenizer`]):
-            A [`CLIPTokenizer`].
-        text_encoder ([`CLIPTextModel`]):
-            Frozen [`CLIPTextModel`] text-encoder.
-        unet ([`UNet2DConditionModel`]):
-            A [`UNet2DConditionModel`] to denoise the encoded image latents.
-        scheduler ([`KarrasDiffusionSchedulers`]):
-            A scheduler to be used in combination with `unet` to denoise the encoded image latents.
-        vae ([`AutoencoderKL`]):
-            Variational Auto-Encoder (VAE) Model to encode and decode images to and from latent representations.
-    """
 
     _exclude_from_cpu_offload = ["prior", "image_normalizer"]
     model_cpu_offload_seq = "text_encoder->prior_text_encoder->unet->vae"
@@ -166,7 +95,7 @@ class StableUnCLIPPipeline(
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1) if getattr(self, "vae", None) else 8
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
 
-    # Copied from diffusers.pipelines.unclip.pipeline_unclip.UnCLIPPipeline._encode_prompt with _encode_prompt->_encode_prior_prompt, tokenizer->prior_tokenizer, text_encoder->prior_text_encoder
+    # Copied from diffusers.pipelines.unclip.pipel...
     def _encode_prior_prompt(
         self,
         prompt,
@@ -235,7 +164,7 @@ class StableUnCLIPPipeline(
             negative_prompt_embeds = negative_prompt_embeds_prior_text_encoder_output.text_embeds
             uncond_text_enc_hid_states = negative_prompt_embeds_prior_text_encoder_output.last_hidden_state
 
-            # duplicate unconditional embeddings for each generation per prompt, using mps friendly method
+            # duplicate unconditional embeddings f...
 
             seq_len = negative_prompt_embeds.shape[1]
             negative_prompt_embeds = negative_prompt_embeds.repeat(1, num_images_per_prompt)
@@ -260,7 +189,7 @@ class StableUnCLIPPipeline(
 
         return prompt_embeds, text_enc_hid_states, text_mask
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline._encode_prompt
+    # Copied from diffusers.pipelines.stable_diffu...
     def _encode_prompt(
         self,
         prompt,
@@ -293,7 +222,7 @@ class StableUnCLIPPipeline(
 
         return prompt_embeds
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.encode_prompt
+    # Copied from diffusers.pipelines.stable_diffu...
     def encode_prompt(
         self,
         prompt,
@@ -306,35 +235,8 @@ class StableUnCLIPPipeline(
         lora_scale: Optional[float] = None,
         clip_skip: Optional[int] = None,
     ):
-        r"""
-        Encodes the prompt into text encoder hidden states.
-
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                prompt to be encoded
-            device: (`torch.device`):
-                torch device
-            num_images_per_prompt (`int`):
-                number of images that should be generated per prompt
-            do_classifier_free_guidance (`bool`):
-                whether to use classifier free guidance or not
-            negative_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts not to guide the image generation. If not defined, one has to pass
-                `negative_prompt_embeds` instead. Ignored when not using guidance (i.e., ignored if `guidance_scale` is
-                less than `1`).
-            prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt weighting. If not
-                provided, text embeddings will be generated from `prompt` input argument.
-            negative_prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated negative text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt
-                weighting. If not provided, negative_prompt_embeds will be generated from `negative_prompt` input
-                argument.
-            lora_scale (`float`, *optional*):
-                A LoRA scale that will be applied to all LoRA layers of the text encoder if LoRA layers are loaded.
-            clip_skip (`int`, *optional*):
-                Number of layers to be skipped from CLIP while computing the prompt embeddings. A value of 1 means that
-                the output of the pre-final layer will be used for computing the prompt embeddings.
-        """
+        
+        """r"""
         # set lora scale so that monkey patched LoRA
         # function of text encoder can correctly access it
         if lora_scale is not None and isinstance(self, StableDiffusionLoraLoaderMixin):
@@ -461,7 +363,7 @@ class StableUnCLIPPipeline(
             negative_prompt_embeds = negative_prompt_embeds[0]
 
         if do_classifier_free_guidance:
-            # duplicate unconditional embeddings for each generation per prompt, using mps friendly method
+            # duplicate unconditional embeddings f...
             seq_len = negative_prompt_embeds.shape[1]
 
             negative_prompt_embeds = negative_prompt_embeds.to(dtype=prompt_embeds_dtype, device=device)
@@ -476,7 +378,7 @@ class StableUnCLIPPipeline(
 
         return prompt_embeds, negative_prompt_embeds
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.decode_latents
+    # Copied from diffusers.pipelines.stable_diffu...
     def decode_latents(self, latents):
         deprecation_message = "The decode_latents method is deprecated and will be removed in 1.0.0. Please use VaeImageProcessor.postprocess(...) instead"
         deprecate("decode_latents", "1.0.0", deprecation_message, standard_warn=False)
@@ -484,14 +386,14 @@ class StableUnCLIPPipeline(
         latents = 1 / self.vae.config.scaling_factor * latents
         image = self.vae.decode(latents, return_dict=False)[0]
         image = (image / 2 + 0.5).clamp(0, 1)
-        # we always cast to float32 as this does not cause significant overhead and is compatible with bfloat16
+        # we always cast to float32 as this does n...
         image = image.cpu().permute(0, 2, 3, 1).float().numpy()
         return image
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_extra_step_kwargs with prepare_extra_step_kwargs->prepare_prior_extra_step_kwargs, scheduler->prior_scheduler
+    # Copied from diffusers.pipelines.stable_diffu...
     def prepare_prior_extra_step_kwargs(self, generator, eta):
-        # prepare extra kwargs for the prior_scheduler step, since not all prior_schedulers have the same signature
-        # eta (η) is only used with the DDIMScheduler, it will be ignored for other prior_schedulers.
+        # prepare extra kwargs for the prior_sched...
+        # eta (η) is only used with the DDIMSchedu...
         # eta corresponds to η in DDIM paper: https://huggingface.co/papers/2010.02502
         # and should be between [0, 1]
 
@@ -506,9 +408,9 @@ class StableUnCLIPPipeline(
             extra_step_kwargs["generator"] = generator
         return extra_step_kwargs
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_extra_step_kwargs
+    # Copied from diffusers.pipelines.stable_diffu...
     def prepare_extra_step_kwargs(self, generator, eta):
-        # prepare extra kwargs for the scheduler step, since not all schedulers have the same signature
+        # prepare extra kwargs for the scheduler s...
         # eta (η) is only used with the DDIMScheduler, it will be ignored for other schedulers.
         # eta corresponds to η in DDIM paper: https://huggingface.co/papers/2010.02502
         # and should be between [0, 1]
@@ -603,18 +505,7 @@ class StableUnCLIPPipeline(
         noise: Optional[torch.Tensor] = None,
         generator: Optional[torch.Generator] = None,
     ):
-        """
-        Add noise to the image embeddings. The amount of noise is controlled by a `noise_level` input. A higher
-        `noise_level` increases the variance in the final un-noised images.
 
-        The noise is applied in two ways:
-        1. A noise schedule is applied directly to the embeddings.
-        2. A vector of sinusoidal time embeddings are appended to the output.
-
-        In both cases, the amount of noise is controlled by the same `noise_level`.
-
-        The embeddings are normalized before the noise is applied and un-normalized after the noise is applied.
-        """
         if noise is None:
             noise = randn_tensor(
                 image_embeds.shape, generator=generator, device=image_embeds.device, dtype=image_embeds.dtype
@@ -647,12 +538,12 @@ class StableUnCLIPPipeline(
     def __call__(
         self,
         # regular denoising process args
-        prompt: Optional[Union[str, List[str]]] = None,
+        prompt: Optional[str] = None,
         height: Optional[int] = None,
         width: Optional[int] = None,
         num_inference_steps: int = 20,
         guidance_scale: float = 10.0,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        negative_prompt: Optional[str] = None,
         num_images_per_prompt: Optional[int] = 1,
         eta: float = 0.0,
         generator: Optional[torch.Generator] = None,
@@ -671,21 +562,7 @@ class StableUnCLIPPipeline(
         prior_latents: Optional[torch.Tensor] = None,
         clip_skip: Optional[int] = None,
     ):
-        """
         The call function to the pipeline for generation.
-
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to guide image generation. If not defined, you need to pass `prompt_embeds`.
-            height (`int`, *optional*, defaults to `self.unet.config.sample_size * self.vae_scale_factor`):
-                The height in pixels of the generated image.
-            width (`int`, *optional*, defaults to `self.unet.config.sample_size * self.vae_scale_factor`):
-                The width in pixels of the generated image.
-            num_inference_steps (`int`, *optional*, defaults to 20):
-                The number of denoising steps. More denoising steps usually lead to a higher quality image at the
-                expense of slower inference.
-            guidance_scale (`float`, *optional*, defaults to 10.0):
-                A higher guidance scale value encourages the model to generate images closely linked to the text
                 `prompt` at the expense of lower image quality. Guidance scale is enabled when `guidance_scale > 1`.
             negative_prompt (`str` or `List[str]`, *optional*):
                 The prompt or prompts to guide what to not include in image generation. If not defined, you need to
@@ -739,214 +616,3 @@ class StableUnCLIPPipeline(
                 Number of layers to be skipped from CLIP while computing the prompt embeddings. A value of 1 means that
                 the output of the pre-final layer will be used for computing the prompt embeddings.
         Examples:
-
-        Returns:
-            [`~pipelines.ImagePipelineOutput`] or `tuple`:
-                [`~ pipeline_utils.ImagePipelineOutput`] if `return_dict` is True, otherwise a `tuple`. When returning
-                a tuple, the first element is a list with the generated images.
-        """
-        # 0. Default height and width to unet
-        height = height or self.unet.config.sample_size * self.vae_scale_factor
-        width = width or self.unet.config.sample_size * self.vae_scale_factor
-
-        # 1. Check inputs. Raise error if not correct
-        self.check_inputs(
-            prompt=prompt,
-            height=height,
-            width=width,
-            callback_steps=callback_steps,
-            noise_level=noise_level,
-            negative_prompt=negative_prompt,
-            prompt_embeds=prompt_embeds,
-            negative_prompt_embeds=negative_prompt_embeds,
-        )
-
-        # 2. Define call parameters
-        if prompt is not None and isinstance(prompt, str):
-            batch_size = 1
-        elif prompt is not None and isinstance(prompt, list):
-            batch_size = len(prompt)
-        else:
-            batch_size = prompt_embeds.shape[0]
-
-        batch_size = batch_size * num_images_per_prompt
-
-        device = self._execution_device
-
-        # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
-        # of the Imagen paper: https://huggingface.co/papers/2205.11487 . `guidance_scale = 1`
-        # corresponds to doing no classifier free guidance.
-        prior_do_classifier_free_guidance = prior_guidance_scale > 1.0
-
-        # 3. Encode input prompt
-        prior_prompt_embeds, prior_text_encoder_hidden_states, prior_text_mask = self._encode_prior_prompt(
-            prompt=prompt,
-            device=device,
-            num_images_per_prompt=num_images_per_prompt,
-            do_classifier_free_guidance=prior_do_classifier_free_guidance,
-        )
-
-        # 4. Prepare prior timesteps
-        self.prior_scheduler.set_timesteps(prior_num_inference_steps, device=device)
-        prior_timesteps_tensor = self.prior_scheduler.timesteps
-
-        # 5. Prepare prior latent variables
-        embedding_dim = self.prior.config.embedding_dim
-        prior_latents = self.prepare_latents(
-            (batch_size, embedding_dim),
-            prior_prompt_embeds.dtype,
-            device,
-            generator,
-            prior_latents,
-            self.prior_scheduler,
-        )
-
-        # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
-        prior_extra_step_kwargs = self.prepare_prior_extra_step_kwargs(generator, eta)
-
-        # 7. Prior denoising loop
-        for i, t in enumerate(self.progress_bar(prior_timesteps_tensor)):
-            # expand the latents if we are doing classifier free guidance
-            latent_model_input = torch.cat([prior_latents] * 2) if prior_do_classifier_free_guidance else prior_latents
-            latent_model_input = self.prior_scheduler.scale_model_input(latent_model_input, t)
-
-            predicted_image_embedding = self.prior(
-                latent_model_input,
-                timestep=t,
-                proj_embedding=prior_prompt_embeds,
-                encoder_hidden_states=prior_text_encoder_hidden_states,
-                attention_mask=prior_text_mask,
-            ).predicted_image_embedding
-
-            if prior_do_classifier_free_guidance:
-                predicted_image_embedding_uncond, predicted_image_embedding_text = predicted_image_embedding.chunk(2)
-                predicted_image_embedding = predicted_image_embedding_uncond + prior_guidance_scale * (
-                    predicted_image_embedding_text - predicted_image_embedding_uncond
-                )
-
-            prior_latents = self.prior_scheduler.step(
-                predicted_image_embedding,
-                timestep=t,
-                sample=prior_latents,
-                **prior_extra_step_kwargs,
-                return_dict=False,
-            )[0]
-
-            if callback is not None and i % callback_steps == 0:
-                callback(i, t, prior_latents)
-
-        prior_latents = self.prior.post_process_latents(prior_latents)
-
-        image_embeds = prior_latents
-
-        # done prior
-
-        # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
-        # of the Imagen paper: https://huggingface.co/papers/2205.11487 . `guidance_scale = 1`
-        # corresponds to doing no classifier free guidance.
-        do_classifier_free_guidance = guidance_scale > 1.0
-
-        # 8. Encode input prompt
-        text_encoder_lora_scale = (
-            cross_attention_kwargs.get("scale", None) if cross_attention_kwargs is not None else None
-        )
-        prompt_embeds, negative_prompt_embeds = self.encode_prompt(
-            prompt=prompt,
-            device=device,
-            num_images_per_prompt=num_images_per_prompt,
-            do_classifier_free_guidance=do_classifier_free_guidance,
-            negative_prompt=negative_prompt,
-            prompt_embeds=prompt_embeds,
-            negative_prompt_embeds=negative_prompt_embeds,
-            lora_scale=text_encoder_lora_scale,
-            clip_skip=clip_skip,
-        )
-        # For classifier free guidance, we need to do two forward passes.
-        # Here we concatenate the unconditional and text embeddings into a single batch
-        # to avoid doing two forward passes
-        if do_classifier_free_guidance:
-            prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
-
-        # 9. Prepare image embeddings
-        image_embeds = self.noise_image_embeddings(
-            image_embeds=image_embeds,
-            noise_level=noise_level,
-            generator=generator,
-        )
-
-        if do_classifier_free_guidance:
-            negative_prompt_embeds = torch.zeros_like(image_embeds)
-
-            # For classifier free guidance, we need to do two forward passes.
-            # Here we concatenate the unconditional and text embeddings into a single batch
-            # to avoid doing two forward passes
-            image_embeds = torch.cat([negative_prompt_embeds, image_embeds])
-
-        # 10. Prepare timesteps
-        self.scheduler.set_timesteps(num_inference_steps, device=device)
-        timesteps = self.scheduler.timesteps
-
-        # 11. Prepare latent variables
-        num_channels_latents = self.unet.config.in_channels
-        shape = (
-            batch_size,
-            num_channels_latents,
-            int(height) // self.vae_scale_factor,
-            int(width) // self.vae_scale_factor,
-        )
-        latents = self.prepare_latents(
-            shape=shape,
-            dtype=prompt_embeds.dtype,
-            device=device,
-            generator=generator,
-            latents=latents,
-            scheduler=self.scheduler,
-        )
-
-        # 12. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
-        extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
-
-        # 13. Denoising loop
-        for i, t in enumerate(self.progress_bar(timesteps)):
-            latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
-            latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
-
-            # predict the noise residual
-            noise_pred = self.unet(
-                latent_model_input,
-                t,
-                encoder_hidden_states=prompt_embeds,
-                class_labels=image_embeds,
-                cross_attention_kwargs=cross_attention_kwargs,
-                return_dict=False,
-            )[0]
-
-            # perform guidance
-            if do_classifier_free_guidance:
-                noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
-
-            # compute the previous noisy sample x_t -> x_t-1
-            latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
-
-            if callback is not None and i % callback_steps == 0:
-                step_idx = i // getattr(self.scheduler, "order", 1)
-                callback(step_idx, t, latents)
-
-            if XLA_AVAILABLE:
-                xm.mark_step()
-
-        if not output_type == "latent":
-            image = self.vae.decode(latents / self.vae.config.scaling_factor, return_dict=False)[0]
-        else:
-            image = latents
-
-        image = self.image_processor.postprocess(image, output_type=output_type)
-
-        # Offload all models
-        self.maybe_free_model_hooks()
-
-        if not return_dict:
-            return (image,)
-
-        return ImagePipelineOutput(images=image)

@@ -1,19 +1,3 @@
-# Copyright 2025 TSAIL Team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# DISCLAIMER: This file is strongly influenced by https://github.com/LuChengTHU/dpm-solver
-
 import math
 from typing import List, Literal, Optional, Tuple, Union
 
@@ -25,10 +9,8 @@ from ..utils import deprecate, is_scipy_available
 from ..utils.torch_utils import randn_tensor
 from .scheduling_utils import KarrasDiffusionSchedulers, SchedulerMixin, SchedulerOutput
 
-
 if is_scipy_available():
     import scipy.stats
-
 
 # Copied from diffusers.schedulers.scheduling_ddpm.betas_for_alpha_bar
 def betas_for_alpha_bar(
@@ -36,25 +18,7 @@ def betas_for_alpha_bar(
     max_beta: float = 0.999,
     alpha_transform_type: Literal["cosine", "exp", "laplace"] = "cosine",
 ) -> torch.Tensor:
-    """
-    Create a beta schedule that discretizes the given alpha_t_bar function, which defines the cumulative product of
-    (1-beta) over time from t = [0,1].
 
-    Contains a function alpha_bar that takes an argument t and transforms it to the cumulative product of (1-beta) up
-    to that part of the diffusion process.
-
-    Args:
-        num_diffusion_timesteps (`int`):
-            The number of betas to produce.
-        max_beta (`float`, defaults to `0.999`):
-            The maximum beta to use; use values lower than 1 to avoid numerical instability.
-        alpha_transform_type (`str`, defaults to `"cosine"`):
-            The type of noise schedule for `alpha_bar`. Choose from `cosine`, `exp`, or `laplace`.
-
-    Returns:
-        `torch.Tensor`:
-            The betas used by the scheduler to step the model outputs.
-    """
     if alpha_transform_type == "cosine":
 
         def alpha_bar_fn(t):
@@ -82,20 +46,9 @@ def betas_for_alpha_bar(
         betas.append(min(1 - alpha_bar_fn(t2) / alpha_bar_fn(t1), max_beta))
     return torch.tensor(betas, dtype=torch.float32)
 
-
 # Copied from diffusers.schedulers.scheduling_ddim.rescale_zero_terminal_snr
 def rescale_zero_terminal_snr(betas):
-    """
-    Rescales betas to have zero terminal SNR Based on https://huggingface.co/papers/2305.08891 (Algorithm 1)
 
-    Args:
-        betas (`torch.Tensor`):
-            The betas that the scheduler is being initialized with.
-
-    Returns:
-        `torch.Tensor`:
-            Rescaled betas with zero terminal SNR.
-    """
     # Convert betas to alphas_bar_sqrt
     alphas = 1.0 - betas
     alphas_cumprod = torch.cumprod(alphas, dim=0)
@@ -119,94 +72,10 @@ def rescale_zero_terminal_snr(betas):
 
     return betas
 
-
 class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
-    """
-    `DPMSolverMultistepScheduler` is a fast dedicated high-order solver for diffusion ODEs.
+    
+    class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
 
-    This model inherits from [`SchedulerMixin`] and [`ConfigMixin`]. Check the superclass documentation for the generic
-    methods the library implements for all schedulers such as loading and saving.
-
-    Args:
-        num_train_timesteps (`int`, defaults to 1000):
-            The number of diffusion steps to train the model.
-        beta_start (`float`, defaults to 0.0001):
-            The starting `beta` value of inference.
-        beta_end (`float`, defaults to 0.02):
-            The final `beta` value.
-        beta_schedule (`"linear"`, `"scaled_linear"`, or `"squaredcos_cap_v2"`, defaults to `"linear"`):
-            The beta schedule, a mapping from a beta range to a sequence of betas for stepping the model.
-        trained_betas (`np.ndarray`, *optional*):
-            Pass an array of betas directly to the constructor to bypass `beta_start` and `beta_end`.
-        solver_order (`int`, defaults to 2):
-            The DPMSolver order which can be `1` or `2` or `3`. It is recommended to use `solver_order=2` for guided
-            sampling, and `solver_order=3` for unconditional sampling.
-        prediction_type (`"epsilon"`, `"sample"`, `"v_prediction"`, or `"flow_prediction"`, defaults to `"epsilon"`):
-            Prediction type of the scheduler function. `epsilon` predicts the noise of the diffusion process, `sample`
-            directly predicts the noisy sample, `v_prediction` predicts the velocity (see section 2.4 of [Imagen
-            Video](https://huggingface.co/papers/2210.02303) paper), and `flow_prediction` predicts the flow.
-        thresholding (`bool`, defaults to `False`):
-            Whether to use the "dynamic thresholding" method. This is unsuitable for latent-space diffusion models such
-            as Stable Diffusion.
-        dynamic_thresholding_ratio (`float`, defaults to 0.995):
-            The ratio for the dynamic thresholding method. Valid only when `thresholding=True`.
-        sample_max_value (`float`, defaults to 1.0):
-            The threshold value for dynamic thresholding. Valid only when `thresholding=True` and
-            `algorithm_type="dpmsolver++"`.
-        algorithm_type (`"dpmsolver"`, `"dpmsolver++"`, `"sde-dpmsolver"`, or `"sde-dpmsolver++"`, defaults to `"dpmsolver++"`):
-            Algorithm type for the solver. The `dpmsolver` type implements the algorithms in the
-            [DPMSolver](https://huggingface.co/papers/2206.00927) paper, and the `dpmsolver++` type implements the
-            algorithms in the [DPMSolver++](https://huggingface.co/papers/2211.01095) paper. It is recommended to use
-            `dpmsolver++` or `sde-dpmsolver++` with `solver_order=2` for guided sampling like in Stable Diffusion.
-        solver_type (`"midpoint"` or `"heun"`, defaults to `"midpoint"`):
-            Solver type for the second-order solver. The solver type slightly affects the sample quality, especially
-            for a small number of steps. It is recommended to use `midpoint` solvers.
-        lower_order_final (`bool`, defaults to `True`):
-            Whether to use lower-order solvers in the final steps. Only valid for < 15 inference steps. This can
-            stabilize the sampling of DPMSolver for steps < 15, especially for steps <= 10.
-        euler_at_final (`bool`, defaults to `False`):
-            Whether to use Euler's method in the final step. It is a trade-off between numerical stability and detail
-            richness. This can stabilize the sampling of the SDE variant of DPMSolver for small number of inference
-            steps, but sometimes may result in blurring.
-        use_karras_sigmas (`bool`, *optional*, defaults to `False`):
-            Whether to use Karras sigmas for step sizes in the noise schedule during the sampling process. If `True`,
-            the sigmas are determined according to a sequence of noise levels {σi}.
-        use_exponential_sigmas (`bool`, *optional*, defaults to `False`):
-            Whether to use exponential sigmas for step sizes in the noise schedule during the sampling process.
-        use_beta_sigmas (`bool`, *optional*, defaults to `False`):
-            Whether to use beta sigmas for step sizes in the noise schedule during the sampling process. Refer to [Beta
-            Sampling is All You Need](https://huggingface.co/papers/2407.12173) for more information.
-        use_lu_lambdas (`bool`, *optional*, defaults to `False`):
-            Whether to use the uniform-logSNR for step sizes proposed by Lu's DPM-Solver in the noise schedule during
-            the sampling process. If `True`, the sigmas and time steps are determined according to a sequence of
-            `lambda(t)`.
-        use_flow_sigmas (`bool`, *optional*, defaults to `False`):
-            Whether to use flow sigmas for step sizes in the noise schedule during the sampling process.
-        flow_shift (`float`, *optional*, defaults to 1.0):
-            The shift value for the timestep schedule for flow matching.
-        final_sigmas_type (`"zero"` or `"sigma_min"`, *optional*, defaults to `"zero"`):
-            The final `sigma` value for the noise schedule during the sampling process. If `"sigma_min"`, the final
-            sigma is the same as the last sigma in the training schedule. If `"zero"`, the final sigma is set to 0.
-        lambda_min_clipped (`float`, defaults to `-inf`):
-            Clipping threshold for the minimum value of `lambda(t)` for numerical stability. This is critical for the
-            cosine (`squaredcos_cap_v2`) noise schedule.
-        variance_type (`"learned"` or `"learned_range"`, *optional*):
-            Set to `"learned"` or `"learned_range"` for diffusion models that predict variance. If set, the model's
-            output contains the predicted Gaussian variance.
-        timestep_spacing (`"linspace"`, `"leading"`, or `"trailing"`, defaults to `"linspace"`):
-            The way the timesteps should be scaled. Refer to Table 2 of the [Common Diffusion Noise Schedules and
-            Sample Steps are Flawed](https://huggingface.co/papers/2305.08891) for more information.
-        steps_offset (`int`, defaults to 0):
-            An offset added to the inference steps, as required by some model families.
-        rescale_betas_zero_snr (`bool`, defaults to `False`):
-            Whether to rescale the betas to have zero terminal SNR. This enables the model to generate very bright and
-            dark samples instead of limiting it to samples with medium brightness. Loosely related to
-            [`--offset_noise`](https://github.com/huggingface/diffusers/blob/74fd735eb073eb1d774b1ab4154a0876eb82f055/examples/dreambooth/train_dreambooth.py#L506).
-        use_dynamic_shifting (`bool`, defaults to `False`):
-            Whether to use dynamic shifting for the timestep schedule.
-        time_shift_type (`"exponential"`, defaults to `"exponential"`):
-            The type of time shift to apply when using dynamic shifting.
-    """
 
     _compatibles = [e.name for e in KarrasDiffusionSchedulers]
     order = 1
@@ -316,26 +185,16 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
 
     @property
     def step_index(self):
-        """
-        The index counter for current timestep. It will increase 1 after each scheduler step.
-        """
+
         return self._step_index
 
     @property
     def begin_index(self):
-        """
-        The index for the first timestep. It should be set from pipeline with `set_begin_index` method.
-        """
+
         return self._begin_index
 
     def set_begin_index(self, begin_index: int = 0):
-        """
-        Sets the begin index for the scheduler. This function should be run from pipeline before the inference.
 
-        Args:
-            begin_index (`int`, defaults to `0`):
-                The begin index for the scheduler.
-        """
         self._begin_index = begin_index
 
     def set_timesteps(
@@ -345,22 +204,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         mu: Optional[float] = None,
         timesteps: Optional[List[int]] = None,
     ) -> None:
-        """
-        Sets the discrete timesteps used for the diffusion chain (to be run before inference).
 
-        Args:
-            num_inference_steps (`int`, *optional*):
-                The number of diffusion steps used when generating samples with a pre-trained model.
-            device (`str` or `torch.device`, *optional*):
-                The device to which the timesteps should be moved to. If `None`, the timesteps are not moved.
-            mu (`float`, *optional*):
-                The mu parameter for dynamic shifting. If provided, requires `use_dynamic_shifting=True` and
-                `time_shift_type="exponential"`.
-            timesteps (`List[int]`, *optional*):
-                Custom timesteps used to support arbitrary timesteps schedule. If `None`, timesteps will be generated
-                based on the `timestep_spacing` attribute. If `timesteps` is passed, `num_inference_steps` and `sigmas`
-                must be `None`, and `timestep_spacing` attribute will be ignored.
-        """
         if mu is not None:
             assert self.config.use_dynamic_shifting and self.config.time_shift_type == "exponential"
             self.config.flow_shift = np.exp(mu)
@@ -385,7 +229,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
             clipped_idx = torch.searchsorted(torch.flip(self.lambda_t, [0]), self.config.lambda_min_clipped)
             last_timestep = ((self.config.num_train_timesteps - clipped_idx).numpy()).item()
 
-            # "linspace", "leading", "trailing" corresponds to annotation of Table 2. of https://huggingface.co/papers/2305.08891
+            # "linspace", "leading", "trailing" co...
             if self.config.timestep_spacing == "linspace":
                 timesteps = (
                     np.linspace(0, last_timestep - 1, num_inference_steps + 1)
@@ -472,25 +316,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
 
     # Copied from diffusers.schedulers.scheduling_ddpm.DDPMScheduler._threshold_sample
     def _threshold_sample(self, sample: torch.Tensor) -> torch.Tensor:
-        """
-        Apply dynamic thresholding to the predicted sample.
 
-        "Dynamic thresholding: At each sampling step we set s to a certain percentile absolute pixel value in xt0 (the
-        prediction of x_0 at timestep t), and if s > 1, then we threshold xt0 to the range [-s, s] and then divide by
-        s. Dynamic thresholding pushes saturated pixels (those near -1 and 1) inwards, thereby actively preventing
-        pixels from saturation at each step. We find that dynamic thresholding results in significantly better
-        photorealism as well as better image-text alignment, especially when using very large guidance weights."
-
-        https://huggingface.co/papers/2205.11487
-
-        Args:
-            sample (`torch.Tensor`):
-                The predicted sample to be thresholded.
-
-        Returns:
-            `torch.Tensor`:
-                The thresholded sample.
-        """
         dtype = sample.dtype
         batch_size, channels, *remaining_dims = sample.shape
 
@@ -516,19 +342,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
 
     # Copied from diffusers.schedulers.scheduling_euler_discrete.EulerDiscreteScheduler._sigma_to_t
     def _sigma_to_t(self, sigma: np.ndarray, log_sigmas: np.ndarray) -> np.ndarray:
-        """
-        Convert sigma values to corresponding timestep values through interpolation.
 
-        Args:
-            sigma (`np.ndarray`):
-                The sigma value(s) to convert to timestep(s).
-            log_sigmas (`np.ndarray`):
-                The logarithm of the sigma schedule used for interpolation.
-
-        Returns:
-            `np.ndarray`:
-                The interpolated timestep value(s) corresponding to the input sigma(s).
-        """
         # get log sigma
         log_sigma = np.log(np.maximum(sigma, 1e-10))
 
@@ -552,17 +366,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         return t
 
     def _sigma_to_alpha_sigma_t(self, sigma: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Convert sigma values to alpha_t and sigma_t values.
 
-        Args:
-            sigma (`torch.Tensor`):
-                The sigma value(s) to convert.
-
-        Returns:
-            `Tuple[torch.Tensor, torch.Tensor]`:
-                A tuple containing (alpha_t, sigma_t) values.
-        """
         if self.config.use_flow_sigmas:
             alpha_t = 1 - sigma
             sigma_t = sigma
@@ -572,22 +376,9 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
 
         return alpha_t, sigma_t
 
-    # Copied from diffusers.schedulers.scheduling_euler_discrete.EulerDiscreteScheduler._convert_to_karras
+    # Copied from diffusers.schedulers.scheduling_...
     def _convert_to_karras(self, in_sigmas: torch.Tensor, num_inference_steps) -> torch.Tensor:
-        """
-        Construct the noise schedule as proposed in [Elucidating the Design Space of Diffusion-Based Generative
-        Models](https://huggingface.co/papers/2206.00364).
 
-        Args:
-            in_sigmas (`torch.Tensor`):
-                The input sigma values to be converted.
-            num_inference_steps (`int`):
-                The number of inference steps to generate the noise schedule for.
-
-        Returns:
-            `torch.Tensor`:
-                The converted sigma values following the Karras noise schedule.
-        """
 
         # Hack to make sure that other schedulers which copy this function don't break
         # TODO: Add this logic to the other schedulers
@@ -612,20 +403,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         return sigmas
 
     def _convert_to_lu(self, in_lambdas: torch.Tensor, num_inference_steps: int) -> torch.Tensor:
-        """
-        Construct the noise schedule as proposed in [DPM-Solver: A Fast ODE Solver for Diffusion Probabilistic Model
-        Sampling in Around 10 Steps](https://huggingface.co/papers/2206.00927) by Lu et al. (2022).
 
-        Args:
-            in_lambdas (`torch.Tensor`):
-                The input lambda values to be converted.
-            num_inference_steps (`int`):
-                The number of inference steps to generate the noise schedule for.
-
-        Returns:
-            `torch.Tensor`:
-                The converted lambda values following the Lu noise schedule.
-        """
 
         lambda_min: float = in_lambdas[-1].item()
         lambda_max: float = in_lambdas[0].item()
@@ -637,21 +415,9 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         lambdas = (max_inv_rho + ramp * (min_inv_rho - max_inv_rho)) ** rho
         return lambdas
 
-    # Copied from diffusers.schedulers.scheduling_euler_discrete.EulerDiscreteScheduler._convert_to_exponential
+    # Copied from diffusers.schedulers.scheduling_...
     def _convert_to_exponential(self, in_sigmas: torch.Tensor, num_inference_steps: int) -> torch.Tensor:
-        """
-        Construct an exponential noise schedule.
 
-        Args:
-            in_sigmas (`torch.Tensor`):
-                The input sigma values to be converted.
-            num_inference_steps (`int`):
-                The number of inference steps to generate the noise schedule for.
-
-        Returns:
-            `torch.Tensor`:
-                The converted sigma values following an exponential schedule.
-        """
 
         # Hack to make sure that other schedulers which copy this function don't break
         # TODO: Add this logic to the other schedulers
@@ -671,28 +437,11 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         sigmas = np.exp(np.linspace(math.log(sigma_max), math.log(sigma_min), num_inference_steps))
         return sigmas
 
-    # Copied from diffusers.schedulers.scheduling_euler_discrete.EulerDiscreteScheduler._convert_to_beta
+    # Copied from diffusers.schedulers.scheduling_...
     def _convert_to_beta(
         self, in_sigmas: torch.Tensor, num_inference_steps: int, alpha: float = 0.6, beta: float = 0.6
     ) -> torch.Tensor:
-        """
-        Construct a beta noise schedule as proposed in [Beta Sampling is All You
-        Need](https://huggingface.co/papers/2407.12173).
 
-        Args:
-            in_sigmas (`torch.Tensor`):
-                The input sigma values to be converted.
-            num_inference_steps (`int`):
-                The number of inference steps to generate the noise schedule for.
-            alpha (`float`, *optional*, defaults to `0.6`):
-                The alpha parameter for the beta distribution.
-            beta (`float`, *optional*, defaults to `0.6`):
-                The beta parameter for the beta distribution.
-
-        Returns:
-            `torch.Tensor`:
-                The converted sigma values following a beta distribution schedule.
-        """
 
         # Hack to make sure that other schedulers which copy this function don't break
         # TODO: Add this logic to the other schedulers
@@ -727,24 +476,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         sample: torch.Tensor = None,
         **kwargs,
     ) -> torch.Tensor:
-        """
-        Convert the model output to the corresponding type the DPMSolver/DPMSolver++ algorithm needs. DPM-Solver is
-        designed to discretize an integral of the noise prediction model, and DPM-Solver++ is designed to discretize an
-        integral of the data prediction model.
 
-        > [!TIP] > The algorithm and model type are decoupled. You can use either DPMSolver or DPMSolver++ for both
-        noise > prediction and data prediction models.
-
-        Args:
-            model_output (`torch.Tensor`):
-                The direct output from the learned diffusion model.
-            sample (`torch.Tensor`):
-                A current instance of a sample created by the diffusion process.
-
-        Returns:
-            `torch.Tensor`:
-                The converted model output.
-        """
         timestep = args[0] if len(args) > 0 else kwargs.pop("timestep", None)
         if sample is None:
             if len(args) > 1:
@@ -826,19 +558,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         noise: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> torch.Tensor:
-        """
-        One step for the first-order DPMSolver (equivalent to DDIM).
 
-        Args:
-            model_output (`torch.Tensor`):
-                The direct output from the learned diffusion model.
-            sample (`torch.Tensor`):
-                A current instance of a sample created by the diffusion process.
-
-        Returns:
-            `torch.Tensor`:
-                The sample tensor at the previous timestep.
-        """
         timestep = args[0] if len(args) > 0 else kwargs.pop("timestep", None)
         prev_timestep = args[1] if len(args) > 1 else kwargs.pop("prev_timestep", None)
         if sample is None:
@@ -895,19 +615,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         noise: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> torch.Tensor:
-        """
-        One step for the second-order multistep DPMSolver.
 
-        Args:
-            model_output_list (`List[torch.Tensor]`):
-                The direct outputs from learned diffusion model at current and latter timesteps.
-            sample (`torch.Tensor`):
-                A current instance of a sample created by the diffusion process.
-
-        Returns:
-            `torch.Tensor`:
-                The sample tensor at the previous timestep.
-        """
         timestep_list = args[0] if len(args) > 0 else kwargs.pop("timestep_list", None)
         prev_timestep = args[1] if len(args) > 1 else kwargs.pop("prev_timestep", None)
         if sample is None:
@@ -1018,19 +726,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         noise: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> torch.Tensor:
-        """
-        One step for the third-order multistep DPMSolver.
 
-        Args:
-            model_output_list (`List[torch.Tensor]`):
-                The direct outputs from learned diffusion model at current and latter timesteps.
-            sample (`torch.Tensor`):
-                A current instance of a sample created by diffusion process.
-
-        Returns:
-            `torch.Tensor`:
-                The sample tensor at the previous timestep.
-        """
 
         timestep_list = args[0] if len(args) > 0 else kwargs.pop("timestep_list", None)
         prev_timestep = args[1] if len(args) > 1 else kwargs.pop("prev_timestep", None)
@@ -1108,19 +804,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
     def index_for_timestep(
         self, timestep: Union[int, torch.Tensor], schedule_timesteps: Optional[torch.Tensor] = None
     ) -> int:
-        """
-        Find the index for a given timestep in the schedule.
 
-        Args:
-            timestep (`int` or `torch.Tensor`):
-                The timestep for which to find the index.
-            schedule_timesteps (`torch.Tensor`, *optional*):
-                The timestep schedule to search in. If `None`, uses `self.timesteps`.
-
-        Returns:
-            `int`:
-                The index of the timestep in the schedule.
-        """
         if schedule_timesteps is None:
             schedule_timesteps = self.timesteps
 
@@ -1140,13 +824,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         return step_index
 
     def _init_step_index(self, timestep: Union[int, torch.Tensor]) -> None:
-        """
-        Initialize the step_index counter for the scheduler.
 
-        Args:
-            timestep (`int` or `torch.Tensor`):
-                The current timestep for which to initialize the step index.
-        """
 
         if self.begin_index is None:
             if isinstance(timestep, torch.Tensor):
@@ -1164,31 +842,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         variance_noise: Optional[torch.Tensor] = None,
         return_dict: bool = True,
     ) -> Union[SchedulerOutput, Tuple]:
-        """
-        Predict the sample from the previous timestep by reversing the SDE. This function propagates the sample with
-        the multistep DPMSolver.
 
-        Args:
-            model_output (`torch.Tensor`):
-                The direct output from the learned diffusion model.
-            timestep (`int` or `torch.Tensor`):
-                The current discrete timestep in the diffusion chain.
-            sample (`torch.Tensor`):
-                A current instance of a sample created by the diffusion process.
-            generator (`torch.Generator`, *optional*):
-                A random number generator.
-            variance_noise (`torch.Tensor`, *optional*):
-                Alternative to generating noise with `generator` by directly providing the noise for the variance
-                itself. Useful for methods such as [`LEdits++`].
-            return_dict (`bool`, defaults to `True`):
-                Whether or not to return a [`~schedulers.scheduling_utils.SchedulerOutput`] or `tuple`.
-
-        Returns:
-            [`~schedulers.scheduling_utils.SchedulerOutput`] or `tuple`:
-                If `return_dict` is `True`, [`~schedulers.scheduling_utils.SchedulerOutput`] is returned, otherwise a
-                tuple is returned where the first element is the sample tensor.
-
-        """
         if self.num_inference_steps is None:
             raise ValueError(
                 "Number of inference steps is 'None', you need to run 'set_timesteps' after creating the scheduler"
@@ -1245,18 +899,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         return SchedulerOutput(prev_sample=prev_sample)
 
     def scale_model_input(self, sample: torch.Tensor, *args, **kwargs) -> torch.Tensor:
-        """
-        Ensures interchangeability with schedulers that need to scale the denoising model input depending on the
-        current timestep.
 
-        Args:
-            sample (`torch.Tensor`):
-                The input sample.
-
-        Returns:
-            `torch.Tensor`:
-                A scaled input sample.
-        """
         return sample
 
     def add_noise(
@@ -1265,21 +908,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         noise: torch.Tensor,
         timesteps: torch.IntTensor,
     ) -> torch.Tensor:
-        """
-        Add noise to the original samples according to the noise schedule at the specified timesteps.
 
-        Args:
-            original_samples (`torch.Tensor`):
-                The original samples without noise.
-            noise (`torch.Tensor`):
-                The noise to add to the samples.
-            timesteps (`torch.IntTensor`):
-                The timesteps at which to add noise to the samples.
-
-        Returns:
-            `torch.Tensor`:
-                The noisy samples.
-        """
         # Make sure sigmas and timesteps have the same device and dtype as original_samples
         sigmas = self.sigmas.to(device=original_samples.device, dtype=original_samples.dtype)
         if original_samples.device.type == "mps" and torch.is_floating_point(timesteps):
@@ -1290,7 +919,7 @@ class DPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
             schedule_timesteps = self.timesteps.to(original_samples.device)
             timesteps = timesteps.to(original_samples.device)
 
-        # begin_index is None when the scheduler is used for training or pipeline does not implement set_begin_index
+        # begin_index is None when the scheduler i...
         if self.begin_index is None:
             step_indices = [self.index_for_timestep(t, schedule_timesteps) for t in timesteps]
         elif self.step_index is not None:

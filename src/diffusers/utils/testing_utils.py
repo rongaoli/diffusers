@@ -52,7 +52,6 @@ from .import_utils import (
 )
 from .logging import get_logger
 
-
 if is_torch_available():
     import torch
 
@@ -84,7 +83,7 @@ BIG_GPU_MEMORY = int(os.getenv("BIG_GPU_MEMORY", 40))
 if is_torch_available():
     import torch
 
-    # Set a backend environment variable for any extra module import required for a custom accelerator
+    # Set a backend environment variable for any e...
     if "DIFFUSERS_TEST_BACKEND" in os.environ:
         backend = os.environ["DIFFUSERS_TEST_BACKEND"]
         try:
@@ -117,12 +116,11 @@ if is_torch_available():
         ) >= version.parse("1.12")
 
         if is_torch_higher_equal_than_1_12:
-            # Some builds of torch 1.12 don't have the mps backend registered. See #892 for more details
+            # Some builds of torch 1.12 don't have...
             mps_backend_registered = hasattr(torch.backends, "mps")
             torch_device = "mps" if (mps_backend_registered and torch.backends.mps.is_available()) else torch_device
 
     from .torch_utils import get_torch_cuda_device_capability
-
 
 def torch_all_close(a, b, *args, **kwargs):
     if not is_torch_available():
@@ -131,13 +129,11 @@ def torch_all_close(a, b, *args, **kwargs):
         assert False, f"Max diff is absolute {(a - b).abs().max()}. Diff tensor is {(a - b).abs()}."
     return True
 
-
 def numpy_cosine_similarity_distance(a, b):
     similarity = np.dot(a, b) / (norm(a) * norm(b))
     distance = 1.0 - similarity.mean()
 
     return distance
-
 
 def check_if_dicts_are_equal(dict1, dict2):
     dict1, dict2 = dict1.copy(), dict2.copy()
@@ -161,7 +157,6 @@ def check_if_dicts_are_equal(dict1, dict2):
 
     return True
 
-
 def print_tensor_test(
     tensor,
     limit_to_slices=None,
@@ -180,22 +175,19 @@ def print_tensor_test(
 
     tensor_str = str(tensor.detach().cpu().flatten().to(torch.float32)).replace("\n", "")
     # format is usually:
-    # expected_slice = np.array([-0.5713, -0.3018, -0.9814, 0.04663, -0.879, 0.76, -1.734, 0.1044, 1.161])
+    # expected_slice = np.array([-0.5713, -0.3018,...
     output_str = tensor_str.replace("tensor", f"{expected_tensor_name} = np.array")
     test_file, test_class, test_fn = test_name.split("::")
     test_fn = test_fn.split()[0]
     with open(filename, "a") as f:
         print("::".join([test_file, test_class, test_fn, output_str]), file=f)
 
-
 def get_tests_dir(append_path=None):
-    """
     Args:
         append_path: optional path to append to the tests dir path
     Return:
         The full path to the `tests` dir, so that the tests can be invoked from anywhere. Optionally `append_path` is
         joined after the `tests` dir the former is provided.
-    """
     # this function caller's __file__
     caller__file__ = inspect.stack()[1][1]
     tests_dir = os.path.abspath(os.path.dirname(caller__file__))
@@ -208,14 +200,11 @@ def get_tests_dir(append_path=None):
     else:
         return tests_dir
 
-
 # Taken from the following PR:
 # https://github.com/huggingface/accelerate/pull/1964
 def str_to_bool(value) -> int:
-    """
     Converts a string representation of truth to `True` (1) or `False` (0). True values are `y`, `yes`, `t`, `true`,
     `on`, and `1`; False value are `n`, `no`, `f`, `false`, `off`, and `0`;
-    """
     value = value.lower()
     if value in ("y", "yes", "t", "true", "on", "1"):
         return 1
@@ -223,7 +212,6 @@ def str_to_bool(value) -> int:
         return 0
     else:
         raise ValueError(f"invalid truth value {value}")
-
 
 def parse_flag_from_env(key, default=False):
     try:
@@ -240,11 +228,9 @@ def parse_flag_from_env(key, default=False):
             raise ValueError(f"If set, {key} must be yes or no.")
     return _value
 
-
 _run_slow_tests = parse_flag_from_env("RUN_SLOW", default=False)
 _run_nightly_tests = parse_flag_from_env("RUN_NIGHTLY", default=False)
 _run_compile_tests = parse_flag_from_env("RUN_COMPILE", default=False)
-
 
 def floats_tensor(shape, scale=1.0, rng=None, name=None):
     """Creates a random float32 tensor"""
@@ -261,52 +247,36 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
 
     return torch.tensor(data=values, dtype=torch.float).view(shape).contiguous()
 
-
 def slow(test_case):
-    """
     Decorator marking a test as slow.
 
     Slow tests are skipped by default. Set the RUN_SLOW environment variable to a truthy value to run them.
 
-    """
     return unittest.skipUnless(_run_slow_tests, "test is slow")(test_case)
 
-
 def nightly(test_case):
-    """
     Decorator marking a test that runs nightly in the diffusers CI.
 
     Slow tests are skipped by default. Set the RUN_NIGHTLY environment variable to a truthy value to run them.
 
-    """
     return unittest.skipUnless(_run_nightly_tests, "test is nightly")(test_case)
 
-
 def is_torch_compile(test_case):
-    """
     Decorator marking a test that runs compile tests in the diffusers CI.
 
     Compile tests are skipped by default. Set the RUN_COMPILE environment variable to a truthy value to run them.
 
-    """
     return unittest.skipUnless(_run_compile_tests, "test is torch compile")(test_case)
 
-
 def require_torch(test_case):
-    """
     Decorator marking a test that requires PyTorch. These tests are skipped when PyTorch isn't installed.
-    """
     return unittest.skipUnless(is_torch_available(), "test requires PyTorch")(test_case)
 
-
 def require_torch_2(test_case):
-    """
     Decorator marking a test that requires PyTorch 2. These tests are skipped when it isn't installed.
-    """
     return unittest.skipUnless(is_torch_available() and is_torch_version(">=", "2.0.0"), "test requires PyTorch 2")(
         test_case
     )
-
 
 def require_torch_version_greater_equal(torch_version):
     """Decorator marking a test that requires torch with a specific version or greater."""
@@ -319,7 +289,6 @@ def require_torch_version_greater_equal(torch_version):
 
     return decorator
 
-
 def require_torch_version_greater(torch_version):
     """Decorator marking a test that requires torch with a specific version greater."""
 
@@ -331,13 +300,11 @@ def require_torch_version_greater(torch_version):
 
     return decorator
 
-
 def require_torch_gpu(test_case):
     """Decorator marking a test that requires CUDA and PyTorch."""
     return unittest.skipUnless(is_torch_available() and torch_device == "cuda", "test requires PyTorch+CUDA")(
         test_case
     )
-
 
 def require_torch_cuda_compatibility(expected_compute_capability):
     def decorator(test_case):
@@ -350,7 +317,6 @@ def require_torch_cuda_compatibility(expected_compute_capability):
 
     return decorator
 
-
 # These decorators are for accelerator-specific behaviours that are not GPU-specific
 def require_torch_accelerator(test_case):
     """Decorator marking a test that requires an accelerator backend and PyTorch."""
@@ -358,13 +324,10 @@ def require_torch_accelerator(test_case):
         test_case
     )
 
-
 def require_torch_multi_gpu(test_case):
-    """
     Decorator marking a test that requires a multi-GPU setup (in PyTorch). These tests are skipped on a machine without
     multiple GPUs. To run *only* the multi_gpu tests, assuming all test names contain multi_gpu: $ pytest -sv ./tests
     -k "multi_gpu"
-    """
     if not is_torch_available():
         return unittest.skip("test requires PyTorch")(test_case)
 
@@ -372,12 +335,9 @@ def require_torch_multi_gpu(test_case):
 
     return unittest.skipUnless(torch.cuda.device_count() > 1, "test requires multiple GPUs")(test_case)
 
-
 def require_torch_multi_accelerator(test_case):
-    """
     Decorator marking a test that requires a multi-accelerator setup (in PyTorch). These tests are skipped on a machine
     without multiple hardware accelerators.
-    """
     if not is_torch_available():
         return unittest.skip("test requires PyTorch")(test_case)
 
@@ -387,13 +347,11 @@ def require_torch_multi_accelerator(test_case):
         torch.cuda.device_count() > 1 or torch.xpu.device_count() > 1, "test requires multiple hardware accelerators"
     )(test_case)
 
-
 def require_torch_accelerator_with_fp16(test_case):
     """Decorator marking a test that requires an accelerator with support for the FP16 data type."""
     return unittest.skipUnless(_is_torch_fp16_available(torch_device), "test requires accelerator with fp16 support")(
         test_case
     )
-
 
 def require_torch_accelerator_with_fp64(test_case):
     """Decorator marking a test that requires an accelerator with support for the FP64 data type."""
@@ -401,12 +359,9 @@ def require_torch_accelerator_with_fp64(test_case):
         test_case
     )
 
-
 def require_big_gpu_with_torch_cuda(test_case):
-    """
     Decorator marking a test that requires a bigger GPU (24GB) for execution. Some example pipelines: Flux, SD3, Cog,
     etc.
-    """
     if not is_torch_available():
         return unittest.skip("test requires PyTorch")(test_case)
 
@@ -421,12 +376,9 @@ def require_big_gpu_with_torch_cuda(test_case):
         total_memory >= BIG_GPU_MEMORY, f"test requires a GPU with at least {BIG_GPU_MEMORY} GB memory"
     )(test_case)
 
-
 def require_big_accelerator(test_case):
-    """
     Decorator marking a test that requires a bigger hardware accelerator (24GB) for execution. Some example pipelines:
     Flux, SD3, Cog, etc.
-    """
     import pytest
 
     test_case = pytest.mark.big_accelerator(test_case)
@@ -450,7 +402,6 @@ def require_big_accelerator(test_case):
         f"test requires a hardware accelerator with at least {BIG_GPU_MEMORY} GB memory",
     )(test_case)
 
-
 def require_torch_accelerator_with_training(test_case):
     """Decorator marking a test that requires an accelerator with support for training."""
     return unittest.skipUnless(
@@ -458,97 +409,60 @@ def require_torch_accelerator_with_training(test_case):
         "test requires accelerator with training support",
     )(test_case)
 
-
 def skip_mps(test_case):
     """Decorator marking a test to skip if torch_device is 'mps'"""
     return unittest.skipUnless(torch_device != "mps", "test requires non 'mps' device")(test_case)
 
-
 def require_flax(test_case):
-    """
     Decorator marking a test that requires JAX & Flax. These tests are skipped when one / both are not installed
-    """
     return unittest.skipUnless(is_flax_available(), "test requires JAX & Flax")(test_case)
 
-
 def require_compel(test_case):
-    """
     Decorator marking a test that requires compel: https://github.com/damian0815/compel. These tests are skipped when
     the library is not installed.
-    """
     return unittest.skipUnless(is_compel_available(), "test requires compel")(test_case)
 
-
 def require_onnxruntime(test_case):
-    """
     Decorator marking a test that requires onnxruntime. These tests are skipped when onnxruntime isn't installed.
-    """
     return unittest.skipUnless(is_onnx_available(), "test requires onnxruntime")(test_case)
 
-
 def require_note_seq(test_case):
-    """
     Decorator marking a test that requires note_seq. These tests are skipped when note_seq isn't installed.
-    """
     return unittest.skipUnless(is_note_seq_available(), "test requires note_seq")(test_case)
 
-
 def require_accelerator(test_case):
-    """
     Decorator marking a test that requires a hardware accelerator backend. These tests are skipped when there are no
     hardware accelerator available.
-    """
     return unittest.skipUnless(torch_device != "cpu", "test requires a hardware accelerator")(test_case)
 
-
 def require_torchsde(test_case):
-    """
     Decorator marking a test that requires torchsde. These tests are skipped when torchsde isn't installed.
-    """
     return unittest.skipUnless(is_torchsde_available(), "test requires torchsde")(test_case)
 
-
 def require_peft_backend(test_case):
-    """
     Decorator marking a test that requires PEFT backend, this would require some specific versions of PEFT and
     transformers.
-    """
     return unittest.skipUnless(USE_PEFT_BACKEND, "test requires PEFT backend")(test_case)
 
-
 def require_timm(test_case):
-    """
     Decorator marking a test that requires timm. These tests are skipped when timm isn't installed.
-    """
     return unittest.skipUnless(is_timm_available(), "test requires timm")(test_case)
 
-
 def require_bitsandbytes(test_case):
-    """
     Decorator marking a test that requires bitsandbytes. These tests are skipped when bitsandbytes isn't installed.
-    """
     return unittest.skipUnless(is_bitsandbytes_available(), "test requires bitsandbytes")(test_case)
 
-
 def require_quanto(test_case):
-    """
     Decorator marking a test that requires quanto. These tests are skipped when quanto isn't installed.
-    """
     return unittest.skipUnless(is_optimum_quanto_available(), "test requires quanto")(test_case)
 
-
 def require_accelerate(test_case):
-    """
     Decorator marking a test that requires accelerate. These tests are skipped when accelerate isn't installed.
-    """
     return unittest.skipUnless(is_accelerate_available(), "test requires accelerate")(test_case)
 
-
 def require_peft_version_greater(peft_version):
-    """
     Decorator marking a test that requires PEFT backend with a specific version, this would require some specific
     versions of PEFT and transformers.
-    """
 
     def decorator(test_case):
         correct_peft_version = is_peft_available() and version.parse(
@@ -560,12 +474,9 @@ def require_peft_version_greater(peft_version):
 
     return decorator
 
-
 def require_transformers_version_greater(transformers_version):
-    """
     Decorator marking a test that requires transformers with a specific version, this would require some specific
     versions of PEFT and transformers.
-    """
 
     def decorator(test_case):
         correct_transformers_version = is_transformers_available() and version.parse(
@@ -578,7 +489,6 @@ def require_transformers_version_greater(transformers_version):
 
     return decorator
 
-
 def require_accelerate_version_greater(accelerate_version):
     def decorator(test_case):
         correct_accelerate_version = is_accelerate_available() and version.parse(
@@ -589,7 +499,6 @@ def require_accelerate_version_greater(accelerate_version):
         )(test_case)
 
     return decorator
-
 
 def require_bitsandbytes_version_greater(bnb_version):
     def decorator(test_case):
@@ -602,7 +511,6 @@ def require_bitsandbytes_version_greater(bnb_version):
 
     return decorator
 
-
 def require_hf_hub_version_greater(hf_hub_version):
     def decorator(test_case):
         correct_hf_hub_version = version.parse(
@@ -613,7 +521,6 @@ def require_hf_hub_version_greater(hf_hub_version):
         )(test_case)
 
     return decorator
-
 
 def require_gguf_version_greater_or_equal(gguf_version):
     def decorator(test_case):
@@ -626,7 +533,6 @@ def require_gguf_version_greater_or_equal(gguf_version):
 
     return decorator
 
-
 def require_torchao_version_greater_or_equal(torchao_version):
     def decorator(test_case):
         correct_torchao_version = is_torchao_available() and version.parse(
@@ -637,7 +543,6 @@ def require_torchao_version_greater_or_equal(torchao_version):
         )(test_case)
 
     return decorator
-
 
 def require_modelopt_version_greater_or_equal(modelopt_version):
     def decorator(test_case):
@@ -650,7 +555,6 @@ def require_modelopt_version_greater_or_equal(modelopt_version):
 
     return decorator
 
-
 def require_kernels_version_greater_or_equal(kernels_version):
     def decorator(test_case):
         correct_kernels_version = is_kernels_available() and version.parse(
@@ -662,19 +566,14 @@ def require_kernels_version_greater_or_equal(kernels_version):
 
     return decorator
 
-
 def deprecate_after_peft_backend(test_case):
-    """
     Decorator marking a test that will be skipped after PEFT backend
-    """
     return unittest.skipUnless(not USE_PEFT_BACKEND, "test skipped in favor of PEFT backend")(test_case)
-
 
 def get_python_version():
     sys_info = sys.version_info
     major, minor = sys_info.major, sys_info.minor
     return major, minor
-
 
 def load_numpy(arry: Union[str, np.ndarray], local_path: Optional[str] = None) -> np.ndarray:
     if isinstance(arry, str):
@@ -701,16 +600,13 @@ def load_numpy(arry: Union[str, np.ndarray], local_path: Optional[str] = None) -
 
     return arry
 
-
 def load_pt(url: str, map_location: Optional[str] = None, weights_only: Optional[bool] = True):
     response = requests.get(url, timeout=DIFFUSERS_REQUEST_TIMEOUT)
     response.raise_for_status()
     arry = torch.load(BytesIO(response.content), map_location=map_location, weights_only=weights_only)
     return arry
 
-
 def load_image(image: Union[str, PIL.Image.Image]) -> PIL.Image.Image:
-    """
     Loads `image` to a PIL Image.
 
     Args:
@@ -719,7 +615,6 @@ def load_image(image: Union[str, PIL.Image.Image]) -> PIL.Image.Image:
     Returns:
         `PIL.Image.Image`:
             A PIL Image.
-    """
     if isinstance(image, str):
         if image.startswith("http://") or image.startswith("https://"):
             image = PIL.Image.open(requests.get(image, stream=True, timeout=DIFFUSERS_REQUEST_TIMEOUT).raw)
@@ -739,7 +634,6 @@ def load_image(image: Union[str, PIL.Image.Image]) -> PIL.Image.Image:
     image = image.convert("RGB")
     return image
 
-
 def preprocess_image(image: PIL.Image, batch_size: int):
     w, h = image.size
     w, h = (x - x % 8 for x in (w, h))  # resize to integer multiple of 8
@@ -748,7 +642,6 @@ def preprocess_image(image: PIL.Image, batch_size: int):
     image = np.vstack([image[None].transpose(0, 3, 1, 2)] * batch_size)
     image = torch.from_numpy(image)
     return 2.0 * image - 1.0
-
 
 def export_to_gif(image: List[PIL.Image.Image], output_gif_path: str = None) -> str:
     if output_gif_path is None:
@@ -764,18 +657,14 @@ def export_to_gif(image: List[PIL.Image.Image], output_gif_path: str = None) -> 
     )
     return output_gif_path
 
-
 @contextmanager
 def buffered_writer(raw_f):
     f = io.BufferedWriter(raw_f)
     yield f
     f.flush()
 
-
 def export_to_ply(mesh, output_ply_path: str = None):
-    """
     Write a PLY file for a mesh.
-    """
     if output_ply_path is None:
         output_ply_path = tempfile.NamedTemporaryFile(suffix=".ply").name
 
@@ -822,7 +711,6 @@ def export_to_ply(mesh, output_ply_path: str = None):
             format = struct.Struct("<B3I")
     return output_ply_path
 
-
 def export_to_obj(mesh, output_obj_path: str = None):
     if output_obj_path is None:
         output_obj_path = tempfile.NamedTemporaryFile(suffix=".obj").name
@@ -842,7 +730,6 @@ def export_to_obj(mesh, output_obj_path: str = None):
     with open(output_obj_path, "w") as f:
         f.writelines("\n".join(combined_data))
 
-
 def export_to_video(video_frames: List[np.ndarray], output_video_path: str = None) -> str:
     if is_opencv_available():
         import cv2
@@ -859,7 +746,6 @@ def export_to_video(video_frames: List[np.ndarray], output_video_path: str = Non
         video_writer.write(img)
     return output_video_path
 
-
 def load_hf_numpy(path) -> np.ndarray:
     base_url = "https://huggingface.co/datasets/fusing/diffusers-testing/resolve/main"
 
@@ -868,21 +754,17 @@ def load_hf_numpy(path) -> np.ndarray:
 
     return load_numpy(path)
 
-
 # --- pytest conf functions --- #
 
-# to avoid multiple invocation from tests/conftest.py and examples/conftest.py - make sure it's called only once
+# to avoid multiple invocation from tests/conftest...
 pytest_opt_registered = {}
 
-
 def pytest_addoption_shared(parser):
-    """
     This function is to be called from `conftest.py` via `pytest_addoption` wrapper that has to be defined there.
 
     It allows loading both `conftest.py` files at once without causing a failure due to adding the same `pytest`
     option.
 
-    """
     option = "--make-reports"
     if option not in pytest_opt_registered:
         parser.addoption(
@@ -893,9 +775,7 @@ def pytest_addoption_shared(parser):
         )
         pytest_opt_registered[option] = 1
 
-
 def pytest_terminal_summary_main(tr, id):
-    """
     Generate multiple reports at the end of test suite run - each report goes into a dedicated file in the current
     directory. The report files are prefixed with the test suite name.
 
@@ -913,7 +793,6 @@ def pytest_terminal_summary_main(tr, id):
     pytest do internal changes - also it calls default internal methods of terminalreporter which
     can be hijacked by various `pytest-` plugins and interfere.
 
-    """
     from _pytest.config import create_terminal_writer
 
     if not len(id):
@@ -961,7 +840,7 @@ def pytest_terminal_summary_main(tr, id):
                 f.write(f"{rep.duration:02.2f}s {rep.when:<8} {rep.nodeid}\n")
 
     def summary_failures_short(tr):
-        # expecting that the reports were --tb=long (default) so we chop them off here to the last frame
+        # expecting that the reports were --tb=lon...
         reports = tr.getreports("failed")
         if not reports:
             return
@@ -974,7 +853,7 @@ def pytest_terminal_summary_main(tr, id):
             tr._tw.line(longrepr)
             # note: not printing out any rep.sections to keep the report short
 
-    # use ready-made report funcs, we are just hijacking the filehandle to log to a dedicated file each
+    # use ready-made report funcs, we are just hij...
     # adapted from https://github.com/pytest-dev/pytest/blob/897f151e/src/_pytest/terminal.py#L814
     # note: some pytest plugins may interfere by hijacking the default `terminalreporter` (e.g.
     # pytest-instafail does that)
@@ -1022,10 +901,8 @@ def pytest_terminal_summary_main(tr, id):
     tr.reportchars = orig_reportchars
     config.option.tbstyle = orig_tbstyle
 
-
-# Adapted from https://github.com/huggingface/transformers/blob/000e52aec8850d3fe2f360adc6fd256e5b47fe4c/src/transformers/testing_utils.py#L1905
+# Adapted from https://github.com/huggingface/tran...
 def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, description: Optional[str] = None):
-    """
     To decorate flaky tests (methods or entire classes). They will be retried on failures.
 
     Args:
@@ -1036,7 +913,6 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, d
         description (`str`, *optional*):
             A string to describe the situation (what / where / why is flaky, link to GH issue/PR comments, errors,
             etc.)
-    """
 
     def decorator(obj):
         # If decorating a class, wrap each test method on it
@@ -1070,10 +946,8 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, d
 
     return decorator
 
-
-# Taken from: https://github.com/huggingface/transformers/blob/3658488ff77ff8d45101293e749263acf437f4d5/src/transformers/testing_utils.py#L1787
+# Taken from: https://github.com/huggingface/trans...
 def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
-    """
     To run a test in a subprocess. In particular, this can avoid (GPU) memory issue.
 
     Args:
@@ -1086,7 +960,6 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
         timeout (`int`, *optional*, defaults to `None`):
             The timeout (in seconds) that will be passed to the input and output queues. If not specified, the env.
             variable `PYTEST_TIMEOUT` will be checked. If still `None`, its value will be set to `600`.
-    """
     if timeout is None:
         timeout = int(os.environ.get("PYTEST_TIMEOUT", 600))
 
@@ -1101,7 +974,7 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
 
     process = ctx.Process(target=target_func, args=(input_queue, output_queue, timeout))
     process.start()
-    # Kill the child process if we can't get outputs from it in time: otherwise, the hanging subprocess prevents
+    # Kill the child process if we can't get outpu...
     # the test to exit properly.
     try:
         results = output_queue.get(timeout=timeout)
@@ -1114,9 +987,7 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
     if results["error"] is not None:
         test_case.fail(f"{results['error']}")
 
-
 class CaptureLogger:
-    """
     Args:
     Context manager to capture `logging` streams
         logger: 'logging` logger object
@@ -1134,7 +1005,6 @@ class CaptureLogger:
     ...     logger.info(msg)
     >>> assert cl.out, msg + "\n"
     ```
-    """
 
     def __init__(self, logger):
         self.logger = logger
@@ -1153,12 +1023,9 @@ class CaptureLogger:
     def __repr__(self):
         return f"captured: {self.out}\n"
 
-
 def enable_full_determinism():
-    """
     Helper function for reproducible behavior during distributed training. See
     - https://pytorch.org/docs/stable/notes/randomness.html for pytorch
-    """
     from .torch_utils import enable_full_determinism as _enable_full_determinism
 
     logger.warning(
@@ -1166,7 +1033,6 @@ def enable_full_determinism():
         "Importing from diffusers.utils.testing_utils is deprecated and will be removed in a future version."
     )
     return _enable_full_determinism()
-
 
 def disable_full_determinism():
     from .torch_utils import disable_full_determinism as _disable_full_determinism
@@ -1176,7 +1042,6 @@ def disable_full_determinism():
         "Importing from diffusers.utils.testing_utils is deprecated and will be removed in a future version."
     )
     return _disable_full_determinism()
-
 
 # Utils for custom and alternative accelerator devices
 def _is_torch_fp16_available(device):
@@ -1200,7 +1065,6 @@ def _is_torch_fp16_available(device):
 
         return False
 
-
 def _is_torch_fp64_available(device):
     if not is_torch_available():
         return False
@@ -1221,7 +1085,6 @@ def _is_torch_fp64_available(device):
             )
 
         return False
-
 
 # Guard these lookups for when Torch is not used - alternative accelerator support is for PyTorch
 if is_torch_available():
@@ -1279,7 +1142,6 @@ if is_torch_available():
         "default": None,
     }
 
-
 # This dispatches a defined function according to the accelerator from the function definitions.
 def _device_agnostic_dispatch(device: str, dispatch_table: Dict[str, Callable], *args, **kwargs):
     if device not in dispatch_table:
@@ -1294,7 +1156,6 @@ def _device_agnostic_dispatch(device: str, dispatch_table: Dict[str, Callable], 
 
     return fn(*args, **kwargs)
 
-
 # These are callables which automatically dispatch the function specific to the accelerator
 def backend_manual_seed(device: str, seed: int):
     from .torch_utils import backend_manual_seed as _backend_manual_seed
@@ -1305,7 +1166,6 @@ def backend_manual_seed(device: str, seed: int):
     )
     return _backend_manual_seed(device, seed)
 
-
 def backend_synchronize(device: str):
     from .torch_utils import backend_synchronize as _backend_synchronize
 
@@ -1314,7 +1174,6 @@ def backend_synchronize(device: str):
         "diffusers.utils.testing_utils is deprecated and will be removed in a future version."
     )
     return _backend_synchronize(device)
-
 
 def backend_empty_cache(device: str):
     from .torch_utils import backend_empty_cache as _backend_empty_cache
@@ -1325,7 +1184,6 @@ def backend_empty_cache(device: str):
     )
     return _backend_empty_cache(device)
 
-
 def backend_device_count(device: str):
     from .torch_utils import backend_device_count as _backend_device_count
 
@@ -1334,7 +1192,6 @@ def backend_device_count(device: str):
         "diffusers.utils.testing_utils is deprecated and will be removed in a future version."
     )
     return _backend_device_count(device)
-
 
 def backend_reset_peak_memory_stats(device: str):
     from .torch_utils import backend_reset_peak_memory_stats as _backend_reset_peak_memory_stats
@@ -1345,7 +1202,6 @@ def backend_reset_peak_memory_stats(device: str):
     )
     return _backend_reset_peak_memory_stats(device)
 
-
 def backend_reset_max_memory_allocated(device: str):
     from .torch_utils import backend_reset_max_memory_allocated as _backend_reset_max_memory_allocated
 
@@ -1355,7 +1211,6 @@ def backend_reset_max_memory_allocated(device: str):
     )
     return _backend_reset_max_memory_allocated(device)
 
-
 def backend_max_memory_allocated(device: str):
     from .torch_utils import backend_max_memory_allocated as _backend_max_memory_allocated
 
@@ -1364,7 +1219,6 @@ def backend_max_memory_allocated(device: str):
         "diffusers.utils.testing_utils is deprecated and will be removed in a future version."
     )
     return _backend_max_memory_allocated(device)
-
 
 # These are callables which return boolean behaviour flags and can be used to specify some
 # device agnostic alternative where the feature is unsupported.
@@ -1376,7 +1230,6 @@ def backend_supports_training(device: str):
         "diffusers.utils.testing_utils is deprecated and will be removed in a future version."
     )
     return _backend_supports_training(device)
-
 
 # Guard for when Torch is not available
 if is_torch_available():
@@ -1426,18 +1279,14 @@ if is_torch_available():
         update_mapping_from_spec(BACKEND_RESET_MAX_MEMORY_ALLOCATED, "RESET_MAX_MEMORY_ALLOCATED_FN")
         update_mapping_from_spec(BACKEND_MAX_MEMORY_ALLOCATED, "MAX_MEMORY_ALLOCATED_FN")
 
-
-# Modified from https://github.com/huggingface/transformers/blob/cdfb018d0300fef3b07d9220f3efe9c2a9974662/src/transformers/testing_utils.py#L3090
+# Modified from https://github.com/huggingface/tra...
 
 # Type definition of key used in `Expectations` class.
 DeviceProperties = Tuple[Union[str, None], Union[int, None]]
 
-
 @functools.lru_cache
 def get_device_properties() -> DeviceProperties:
-    """
     Get environment device properties.
-    """
     if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
         import torch
 
@@ -1449,14 +1298,13 @@ def get_device_properties() -> DeviceProperties:
     elif IS_XPU_SYSTEM:
         import torch
 
-        # To get more info of the architecture meaning and bit allocation, refer to https://github.com/intel/llvm/blob/sycl/sycl/include/sycl/ext/oneapi/experimental/device_architecture.def
+        # To get more info of the architecture mea...
         arch = torch.xpu.get_device_capability()["architecture"]
         gen_mask = 0x000000FF00000000
         gen = (arch & gen_mask) >> 32
         return ("xpu", gen)
     else:
         return (torch_device, None)
-
 
 if TYPE_CHECKING:
     DevicePropertiesUserDict = UserDict[DeviceProperties, Any]
@@ -1560,12 +1408,9 @@ if is_torch_available():
         is_correct = not missing_files and not extra_files
         return is_correct, extra_files, missing_files
 
-
 class Expectations(DevicePropertiesUserDict):
     def get_expectation(self) -> Any:
-        """
         Find best matching expectation based on environment device properties.
-        """
         return self.find_expectation(get_device_properties())
 
     @staticmethod
@@ -1574,14 +1419,12 @@ class Expectations(DevicePropertiesUserDict):
 
     @staticmethod
     def score(key: DeviceProperties, other: DeviceProperties) -> int:
-        """
         Returns score indicating how similar two instances of the `Properties` tuple are. Points are calculated using
         bits, but documented as int. Rules are as follows:
             * Matching `type` gives 8 points.
             * Semi-matching `type`, for example cuda and rocm, gives 4 points.
             * Matching `major` (compute capability major version) gives 2 points.
             * Default expectation (if present) gives 1 points.
-        """
         (device_type, major) = key
         (other_device_type, other_major) = other
 
@@ -1600,9 +1443,7 @@ class Expectations(DevicePropertiesUserDict):
         return int(score)
 
     def find_expectation(self, key: DeviceProperties = (None, None)) -> Any:
-        """
         Find best matching expectation based on provided device properties.
-        """
         (result_key, result) = max(self.data.items(), key=lambda x: Expectations.score(key, x[0]))
 
         if Expectations.score(key, result_key) == 0:

@@ -16,7 +16,6 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 @dataclass
 class SafetyConfig(object):
     WEAK = {
@@ -48,7 +47,6 @@ class SafetyConfig(object):
         "sld_mom_beta": 0.7,
     }
 
-
 _dummy_objects = {}
 _additional_imports = {}
 _import_structure = {}
@@ -70,7 +68,6 @@ else:
             "safety_checker": ["StableDiffusionSafetyChecker"],
         }
     )
-
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:

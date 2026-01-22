@@ -10,7 +10,6 @@ from torchvision.transforms.functional import normalize, resize
 
 from ...utils import get_logger, load_image
 
-
 logger = get_logger(__name__)
 
 _insightface_available = importlib.util.find_spec("insightface") is not None
@@ -35,19 +34,8 @@ if _facexlib_available:
 else:
     raise ImportError("facexlib is not available. Please install it using 'pip install facexlib'.")
 
-
 def resize_numpy_image_long(image, resize_long_edge=768):
-    """
-    Resize the input image to a specified long edge while maintaining aspect ratio.
 
-    Args:
-        image (numpy.ndarray): Input image (H x W x C or H x W).
-        resize_long_edge (int): The target size for the long edge of the image. Default is 768.
-
-    Returns:
-        numpy.ndarray: Resized image with the long edge matching `resize_long_edge`, while maintaining the aspect
-        ratio.
-    """
 
     h, w = image.shape[:2]
     if max(h, w) <= resize_long_edge:
@@ -58,19 +46,8 @@ def resize_numpy_image_long(image, resize_long_edge=768):
     image = cv2.resize(image, (w, h), interpolation=cv2.INTER_LANCZOS4)
     return image
 
-
 def img2tensor(imgs, bgr2rgb=True, float32=True):
-    """Numpy array to tensor.
 
-    Args:
-        imgs (list[ndarray] | ndarray): Input images.
-        bgr2rgb (bool): Whether to change bgr to rgb.
-        float32 (bool): Whether to change to float32.
-
-    Returns:
-        list[tensor] | tensor: Tensor images. If returned results only have
-            one element, just return tensor.
-    """
 
     def _totensor(img, bgr2rgb, float32):
         if img.shape[2] == 3 and bgr2rgb:
@@ -86,23 +63,11 @@ def img2tensor(imgs, bgr2rgb=True, float32=True):
         return [_totensor(img, bgr2rgb, float32) for img in imgs]
     return _totensor(imgs, bgr2rgb, float32)
 
-
 def to_gray(img):
-    """
-    Converts an RGB image to grayscale by applying the standard luminosity formula.
 
-    Args:
-        img (torch.Tensor): The input image tensor with shape (batch_size, channels, height, width).
-                             The image is expected to be in RGB format (3 channels).
-
-    Returns:
-        torch.Tensor: The grayscale image tensor with shape (batch_size, 3, height, width).
-                      The grayscale values are replicated across all three channels.
-    """
     x = 0.299 * img[:, 0:1] + 0.587 * img[:, 1:2] + 0.114 * img[:, 2:3]
     x = x.repeat(1, 3, 1, 1)
     return x
-
 
 def process_face_embeddings(
     face_helper_1,
@@ -117,30 +82,7 @@ def process_face_embeddings(
     original_id_image=None,
     is_align_face=True,
 ):
-    """
-    Process face embeddings from an image, extracting relevant features such as face embeddings, landmarks, and parsed
-    face features using a series of face detection and alignment tools.
 
-    Args:
-        face_helper_1: Face helper object (first helper) for alignment and landmark detection.
-        clip_vision_model: Pre-trained CLIP vision model used for feature extraction.
-        face_helper_2: Face helper object (second helper) for embedding extraction.
-        eva_transform_mean: Mean values for image normalization before passing to EVA model.
-        eva_transform_std: Standard deviation values for image normalization before passing to EVA model.
-        app: Application instance used for face detection.
-        device: Device (CPU or GPU) where the computations will be performed.
-        weight_dtype: Data type of the weights for precision (e.g., `torch.float32`).
-        image: Input image in RGB format with pixel values in the range [0, 255].
-        original_id_image: (Optional) Original image for feature extraction if `is_align_face` is False.
-        is_align_face: Boolean flag indicating whether face alignment should be performed.
-
-    Returns:
-        Tuple:
-            - id_cond: Concatenated tensor of Ante face embedding and CLIP vision embedding
-            - id_vit_hidden: Hidden state of the CLIP vision model, a list of tensors.
-            - return_face_features_image_2: Processed face features image after normalization and parsing.
-            - face_kps: Keypoints of the face detected in the image.
-    """
 
     face_helper_1.clean_all()
     image_bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
@@ -215,7 +157,6 @@ def process_face_embeddings(
         face_kps,
     )  # torch.Size([1, 1280]), list(torch.Size([1, 577, 1024]))
 
-
 def process_face_embeddings_infer(
     face_helper_1,
     clip_vision_model,
@@ -228,29 +169,7 @@ def process_face_embeddings_infer(
     img_file_path,
     is_align_face=True,
 ):
-    """
-    Process face embeddings from an input image for inference, including alignment, feature extraction, and embedding
-    concatenation.
 
-    Args:
-        face_helper_1: Face helper object (first helper) for alignment and landmark detection.
-        clip_vision_model: Pre-trained CLIP vision model used for feature extraction.
-        face_helper_2: Face helper object (second helper) for embedding extraction.
-        eva_transform_mean: Mean values for image normalization before passing to EVA model.
-        eva_transform_std: Standard deviation values for image normalization before passing to EVA model.
-        app: Application instance used for face detection.
-        device: Device (CPU or GPU) where the computations will be performed.
-        weight_dtype: Data type of the weights for precision (e.g., `torch.float32`).
-        img_file_path: Path to the input image file (string) or a numpy array representing an image.
-        is_align_face: Boolean flag indicating whether face alignment should be performed (default: True).
-
-    Returns:
-        Tuple:
-            - id_cond: Concatenated tensor of Ante face embedding and CLIP vision embedding.
-            - id_vit_hidden: Hidden state of the CLIP vision model, a list of tensors.
-            - image: Processed face image after feature extraction and alignment.
-            - face_kps: Keypoints of the face detected in the image.
-    """
 
     # Load and preprocess the input image
     if isinstance(img_file_path, str):
@@ -287,71 +206,8 @@ def process_face_embeddings_infer(
 
     return id_cond, id_vit_hidden, image, face_kps
 
-
 def prepare_face_models(model_path, device, dtype):
-    """
     Prepare all face models for the facial recognition task.
-
-    Parameters:
     - model_path: Path to the directory containing model files.
     - device: The device (e.g., 'cuda', 'xpu', 'cpu') where models will be loaded.
     - dtype: Data type (e.g., torch.float32) for model inference.
-
-    Returns:
-    - face_helper_1: First face restoration helper.
-    - face_helper_2: Second face restoration helper.
-    - face_clip_model: CLIP model for face extraction.
-    - eva_transform_mean: Mean value for image normalization.
-    - eva_transform_std: Standard deviation value for image normalization.
-    - face_main_model: Main face analysis model.
-    """
-    # get helper model
-    face_helper_1 = FaceRestoreHelper(
-        upscale_factor=1,
-        face_size=512,
-        crop_ratio=(1, 1),
-        det_model="retinaface_resnet50",
-        save_ext="png",
-        device=device,
-        model_rootpath=os.path.join(model_path, "face_encoder"),
-    )
-    face_helper_1.face_parse = None
-    face_helper_1.face_parse = init_parsing_model(
-        model_name="bisenet", device=device, model_rootpath=os.path.join(model_path, "face_encoder")
-    )
-    face_helper_2 = insightface.model_zoo.get_model(
-        f"{model_path}/face_encoder/models/antelopev2/glintr100.onnx", providers=["CUDAExecutionProvider"]
-    )
-    face_helper_2.prepare(ctx_id=0)
-
-    # get local facial extractor part 1
-    model, _, _ = create_model_and_transforms(
-        "EVA02-CLIP-L-14-336",
-        os.path.join(model_path, "face_encoder", "EVA02_CLIP_L_336_psz14_s6B.pt"),
-        force_custom_clip=True,
-    )
-    face_clip_model = model.visual
-    eva_transform_mean = getattr(face_clip_model, "image_mean", OPENAI_DATASET_MEAN)
-    eva_transform_std = getattr(face_clip_model, "image_std", OPENAI_DATASET_STD)
-    if not isinstance(eva_transform_mean, (list, tuple)):
-        eva_transform_mean = (eva_transform_mean,) * 3
-    if not isinstance(eva_transform_std, (list, tuple)):
-        eva_transform_std = (eva_transform_std,) * 3
-    eva_transform_mean = eva_transform_mean
-    eva_transform_std = eva_transform_std
-
-    # get local facial extractor part 2
-    face_main_model = FaceAnalysis(
-        name="antelopev2", root=os.path.join(model_path, "face_encoder"), providers=["CUDAExecutionProvider"]
-    )
-    face_main_model.prepare(ctx_id=0, det_size=(640, 640))
-
-    # move face models to device
-    face_helper_1.face_det.eval()
-    face_helper_1.face_parse.eval()
-    face_clip_model.eval()
-    face_helper_1.face_det.to(device)
-    face_helper_1.face_parse.to(device)
-    face_clip_model.to(device, dtype=dtype)
-
-    return face_helper_1, face_helper_2, face_clip_model, face_main_model, eva_transform_mean, eva_transform_std

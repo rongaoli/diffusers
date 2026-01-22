@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team and City96. All rights reserved.
-# #
-# # Licensed under the Apache License, Version 2.0 (the "License");
-# # you may not use this file except in compliance with the License.
-# # You may obtain a copy of the License at
-# #
-# #     http://www.apache.org/licenses/LICENSE-2.0
-# #
-# # Unless required by applicable law or agreed to in writing, software
-# # distributed under the License is distributed on an "AS IS" BASIS,
-# # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# # See the License for the specific language governing permissions and
-# # limitations under the License.
-
 import inspect
 import os
 from contextlib import nullcontext
@@ -22,12 +8,10 @@ import torch.nn as nn
 
 from ...utils import is_accelerate_available, is_kernels_available
 
-
 if is_accelerate_available():
     import accelerate
     from accelerate import init_empty_weights
     from accelerate.hooks import add_hook_to_module, remove_hook_from_module
-
 
 can_use_cuda_kernels = (
     os.getenv("DIFFUSERS_GGUF_CUDA_KERNELS", "false").lower() in ["1", "true", "yes"]
@@ -75,7 +59,6 @@ DEQUANT_TYPES = STANDARD_QUANT_TYPES | KQUANT_TYPES | IMATRIX_QUANT_TYPES
 MMVQ_QUANT_TYPES = STANDARD_QUANT_TYPES | KQUANT_TYPES | IMATRIX_QUANT_TYPES
 MMQ_QUANT_TYPES = STANDARD_QUANT_TYPES | KQUANT_TYPES
 
-
 def _fused_mul_mat_gguf(x: torch.Tensor, qweight: torch.Tensor, qweight_type: int) -> torch.Tensor:
     # there is no need to call any kernel for fp16/bf16
     if qweight_type in UNQUANTIZED_TYPES:
@@ -104,14 +87,9 @@ def _fused_mul_mat_gguf(x: torch.Tensor, qweight: torch.Tensor, qweight_type: in
         raise NotImplementedError(f"Unsupported GGUF quantization type: {qweight_type}")
     return y.as_tensor()
 
-
 # Copied from diffusers.quantizers.bitsandbytes.utils._create_accelerate_new_hook
 def _create_accelerate_new_hook(old_hook):
-    r"""
-    Creates a new hook based on the old hook. Use it only if you know what you are doing ! This method is a copy of:
-    https://github.com/huggingface/peft/blob/748f7968f3a31ec06a1c2b0328993319ad9a150a/src/peft/utils/other.py#L245 with
-    some changes
-    """
+
     old_hook_cls = getattr(accelerate.hooks, old_hook.__class__.__name__)
     old_hook_attr = old_hook.__dict__
     filtered_old_hook_attr = {}
@@ -121,7 +99,6 @@ def _create_accelerate_new_hook(old_hook):
             filtered_old_hook_attr[k] = old_hook_attr[k]
     new_hook = old_hook_cls(**filtered_old_hook_attr)
     return new_hook
-
 
 def _replace_with_gguf_linear(model, compute_dtype, state_dict, prefix="", modules_to_not_convert=[]):
     def _should_convert_to_gguf(state_dict, prefix):
@@ -154,7 +131,6 @@ def _replace_with_gguf_linear(model, compute_dtype, state_dict, prefix="", modul
             model._modules[name].requires_grad_(False)
 
     return model
-
 
 def _dequantize_gguf_and_restore_linear(model, modules_to_not_convert=[]):
     for name, module in model.named_children():
@@ -191,26 +167,21 @@ def _dequantize_gguf_and_restore_linear(model, modules_to_not_convert=[]):
 
     return model
 
-
 # dequantize operations based on torch ports of GGUF dequantize_functions
 # from City96
 # more info: https://github.com/city96/ComfyUI-GGUF/blob/main/dequant.py
 
-
 QK_K = 256
 K_SCALE_SIZE = 12
-
 
 def to_uint32(x):
     x = x.view(torch.uint8).to(torch.int32)
     return (x[:, 0] | x[:, 1] << 8 | x[:, 2] << 16 | x[:, 3] << 24).unsqueeze(1)
 
-
 def split_block_dims(blocks, *args):
     n_max = blocks.shape[1]
     dims = list(args) + [n_max - sum(args)]
     return torch.split(blocks, dims, dim=1)
-
 
 def get_scale_min(scales):
     n_blocks = scales.shape[0]
@@ -224,13 +195,11 @@ def get_scale_min(scales):
 
     return (sc.reshape((n_blocks, 8)), min.reshape((n_blocks, 8)))
 
-
 def dequantize_blocks_Q8_0(blocks, block_size, type_size, dtype=None):
     d, x = split_block_dims(blocks, 2)
     d = d.view(torch.float16).to(dtype)
     x = x.view(torch.int8)
     return d * x
-
 
 def dequantize_blocks_Q5_1(blocks, block_size, type_size, dtype=None):
     n_blocks = blocks.shape[0]
@@ -250,7 +219,6 @@ def dequantize_blocks_Q5_1(blocks, block_size, type_size, dtype=None):
     qs = ql | (qh << 4)
     return (d * qs) + m
 
-
 def dequantize_blocks_Q5_0(blocks, block_size, type_size, dtype=None):
     n_blocks = blocks.shape[0]
 
@@ -269,7 +237,6 @@ def dequantize_blocks_Q5_0(blocks, block_size, type_size, dtype=None):
     qs = (ql | (qh << 4)).to(torch.int8) - 16
     return d * qs
 
-
 def dequantize_blocks_Q4_1(blocks, block_size, type_size, dtype=None):
     n_blocks = blocks.shape[0]
 
@@ -284,7 +251,6 @@ def dequantize_blocks_Q4_1(blocks, block_size, type_size, dtype=None):
 
     return (d * qs) + m
 
-
 def dequantize_blocks_Q4_0(blocks, block_size, type_size, dtype=None):
     n_blocks = blocks.shape[0]
 
@@ -296,7 +262,6 @@ def dequantize_blocks_Q4_0(blocks, block_size, type_size, dtype=None):
     ).reshape((1, 1, 2, 1))
     qs = (qs & 0x0F).reshape((n_blocks, -1)).to(torch.int8) - 8
     return d * qs
-
 
 def dequantize_blocks_Q6_K(blocks, block_size, type_size, dtype=None):
     n_blocks = blocks.shape[0]
@@ -325,7 +290,6 @@ def dequantize_blocks_Q6_K(blocks, block_size, type_size, dtype=None):
 
     return (d * q).reshape((n_blocks, QK_K))
 
-
 def dequantize_blocks_Q5_K(blocks, block_size, type_size, dtype=None):
     n_blocks = blocks.shape[0]
 
@@ -351,7 +315,6 @@ def dequantize_blocks_Q5_K(blocks, block_size, type_size, dtype=None):
 
     return (d * q - dm).reshape((n_blocks, QK_K))
 
-
 def dequantize_blocks_Q4_K(blocks, block_size, type_size, dtype=None):
     n_blocks = blocks.shape[0]
 
@@ -370,7 +333,6 @@ def dequantize_blocks_Q4_K(blocks, block_size, type_size, dtype=None):
     qs = (qs & 0x0F).reshape((n_blocks, -1, 32))
 
     return (d * qs - dm).reshape((n_blocks, QK_K))
-
 
 def dequantize_blocks_Q3_K(blocks, block_size, type_size, dtype=None):
     n_blocks = blocks.shape[0]
@@ -404,7 +366,6 @@ def dequantize_blocks_Q3_K(blocks, block_size, type_size, dtype=None):
 
     return (dl * q).reshape((n_blocks, QK_K))
 
-
 def dequantize_blocks_Q2_K(blocks, block_size, type_size, dtype=None):
     n_blocks = blocks.shape[0]
 
@@ -424,14 +385,11 @@ def dequantize_blocks_Q2_K(blocks, block_size, type_size, dtype=None):
 
     return qs.reshape((n_blocks, -1))
 
-
 def dequantize_blocks_BF16(blocks, block_size, type_size, dtype=None):
     return (blocks.view(torch.int16).to(torch.int32) << 16).view(torch.float32)
 
-
 # this part from calcuis (gguf.org)
 # more info: https://github.com/calcuis/gguf-connector/blob/main/src/gguf_connector/quant2c.py
-
 
 def dequantize_blocks_IQ4_NL(blocks, block_size, type_size, dtype=None):
     kvalues = torch.tensor(
@@ -451,7 +409,6 @@ def dequantize_blocks_IQ4_NL(blocks, block_size, type_size, dtype=None):
     qs = torch.gather(kvalues.expand(qs.shape[0], qs.shape[1], 16), 2, qs)
     qs = qs.squeeze(-1).to(dtype)
     return d * qs
-
 
 def dequantize_blocks_IQ4_XS(blocks, block_size, type_size, dtype=None):
     kvalues = torch.tensor(
@@ -482,7 +439,6 @@ def dequantize_blocks_IQ4_XS(blocks, block_size, type_size, dtype=None):
     qs = qs.squeeze(-1).to(dtype)
     return (dl * qs).reshape(n_blocks, -1)
 
-
 GGML_QUANT_SIZES = gguf.GGML_QUANT_SIZES
 dequantize_functions = {
     gguf.GGMLQuantizationType.IQ4_NL: dequantize_blocks_IQ4_NL,
@@ -501,10 +457,8 @@ dequantize_functions = {
 }
 SUPPORTED_GGUF_QUANT_TYPES = list(dequantize_functions.keys())
 
-
 def _quant_shape_from_byte_shape(shape, type_size, block_size):
     return (*shape[:-1], shape[-1] // type_size * block_size)
-
 
 def dequantize_gguf_tensor(tensor):
     if not hasattr(tensor, "quant_type"):
@@ -526,7 +480,6 @@ def dequantize_gguf_tensor(tensor):
 
     return dequant.as_tensor()
 
-
 class GGUFParameter(torch.nn.Parameter):
     def __new__(cls, data, requires_grad=False, quant_type=None):
         data = data if data is not None else torch.empty(0)
@@ -543,7 +496,7 @@ class GGUFParameter(torch.nn.Parameter):
     @staticmethod
     def _extract_quant_type(args):
         # When converting from original format checkpoints we often use splits, cats etc on tensors
-        # this method ensures that the returned tensor type from those operations remains GGUFParameter
+        # this method ensures that the returned te...
         # so that we preserve quant_type information
         for arg in args:
             if isinstance(arg, list) and isinstance(arg[0], GGUFParameter):
@@ -570,7 +523,6 @@ class GGUFParameter(torch.nn.Parameter):
             return type(result)(wrapped)
         else:
             return result
-
 
 class GGUFLinear(nn.Linear):
     def __init__(

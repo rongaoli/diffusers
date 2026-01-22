@@ -1,18 +1,3 @@
-# Copyright 2025 Stability AI and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-
 from typing import Optional, Union
 
 import numpy as np
@@ -27,12 +12,10 @@ from ..attention_processor import Attention, StableAudioAttnProcessor2_0
 from ..modeling_utils import ModelMixin
 from ..transformers.transformer_2d import Transformer2DModelOutput
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 class StableAudioGaussianFourierProjection(nn.Module):
-    """Gaussian Fourier embeddings for noise levels."""
+
 
     # Copied from diffusers.models.embeddings.GaussianFourierProjection.__init__
     def __init__(
@@ -62,23 +45,9 @@ class StableAudioGaussianFourierProjection(nn.Module):
             out = torch.cat([torch.sin(x_proj), torch.cos(x_proj)], dim=-1)
         return out
 
-
 @maybe_allow_in_graph
 class StableAudioDiTBlock(nn.Module):
-    r"""
-    Transformer block used in Stable Audio model (https://github.com/Stability-AI/stable-audio-tools). Allow skip
-    connection and QKNorm
 
-    Parameters:
-        dim (`int`): The number of channels in the input and output.
-        num_attention_heads (`int`): The number of heads to use for the query states.
-        num_key_value_attention_heads (`int`): The number of heads to use for the key and value states.
-        attention_head_dim (`int`): The number of channels in each head.
-        dropout (`float`, *optional*, defaults to 0.0): The dropout probability to use.
-        cross_attention_dim (`int`, *optional*): The size of the encoder_hidden_states vector for cross attention.
-        upcast_attention (`bool`, *optional*):
-            Whether to upcast the attention computation to float32. This is useful for mixed precision training.
-    """
 
     def __init__(
         self,
@@ -151,7 +120,7 @@ class StableAudioDiTBlock(nn.Module):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         rotary_embedding: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
-        # Notice that normalization is always applied before the real computation in the following blocks.
+        # Notice that normalization is always appl...
         # 0. Self-Attention
         norm_hidden_states = self.norm1(hidden_states)
 
@@ -181,29 +150,8 @@ class StableAudioDiTBlock(nn.Module):
 
         return hidden_states
 
-
 class StableAudioDiTModel(ModelMixin, AttentionMixin, ConfigMixin):
-    """
-    The Diffusion Transformer model introduced in Stable Audio.
 
-    Reference: https://github.com/Stability-AI/stable-audio-tools
-
-    Parameters:
-        sample_size ( `int`, *optional*, defaults to 1024): The size of the input sample.
-        in_channels (`int`, *optional*, defaults to 64): The number of channels in the input.
-        num_layers (`int`, *optional*, defaults to 24): The number of layers of Transformer blocks to use.
-        attention_head_dim (`int`, *optional*, defaults to 64): The number of channels in each head.
-        num_attention_heads (`int`, *optional*, defaults to 24): The number of heads to use for the query states.
-        num_key_value_attention_heads (`int`, *optional*, defaults to 12):
-            The number of heads to use for the key and value states.
-        out_channels (`int`, defaults to 64): Number of output channels.
-        cross_attention_dim ( `int`, *optional*, defaults to 768): Dimension of the cross-attention projection.
-        time_proj_dim ( `int`, *optional*, defaults to 256): Dimension of the timestep inner projection.
-        global_states_input_dim ( `int`, *optional*, defaults to 1536):
-            Input dimension of the global hidden states projection.
-        cross_attention_input_dim ( `int`, *optional*, defaults to 768):
-            Input dimension of the cross-attention projection
-    """
 
     _supports_gradient_checkpointing = True
     _skip_layerwise_casting_patterns = ["preprocess_conv", "postprocess_conv", "^proj_in$", "^proj_out$", "norm"]
@@ -274,11 +222,9 @@ class StableAudioDiTModel(ModelMixin, AttentionMixin, ConfigMixin):
 
         self.gradient_checkpointing = False
 
-    # Copied from diffusers.models.transformers.hunyuan_transformer_2d.HunyuanDiT2DModel.set_default_attn_processor with Hunyuan->StableAudio
+    # Copied from diffusers.models.transformers.hu...
     def set_default_attn_processor(self):
-        """
-        Disables custom attention processors and sets the default attention implementation.
-        """
+
         self.set_attn_processor(StableAudioAttnProcessor2_0())
 
     def forward(
@@ -292,27 +238,7 @@ class StableAudioDiTModel(ModelMixin, AttentionMixin, ConfigMixin):
         attention_mask: Optional[torch.LongTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
     ) -> Union[torch.FloatTensor, Transformer2DModelOutput]:
-        """
         The [`StableAudioDiTModel`] forward method.
-
-        Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch size, in_channels, sequence_len)`):
-                Input `hidden_states`.
-            timestep ( `torch.LongTensor`):
-                Used to indicate denoising step.
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch size, encoder_sequence_len, cross_attention_input_dim)`):
-                Conditional embeddings (embeddings computed from the input conditions such as prompts) to use.
-            global_hidden_states (`torch.FloatTensor` of shape `(batch size, global_sequence_len, global_states_input_dim)`):
-               Global embeddings that will be prepended to the hidden states.
-            rotary_embedding (`torch.Tensor`):
-                The rotary embeddings to apply on query and key tensors during attention calculation.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether or not to return a [`~models.transformer_2d.Transformer2DModelOutput`] instead of a plain
-                tuple.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_len)`, *optional*):
-                Mask to avoid performing attention on padding token indices, formed by concatenating the attention
-                masks
-                    for the two text encoders together. Mask values selected in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
@@ -323,56 +249,3 @@ class StableAudioDiTModel(ModelMixin, AttentionMixin, ConfigMixin):
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
-        Returns:
-            If `return_dict` is True, an [`~models.transformer_2d.Transformer2DModelOutput`] is returned, otherwise a
-            `tuple` where the first element is the sample tensor.
-        """
-        cross_attention_hidden_states = self.cross_attention_proj(encoder_hidden_states)
-        global_hidden_states = self.global_proj(global_hidden_states)
-        time_hidden_states = self.timestep_proj(self.time_proj(timestep.to(self.dtype)))
-
-        global_hidden_states = global_hidden_states + time_hidden_states.unsqueeze(1)
-
-        hidden_states = self.preprocess_conv(hidden_states) + hidden_states
-        # (batch_size, dim, sequence_length) -> (batch_size, sequence_length, dim)
-        hidden_states = hidden_states.transpose(1, 2)
-
-        hidden_states = self.proj_in(hidden_states)
-
-        # prepend global states to hidden states
-        hidden_states = torch.cat([global_hidden_states, hidden_states], dim=-2)
-        if attention_mask is not None:
-            prepend_mask = torch.ones((hidden_states.shape[0], 1), device=hidden_states.device, dtype=torch.bool)
-            attention_mask = torch.cat([prepend_mask, attention_mask], dim=-1)
-
-        for block in self.transformer_blocks:
-            if torch.is_grad_enabled() and self.gradient_checkpointing:
-                hidden_states = self._gradient_checkpointing_func(
-                    block,
-                    hidden_states,
-                    attention_mask,
-                    cross_attention_hidden_states,
-                    encoder_attention_mask,
-                    rotary_embedding,
-                )
-
-            else:
-                hidden_states = block(
-                    hidden_states=hidden_states,
-                    attention_mask=attention_mask,
-                    encoder_hidden_states=cross_attention_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    rotary_embedding=rotary_embedding,
-                )
-
-        hidden_states = self.proj_out(hidden_states)
-
-        # (batch_size, sequence_length, dim) -> (batch_size, dim, sequence_length)
-        # remove prepend length that has been added by global hidden states
-        hidden_states = hidden_states.transpose(1, 2)[:, :, 1:]
-        hidden_states = self.postprocess_conv(hidden_states) + hidden_states
-
-        if not return_dict:
-            return (hidden_states,)
-
-        return Transformer2DModelOutput(sample=hidden_states)

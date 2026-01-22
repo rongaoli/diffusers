@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from ...utils import logging
 from ..modular_pipeline import AutoPipelineBlocks, SequentialPipelineBlocks
 from ..modular_pipeline_utils import InsertableDict
@@ -44,12 +30,9 @@ from .encoders import (
     StableDiffusionXLVaeEncoderStep,
 )
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 # auto blocks & sequential blocks & mappings
-
 
 # vae encoder (run before before_denoise)
 class StableDiffusionXLAutoVaeEncoderStep(AutoPipelineBlocks):
@@ -67,7 +50,6 @@ class StableDiffusionXLAutoVaeEncoderStep(AutoPipelineBlocks):
             + " - if neither `mask_image` nor `image` is provided, step will be skipped."
         )
 
-
 # optional ip-adapter (run before input step)
 class StableDiffusionXLAutoIPAdapterStep(AutoPipelineBlocks):
     block_classes = [StableDiffusionXLIPAdapterStep]
@@ -77,7 +59,6 @@ class StableDiffusionXLAutoIPAdapterStep(AutoPipelineBlocks):
     @property
     def description(self):
         return "Run IP Adapter step if `ip_adapter_image` is provided. This step should be placed before the 'input' step.\n"
-
 
 # before_denoise: text2img
 class StableDiffusionXLBeforeDenoiseStep(SequentialPipelineBlocks):
@@ -98,7 +79,6 @@ class StableDiffusionXLBeforeDenoiseStep(SequentialPipelineBlocks):
             + " - `StableDiffusionXLPrepareAdditionalConditioningStep` is used to prepare the additional conditioning\n"
         )
 
-
 # before_denoise: img2img
 class StableDiffusionXLImg2ImgBeforeDenoiseStep(SequentialPipelineBlocks):
     block_classes = [
@@ -118,7 +98,6 @@ class StableDiffusionXLImg2ImgBeforeDenoiseStep(SequentialPipelineBlocks):
             + " - `StableDiffusionXLImg2ImgPrepareAdditionalConditioningStep` is used to prepare the additional conditioning\n"
         )
 
-
 # before_denoise: inpainting
 class StableDiffusionXLInpaintBeforeDenoiseStep(SequentialPipelineBlocks):
     block_classes = [
@@ -137,7 +116,6 @@ class StableDiffusionXLInpaintBeforeDenoiseStep(SequentialPipelineBlocks):
             + " - `StableDiffusionXLInpaintPrepareLatentsStep` is used to prepare the latents\n"
             + " - `StableDiffusionXLImg2ImgPrepareAdditionalConditioningStep` is used to prepare the additional conditioning\n"
         )
-
 
 # before_denoise: all task (text2img, img2img, inpainting)
 class StableDiffusionXLAutoBeforeDenoiseStep(AutoPipelineBlocks):
@@ -159,7 +137,6 @@ class StableDiffusionXLAutoBeforeDenoiseStep(AutoPipelineBlocks):
             + " - `StableDiffusionXLBeforeDenoiseStep` (text2img) is used when both `image_latents` and `mask` are not provided.\n"
         )
 
-
 # optional controlnet input step (after before_denoise, before denoise)
 # works for both controlnet and controlnet_union
 class StableDiffusionXLAutoControlNetInputStep(AutoPipelineBlocks):
@@ -178,7 +155,6 @@ class StableDiffusionXLAutoControlNetInputStep(AutoPipelineBlocks):
             + " - if neither `control_mode` nor `control_image` is provided, step will be skipped."
         )
 
-
 # denoise: controlnet (text2img, img2img, inpainting)
 class StableDiffusionXLAutoControlNetDenoiseStep(AutoPipelineBlocks):
     block_classes = [StableDiffusionXLInpaintControlNetDenoiseStep, StableDiffusionXLControlNetDenoiseStep]
@@ -195,7 +171,6 @@ class StableDiffusionXLAutoControlNetDenoiseStep(AutoPipelineBlocks):
             " - `StableDiffusionXLControlNetDenoiseStep` (controlnet_denoise) is used when mask is not provided but controlnet_cond is provided."
             " - If neither mask nor controlnet_cond are provided, step will be skipped."
         )
-
 
 # denoise: all task with or without controlnet (text2img, img2img, inpainting)
 class StableDiffusionXLAutoDenoiseStep(AutoPipelineBlocks):
@@ -217,7 +192,6 @@ class StableDiffusionXLAutoDenoiseStep(AutoPipelineBlocks):
             " - `StableDiffusionXLDenoiseStep` (denoise) is used when neither mask nor controlnet_cond are provided (support text2img and img2img tasks)."
         )
 
-
 # decode: inpaint
 class StableDiffusionXLInpaintDecodeStep(SequentialPipelineBlocks):
     block_classes = [StableDiffusionXLDecodeStep, StableDiffusionXLInpaintOverlayMaskStep]
@@ -231,7 +205,6 @@ class StableDiffusionXLInpaintDecodeStep(SequentialPipelineBlocks):
             + " - `StableDiffusionXLDecodeStep` is used to decode the denoised latents into images\n"
             + " - `StableDiffusionXLInpaintOverlayMaskStep` is used to overlay the mask on the image"
         )
-
 
 # decode: all task (text2img, img2img, inpainting)
 class StableDiffusionXLAutoDecodeStep(AutoPipelineBlocks):
@@ -247,7 +220,6 @@ class StableDiffusionXLAutoDecodeStep(AutoPipelineBlocks):
             + " - `StableDiffusionXLInpaintDecodeStep` (inpaint) is used when `padding_mask_crop` is provided.\n"
             + " - `StableDiffusionXLDecodeStep` (non-inpaint) is used when `padding_mask_crop` is not provided."
         )
-
 
 class StableDiffusionXLCoreDenoiseStep(SequentialPipelineBlocks):
     block_classes = [
@@ -274,7 +246,6 @@ class StableDiffusionXLCoreDenoiseStep(SequentialPipelineBlocks):
             + "- to run the ip_adapter workflow, you need to load ip_adapter into your unet and provide `ip_adapter_embeds`\n"
             + "- for text-to-image generation, all you need to provide is prompt embeddings\n"
         )
-
 
 # ip-adapter, controlnet, text2img, img2img, inpainting
 class StableDiffusionXLAutoBlocks(SequentialPipelineBlocks):
@@ -305,7 +276,6 @@ class StableDiffusionXLAutoBlocks(SequentialPipelineBlocks):
             + "- for text-to-image generation, all you need to provide is `prompt`"
         )
 
-
 # controlnet (input + denoise step)
 class StableDiffusionXLAutoControlnetStep(SequentialPipelineBlocks):
     block_classes = [
@@ -321,7 +291,6 @@ class StableDiffusionXLAutoControlnetStep(SequentialPipelineBlocks):
             + "It works for both controlnet and controlnet_union and supports text2img, img2img and inpainting tasks."
             + " (it should be replace at 'denoise' step)"
         )
-
 
 TEXT2IMAGE_BLOCKS = InsertableDict(
     [
@@ -367,7 +336,6 @@ CONTROLNET_BLOCKS = InsertableDict(
     ]
 )
 
-
 IP_ADAPTER_BLOCKS = InsertableDict(
     [
         ("ip_adapter", StableDiffusionXLAutoIPAdapterStep),
@@ -383,7 +351,6 @@ AUTO_BLOCKS = InsertableDict(
         ("decode", StableDiffusionXLAutoDecodeStep),
     ]
 )
-
 
 ALL_BLOCKS = {
     "text2img": TEXT2IMAGE_BLOCKS,

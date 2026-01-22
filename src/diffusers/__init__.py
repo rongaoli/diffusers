@@ -26,13 +26,12 @@ from .utils import (
     is_transformers_version,
 )
 
-
 # Lazy Import based on
 # https://github.com/huggingface/transformers/blob/main/src/transformers/__init__.py
 
-# When adding a new object to this init, please add it to `_import_structure`. The `_import_structure` is a dictionary submodule to list of object names,
+# When adding a new object to this init, please ad...
 # and is used to defer the actual importing for when the objects are requested.
-# This way `import diffusers` provides the names in the namespace without actually importing anything (and especially none of the backends).
+# This way `import diffusers` provides the names i...
 
 _import_structure = {
     "configuration_utils": ["ConfigMixin"],
@@ -696,7 +695,6 @@ else:
         ]
     )
 
-
 try:
     if not (is_torch_available() and is_transformers_available() and is_opencv_available()):
         raise OptionalDependencyNotAvailable()
@@ -781,7 +779,6 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_transformers_and_torch_and_note_seq_objects) if not name.startswith("_")
     ]
 
-
 else:
     _import_structure["pipelines"].extend(["SpectrogramDiffusionPipeline"])
 
@@ -794,7 +791,6 @@ except OptionalDependencyNotAvailable:
     _import_structure["utils.dummy_flax_objects"] = [
         name for name in dir(dummy_flax_objects) if not name.startswith("_")
     ]
-
 
 else:
     _import_structure["models.controlnets.controlnet_flax"] = ["FlaxControlNetModel"]
@@ -816,7 +812,6 @@ else:
         ]
     )
 
-
 try:
     if not (is_flax_available() and is_transformers_available()):
         raise OptionalDependencyNotAvailable()
@@ -826,7 +821,6 @@ except OptionalDependencyNotAvailable:
     _import_structure["utils.dummy_flax_and_transformers_objects"] = [
         name for name in dir(dummy_flax_and_transformers_objects) if not name.startswith("_")
     ]
-
 
 else:
     _import_structure["pipelines"].extend(
@@ -848,7 +842,6 @@ except OptionalDependencyNotAvailable:
     _import_structure["utils.dummy_note_seq_objects"] = [
         name for name in dir(dummy_note_seq_objects) if not name.startswith("_")
     ]
-
 
 else:
     _import_structure["pipelines"].extend(["MidiProcessor"])

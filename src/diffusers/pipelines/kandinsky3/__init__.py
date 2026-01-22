@@ -9,7 +9,6 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
 
@@ -23,7 +22,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["pipeline_kandinsky3"] = ["Kandinsky3Pipeline"]
     _import_structure["pipeline_kandinsky3_img2img"] = ["Kandinsky3Img2ImgPipeline"]
-
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:

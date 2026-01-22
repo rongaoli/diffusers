@@ -10,7 +10,6 @@ from ..utils import (
     logging,
 )
 
-
 logger = logging.get_logger(__name__)
 logger.warning(
     "Modular Diffusers is currently an experimental feature under active development. The API is subject to breaking changes in future releases."

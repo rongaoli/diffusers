@@ -1,18 +1,3 @@
-# Copyright 2025 The CogVideoX team, Tsinghua University & ZhipuAI and The HuggingFace Team.
-# All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
@@ -30,45 +15,11 @@ from ..modeling_outputs import Transformer2DModelOutput
 from ..modeling_utils import ModelMixin
 from ..normalization import AdaLayerNorm, CogVideoXLayerNormZero
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 @maybe_allow_in_graph
 class CogVideoXBlock(nn.Module):
-    r"""
-    Transformer block used in [CogVideoX](https://github.com/THUDM/CogVideo) model.
 
-    Parameters:
-        dim (`int`):
-            The number of channels in the input and output.
-        num_attention_heads (`int`):
-            The number of heads to use for multi-head attention.
-        attention_head_dim (`int`):
-            The number of channels in each head.
-        time_embed_dim (`int`):
-            The number of channels in timestep embedding.
-        dropout (`float`, defaults to `0.0`):
-            The dropout probability to use.
-        activation_fn (`str`, defaults to `"gelu-approximate"`):
-            Activation function to be used in feed-forward.
-        attention_bias (`bool`, defaults to `False`):
-            Whether or not to use bias in attention projection layers.
-        qk_norm (`bool`, defaults to `True`):
-            Whether or not to use normalization after query and key projections in Attention.
-        norm_elementwise_affine (`bool`, defaults to `True`):
-            Whether to use learnable elementwise affine parameters for normalization.
-        norm_eps (`float`, defaults to `1e-5`):
-            Epsilon value for normalization layers.
-        final_dropout (`bool` defaults to `False`):
-            Whether to apply a final dropout after the last feed-forward layer.
-        ff_inner_dim (`int`, *optional*, defaults to `None`):
-            Custom hidden dimension of Feed-forward layer. If not provided, `4 * dim` is used.
-        ff_bias (`bool`, defaults to `True`):
-            Whether or not to use bias in Feed-forward layer.
-        attention_out_bias (`bool`, defaults to `True`):
-            Whether or not to use bias in Attention output projection layer.
-    """
 
     def __init__(
         self,
@@ -156,62 +107,8 @@ class CogVideoXBlock(nn.Module):
 
         return hidden_states, encoder_hidden_states
 
-
 class CogVideoXTransformer3DModel(ModelMixin, AttentionMixin, ConfigMixin, PeftAdapterMixin, CacheMixin):
-    """
-    A Transformer model for video-like data in [CogVideoX](https://github.com/THUDM/CogVideo).
 
-    Parameters:
-        num_attention_heads (`int`, defaults to `30`):
-            The number of heads to use for multi-head attention.
-        attention_head_dim (`int`, defaults to `64`):
-            The number of channels in each head.
-        in_channels (`int`, defaults to `16`):
-            The number of channels in the input.
-        out_channels (`int`, *optional*, defaults to `16`):
-            The number of channels in the output.
-        flip_sin_to_cos (`bool`, defaults to `True`):
-            Whether to flip the sin to cos in the time embedding.
-        time_embed_dim (`int`, defaults to `512`):
-            Output dimension of timestep embeddings.
-        ofs_embed_dim (`int`, defaults to `512`):
-            Output dimension of "ofs" embeddings used in CogVideoX-5b-I2B in version 1.5
-        text_embed_dim (`int`, defaults to `4096`):
-            Input dimension of text embeddings from the text encoder.
-        num_layers (`int`, defaults to `30`):
-            The number of layers of Transformer blocks to use.
-        dropout (`float`, defaults to `0.0`):
-            The dropout probability to use.
-        attention_bias (`bool`, defaults to `True`):
-            Whether to use bias in the attention projection layers.
-        sample_width (`int`, defaults to `90`):
-            The width of the input latents.
-        sample_height (`int`, defaults to `60`):
-            The height of the input latents.
-        sample_frames (`int`, defaults to `49`):
-            The number of frames in the input latents. Note that this parameter was incorrectly initialized to 49
-            instead of 13 because CogVideoX processed 13 latent frames at once in its default and recommended settings,
-            but cannot be changed to the correct value to ensure backwards compatibility. To create a transformer with
-            K latent frames, the correct value to pass here would be: ((K - 1) * temporal_compression_ratio + 1).
-        patch_size (`int`, defaults to `2`):
-            The size of the patches to use in the patch embedding layer.
-        temporal_compression_ratio (`int`, defaults to `4`):
-            The compression ratio across the temporal dimension. See documentation for `sample_frames`.
-        max_text_seq_length (`int`, defaults to `226`):
-            The maximum sequence length of the input text embeddings.
-        activation_fn (`str`, defaults to `"gelu-approximate"`):
-            Activation function to use in feed-forward.
-        timestep_activation_fn (`str`, defaults to `"silu"`):
-            Activation function to use when generating the timestep embeddings.
-        norm_elementwise_affine (`bool`, defaults to `True`):
-            Whether to use elementwise affine in normalization layers.
-        norm_eps (`float`, defaults to `1e-5`):
-            The epsilon value to use in normalization layers.
-        spatial_interpolation_scale (`float`, defaults to `1.875`):
-            Scaling factor to apply in 3D positional embeddings across spatial dimensions.
-        temporal_interpolation_scale (`float`, defaults to `1.0`):
-            Scaling factor to apply in 3D positional embeddings across temporal dimensions.
-    """
 
     _skip_layerwise_casting_patterns = ["patch_embed", "norm"]
     _supports_gradient_checkpointing = True
@@ -331,14 +228,9 @@ class CogVideoXTransformer3DModel(ModelMixin, AttentionMixin, ConfigMixin, PeftA
 
         self.gradient_checkpointing = False
 
-    # Copied from diffusers.models.unets.unet_2d_condition.UNet2DConditionModel.fuse_qkv_projections with FusedAttnProcessor2_0->FusedCogVideoXAttnProcessor2_0
+    # Copied from diffusers.models.unets.unet_2d_c...
     def fuse_qkv_projections(self):
-        """
-        Enables fused QKV projections. For self-attention modules, all projection matrices (i.e., query, key, value)
-        are fused. For cross-attention modules, key and value projection matrices are fused.
 
-        > [!WARNING] > This API is 🧪 experimental.
-        """
         self.original_attn_processors = None
 
         for _, attn_processor in self.attn_processors.items():
@@ -353,13 +245,9 @@ class CogVideoXTransformer3DModel(ModelMixin, AttentionMixin, ConfigMixin, PeftA
 
         self.set_attn_processor(FusedCogVideoXAttnProcessor2_0())
 
-    # Copied from diffusers.models.unets.unet_2d_condition.UNet2DConditionModel.unfuse_qkv_projections
+    # Copied from diffusers.models.unets.unet_2d_c...
     def unfuse_qkv_projections(self):
-        """Disables the fused QKV projection if enabled.
 
-        > [!WARNING] > This API is 🧪 experimental.
-
-        """
         if self.original_attn_processors is not None:
             self.set_attn_processor(self.original_attn_processors)
 

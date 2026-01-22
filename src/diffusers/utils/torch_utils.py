@@ -1,19 +1,4 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""
 PyTorch utilities: Utilities related to PyTorch
-"""
 
 import functools
 import os
@@ -21,7 +6,6 @@ from typing import Callable, Dict, List, Optional, Tuple, Union
 
 from . import logging
 from .import_utils import is_torch_available, is_torch_mlu_available, is_torch_npu_available, is_torch_version
-
 
 if is_torch_available():
     import torch
@@ -86,7 +70,6 @@ except (ImportError, ModuleNotFoundError):
     def maybe_allow_in_graph(cls):
         return cls
 
-
 # This dispatches a defined function according to the accelerator from the function definitions.
 def _device_agnostic_dispatch(device: str, dispatch_table: Dict[str, Callable], *args, **kwargs):
     if device not in dispatch_table:
@@ -101,35 +84,27 @@ def _device_agnostic_dispatch(device: str, dispatch_table: Dict[str, Callable], 
 
     return fn(*args, **kwargs)
 
-
 # These are callables which automatically dispatch the function specific to the accelerator
 def backend_manual_seed(device: str, seed: int):
     return _device_agnostic_dispatch(device, BACKEND_MANUAL_SEED, seed)
 
-
 def backend_synchronize(device: str):
     return _device_agnostic_dispatch(device, BACKEND_SYNCHRONIZE)
-
 
 def backend_empty_cache(device: str):
     return _device_agnostic_dispatch(device, BACKEND_EMPTY_CACHE)
 
-
 def backend_device_count(device: str):
     return _device_agnostic_dispatch(device, BACKEND_DEVICE_COUNT)
-
 
 def backend_reset_peak_memory_stats(device: str):
     return _device_agnostic_dispatch(device, BACKEND_RESET_PEAK_MEMORY_STATS)
 
-
 def backend_reset_max_memory_allocated(device: str):
     return _device_agnostic_dispatch(device, BACKEND_RESET_MAX_MEMORY_ALLOCATED)
 
-
 def backend_max_memory_allocated(device: str):
     return _device_agnostic_dispatch(device, BACKEND_MAX_MEMORY_ALLOCATED)
-
 
 # These are callables which return boolean behaviour flags and can be used to specify some
 # device agnostic alternative where the feature is unsupported.
@@ -142,7 +117,6 @@ def backend_supports_training(device: str):
 
     return BACKEND_SUPPORTS_TRAINING[device]
 
-
 def randn_tensor(
     shape: Union[Tuple, List],
     generator: Optional[Union[List["torch.Generator"], "torch.Generator"]] = None,
@@ -150,10 +124,7 @@ def randn_tensor(
     dtype: Optional["torch.dtype"] = None,
     layout: Optional["torch.layout"] = None,
 ):
-    """A helper function to create random tensors on the desired `device` with the desired `dtype`. When
-    passing a list of generators, you can seed each batch size individually. If CPU generators are passed, the tensor
-    is always created on the CPU.
-    """
+
     # device on which tensor is created defaults to device
     if isinstance(device, str):
         device = torch.device(device)
@@ -192,25 +163,18 @@ def randn_tensor(
 
     return latents
 
-
 def is_compiled_module(module) -> bool:
-    """Check whether the module was compiled with torch.compile()"""
+
     if is_torch_version("<", "2.0.0") or not hasattr(torch, "_dynamo"):
         return False
     return isinstance(module, torch._dynamo.eval_frame.OptimizedModule)
 
-
 def unwrap_module(module):
-    """Unwraps a module if it was compiled with torch.compile()"""
+
     return module._orig_mod if is_compiled_module(module) else module
 
-
 def fourier_filter(x_in: "torch.Tensor", threshold: int, scale: int) -> "torch.Tensor":
-    """Fourier filter as introduced in FreeU (https://huggingface.co/papers/2309.11497).
 
-    This version of the method comes from here:
-    https://github.com/huggingface/diffusers/pull/5164#issuecomment-1732638706
-    """
     x = x_in
     B, C, H, W = x.shape
 
@@ -238,22 +202,10 @@ def fourier_filter(x_in: "torch.Tensor", threshold: int, scale: int) -> "torch.T
 
     return x_filtered.to(dtype=x_in.dtype)
 
-
 def apply_freeu(
     resolution_idx: int, hidden_states: "torch.Tensor", res_hidden_states: "torch.Tensor", **freeu_kwargs
 ) -> Tuple["torch.Tensor", "torch.Tensor"]:
-    """Applies the FreeU mechanism as introduced in https://huggingface.co/papers/2309.11497. Adapted from the official
-    code repository: https://github.com/ChenyangSi/FreeU.
 
-    Args:
-        resolution_idx (`int`): Integer denoting the UNet block where FreeU is being applied.
-        hidden_states (`torch.Tensor`): Inputs to the underlying block.
-        res_hidden_states (`torch.Tensor`): Features from the skip block corresponding to the underlying block.
-        s1 (`float`): Scaling factor for stage 1 to attenuate the contributions of the skip features.
-        s2 (`float`): Scaling factor for stage 2 to attenuate the contributions of the skip features.
-        b1 (`float`): Scaling factor for stage 1 to amplify the contributions of backbone features.
-        b2 (`float`): Scaling factor for stage 2 to amplify the contributions of backbone features.
-    """
     if resolution_idx == 0:
         num_half_channels = hidden_states.shape[1] // 2
         hidden_states[:, :num_half_channels] = hidden_states[:, :num_half_channels] * freeu_kwargs["b1"]
@@ -265,7 +217,6 @@ def apply_freeu(
 
     return hidden_states, res_hidden_states
 
-
 def get_torch_cuda_device_capability():
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -274,7 +225,6 @@ def get_torch_cuda_device_capability():
         return float(compute_capability)
     else:
         return None
-
 
 @functools.lru_cache
 def get_device():
@@ -291,7 +241,6 @@ def get_device():
     else:
         return "cpu"
 
-
 def empty_device_cache(device_type: Optional[str] = None):
     if device_type is None:
         device_type = get_device()
@@ -300,19 +249,14 @@ def empty_device_cache(device_type: Optional[str] = None):
     device_mod = getattr(torch, device_type, torch.cuda)
     device_mod.empty_cache()
 
-
 def device_synchronize(device_type: Optional[str] = None):
     if device_type is None:
         device_type = get_device()
     device_mod = getattr(torch, device_type, torch.cuda)
     device_mod.synchronize()
 
-
 def enable_full_determinism():
-    """
-    Helper function for reproducible behavior during distributed training. See
-    - https://pytorch.org/docs/stable/notes/randomness.html for pytorch
-    """
+
     #  Enable PyTorch deterministic mode. This potentially requires either the environment
     #  variable 'CUDA_LAUNCH_BLOCKING' or 'CUBLAS_WORKSPACE_CONFIG' to be set,
     # depending on the CUDA version, so we set them both here
@@ -325,12 +269,10 @@ def enable_full_determinism():
     torch.backends.cudnn.benchmark = False
     torch.backends.cuda.matmul.allow_tf32 = False
 
-
 def disable_full_determinism():
     os.environ["CUDA_LAUNCH_BLOCKING"] = "0"
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ""
     torch.use_deterministic_algorithms(False)
-
 
 if is_torch_available():
     torch_device = get_device()

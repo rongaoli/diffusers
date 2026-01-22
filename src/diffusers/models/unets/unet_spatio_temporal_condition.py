@@ -13,58 +13,16 @@ from ..embeddings import TimestepEmbedding, Timesteps
 from ..modeling_utils import ModelMixin
 from .unet_3d_blocks import UNetMidBlockSpatioTemporal, get_down_block, get_up_block
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 @dataclass
 class UNetSpatioTemporalConditionOutput(BaseOutput):
-    """
-    The output of [`UNetSpatioTemporalConditionModel`].
 
-    Args:
-        sample (`torch.Tensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
-            The hidden states output conditioned on `encoder_hidden_states` input. Output of last layer of model.
-    """
 
     sample: torch.Tensor = None
 
-
 class UNetSpatioTemporalConditionModel(ModelMixin, AttentionMixin, ConfigMixin, UNet2DConditionLoadersMixin):
-    r"""
-    A conditional Spatio-Temporal UNet model that takes a noisy video frames, conditional state, and a timestep and
-    returns a sample shaped output.
 
-    This model inherits from [`ModelMixin`]. Check the superclass documentation for it's generic methods implemented
-    for all models (such as downloading or saving).
-
-    Parameters:
-        sample_size (`int` or `Tuple[int, int]`, *optional*, defaults to `None`):
-            Height and width of input/output sample.
-        in_channels (`int`, *optional*, defaults to 8): Number of channels in the input sample.
-        out_channels (`int`, *optional*, defaults to 4): Number of channels in the output.
-        down_block_types (`Tuple[str]`, *optional*, defaults to `("CrossAttnDownBlockSpatioTemporal", "CrossAttnDownBlockSpatioTemporal", "CrossAttnDownBlockSpatioTemporal", "DownBlockSpatioTemporal")`):
-            The tuple of downsample blocks to use.
-        up_block_types (`Tuple[str]`, *optional*, defaults to `("UpBlockSpatioTemporal", "CrossAttnUpBlockSpatioTemporal", "CrossAttnUpBlockSpatioTemporal", "CrossAttnUpBlockSpatioTemporal")`):
-            The tuple of upsample blocks to use.
-        block_out_channels (`Tuple[int]`, *optional*, defaults to `(320, 640, 1280, 1280)`):
-            The tuple of output channels for each block.
-        addition_time_embed_dim: (`int`, defaults to 256):
-            Dimension to to encode the additional time ids.
-        projection_class_embeddings_input_dim (`int`, defaults to 768):
-            The dimension of the projection of encoded `added_time_ids`.
-        layers_per_block (`int`, *optional*, defaults to 2): The number of layers per block.
-        cross_attention_dim (`int` or `Tuple[int]`, *optional*, defaults to 1280):
-            The dimension of the cross attention features.
-        transformer_layers_per_block (`int`, `Tuple[int]`, or `Tuple[Tuple]` , *optional*, defaults to 1):
-            The number of transformer blocks of type [`~models.attention.BasicTransformerBlock`]. Only relevant for
-            [`~models.unets.unet_3d_blocks.CrossAttnDownBlockSpatioTemporal`],
-            [`~models.unets.unet_3d_blocks.CrossAttnUpBlockSpatioTemporal`],
-            [`~models.unets.unet_3d_blocks.UNetMidBlockSpatioTemporal`].
-        num_attention_heads (`int`, `Tuple[int]`, defaults to `(5, 10, 10, 20)`):
-            The number of attention heads.
-        dropout (`float`, *optional*, defaults to 0.0): The dropout probability to use.
-    """
 
     _supports_gradient_checkpointing = True
 
@@ -247,9 +205,7 @@ class UNetSpatioTemporalConditionModel(ModelMixin, AttentionMixin, ConfigMixin, 
         )
 
     def set_default_attn_processor(self):
-        """
-        Disables custom attention processors and sets the default attention implementation.
-        """
+
         if all(proc.__class__ in CROSS_ATTENTION_PROCESSORS for proc in self.attn_processors.values()):
             processor = AttnProcessor()
         else:
@@ -259,20 +215,9 @@ class UNetSpatioTemporalConditionModel(ModelMixin, AttentionMixin, ConfigMixin, 
 
         self.set_attn_processor(processor)
 
-    # Copied from diffusers.models.unets.unet_3d_condition.UNet3DConditionModel.enable_forward_chunking
+    # Copied from diffusers.models.unets.unet_3d_c...
     def enable_forward_chunking(self, chunk_size: Optional[int] = None, dim: int = 0) -> None:
-        """
-        Sets the attention processor to use [feed forward
-        chunking](https://huggingface.co/blog/reformer#2-chunked-feed-forward-layers).
 
-        Parameters:
-            chunk_size (`int`, *optional*):
-                The chunk size of the feed-forward layers. If not specified, will run feed-forward layer individually
-                over each tensor of dim=`dim`.
-            dim (`int`, *optional*, defaults to `0`):
-                The dimension over which the feed-forward computation should be chunked. Choose between dim=0 (batch)
-                or dim=1 (sequence length).
-        """
         if dim not in [0, 1]:
             raise ValueError(f"Make sure to set `dim` to either 0 or 1, not {dim}")
 
@@ -297,33 +242,15 @@ class UNetSpatioTemporalConditionModel(ModelMixin, AttentionMixin, ConfigMixin, 
         added_time_ids: torch.Tensor,
         return_dict: bool = True,
     ) -> Union[UNetSpatioTemporalConditionOutput, Tuple]:
-        r"""
-        The [`UNetSpatioTemporalConditionModel`] forward method.
-
-        Args:
-            sample (`torch.Tensor`):
-                The noisy input tensor with the following shape `(batch, num_frames, channel, height, width)`.
-            timestep (`torch.Tensor` or `float` or `int`): The number of timesteps to denoise an input.
-            encoder_hidden_states (`torch.Tensor`):
-                The encoder hidden states with shape `(batch, sequence_length, cross_attention_dim)`.
-            added_time_ids: (`torch.Tensor`):
-                The additional time ids with shape `(batch, num_additional_ids)`. These are encoded with sinusoidal
-                embeddings and added to the time embeddings.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether or not to return a [`~models.unet_slatio_temporal.UNetSpatioTemporalConditionOutput`] instead
-                of a plain tuple.
-        Returns:
-            [`~models.unet_slatio_temporal.UNetSpatioTemporalConditionOutput`] or `tuple`:
-                If `return_dict` is True, an [`~models.unet_slatio_temporal.UNetSpatioTemporalConditionOutput`] is
-                returned, otherwise a `tuple` is returned where the first element is the sample tensor.
-        """
+        
+        """r"""
         # By default samples have to be AT least a multiple of the overall upsampling factor.
         # The overall upsampling factor is equal to 2 ** (# num of upsampling layears).
         # However, the upsampling interpolation output size can be forced to fit any upsampling size
         # on the fly if necessary.
         default_overall_up_factor = 2**self.num_upsamplers
 
-        # upsample size should be forwarded when sample is not a multiple of `default_overall_up_factor`
+        # upsample size should be forwarded when s...
         forward_upsample_size = False
         upsample_size = None
 
@@ -366,7 +293,7 @@ class UNetSpatioTemporalConditionModel(ModelMixin, AttentionMixin, ConfigMixin, 
         emb = emb + aug_emb
 
         # Flatten the batch and frames dimensions
-        # sample: [batch, frames, channels, height, width] -> [batch * frames, channels, height, width]
+        # sample: [batch, frames, channels, height...
         sample = sample.flatten(0, 1)
         # Repeat the embeddings num_video_frames times
         # emb: [batch, channels] -> [batch * frames, channels]

@@ -5,9 +5,7 @@ from transformers import CLIPConfig, CLIPVisionModelWithProjection, PreTrainedMo
 
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
-
 
 class IFSafetyChecker(PreTrainedModel):
     config_class = CLIPConfig

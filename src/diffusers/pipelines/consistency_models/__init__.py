@@ -5,7 +5,6 @@ from ...utils import (
     _LazyModule,
 )
 
-
 _import_structure = {
     "pipeline_consistency_models": ["ConsistencyModelPipeline"],
 }

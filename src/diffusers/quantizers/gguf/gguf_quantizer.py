@@ -2,10 +2,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from ..base import DiffusersQuantizer
 
-
 if TYPE_CHECKING:
     from ...models.modeling_utils import ModelMixin
-
 
 from ...utils import (
     get_module_from_name,
@@ -16,7 +14,6 @@ from ...utils import (
     is_torch_available,
     logging,
 )
-
 
 if is_torch_available() and is_gguf_available():
     import torch
@@ -29,9 +26,7 @@ if is_torch_available() and is_gguf_available():
         _replace_with_gguf_linear,
     )
 
-
 logger = logging.get_logger(__name__)
-
 
 class GGUFQuantizer(DiffusersQuantizer):
     use_keep_in_fp32_modules = True
@@ -56,7 +51,7 @@ class GGUFQuantizer(DiffusersQuantizer):
                 "To load GGUF format files you must have `gguf` installed in your environment: `pip install gguf>=0.10.0`"
             )
 
-    # Copied from diffusers.quantizers.bitsandbytes.bnb_quantizer.BnB4BitDiffusersQuantizer.adjust_max_memory
+    # Copied from diffusers.quantizers.bitsandbyte...
     def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
         # need more space for buffers that are created during quantization
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}

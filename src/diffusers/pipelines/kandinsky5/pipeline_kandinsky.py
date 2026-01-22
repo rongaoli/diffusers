@@ -1,17 +1,3 @@
-# Copyright 2025 The Kandinsky Team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import html
 from typing import Callable, Dict, List, Optional, Union
 
@@ -38,7 +24,6 @@ from ...video_processor import VideoProcessor
 from ..pipeline_utils import DiffusionPipeline
 from .pipeline_output import KandinskyPipelineOutput
 
-
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
@@ -51,109 +36,31 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 if is_ftfy_available():
     import ftfy
 
-
 logger = logging.get_logger(__name__)
 
 EXAMPLE_DOC_STRING = """
-    Examples:
-
-        ```python
-        >>> import torch
-        >>> from diffusers import Kandinsky5T2VPipeline
-        >>> from diffusers.utils import export_to_video
-
-        >>> # Available models:
-        >>> # kandinskylab/Kandinsky-5.0-T2V-Pro-sft-5s-Diffusers
-        >>> # kandinskylab/Kandinsky-5.0-T2V-Lite-sft-5s-Diffusers
-        >>> # kandinskylab/Kandinsky-5.0-T2V-Lite-nocfg-5s-Diffusers
-        >>> # kandinskylab/Kandinsky-5.0-T2V-Lite-distilled16steps-5s-Diffusers
-        >>> # kandinskylab/Kandinsky-5.0-T2V-Lite-pretrain-5s-Diffusers
-        >>> # kandinskylab/Kandinsky-5.0-T2V-Lite-sft-10s-Diffusers
-        >>> # kandinskylab/Kandinsky-5.0-T2V-Lite-nocfg-10s-Diffusers
-        >>> # kandinskylab/Kandinsky-5.0-T2V-Lite-distilled16steps-10s-Diffusers
-        >>> # kandinskylab/Kandinsky-5.0-T2V-Lite-pretrain-10s-Diffusers
-
-        >>> model_id = "kandinskylab/Kandinsky-5.0-T2V-Lite-sft-5s-Diffusers"
-        >>> pipe = Kandinsky5T2VPipeline.from_pretrained(model_id, torch_dtype=torch.bfloat16)
-        >>> pipe = pipe.to("cuda")
-
-        >>> prompt = "A cat and a dog baking a cake together in a kitchen."
-        >>> negative_prompt = "Static, 2D cartoon, cartoon, 2d animation, paintings, images, worst quality, low quality, ugly, deformed, walking backwards"
-
-        >>> output = pipe(
-        ...     prompt=prompt,
-        ...     negative_prompt=negative_prompt,
-        ...     height=512,
-        ...     width=768,
-        ...     num_frames=121,
-        ...     num_inference_steps=50,
-        ...     guidance_scale=5.0,
-        ... ).frames[0]
-
-        >>> export_to_video(output, "output.mp4", fps=24, quality=9)
-        ```
-"""
 
 
 def basic_clean(text):
-    """
-    Copied from https://github.com/huggingface/diffusers/blob/main/src/diffusers/pipelines/wan/pipeline_wan.py
 
-    Clean text using ftfy if available and unescape HTML entities.
-    """
     if is_ftfy_available():
         text = ftfy.fix_text(text)
     text = html.unescape(html.unescape(text))
     return text.strip()
 
-
 def whitespace_clean(text):
-    """
-    Copied from https://github.com/huggingface/diffusers/blob/main/src/diffusers/pipelines/wan/pipeline_wan.py
 
-    Normalize whitespace in text by replacing multiple spaces with single space.
-    """
     text = re.sub(r"\s+", " ", text)
     text = text.strip()
     return text
 
-
 def prompt_clean(text):
-    """
-    Copied from https://github.com/huggingface/diffusers/blob/main/src/diffusers/pipelines/wan/pipeline_wan.py
 
-    Apply both basic cleaning and whitespace normalization to prompts.
-    """
     text = whitespace_clean(basic_clean(text))
     return text
 
-
 class Kandinsky5T2VPipeline(DiffusionPipeline, KandinskyLoraLoaderMixin):
-    r"""
-    Pipeline for text-to-video generation using Kandinsky 5.0.
 
-    This model inherits from [`DiffusionPipeline`]. Check the superclass documentation for the generic methods
-    implemented for all pipelines (downloading, saving, running on a particular device, etc.).
-
-    Args:
-        transformer ([`Kandinsky5Transformer3DModel`]):
-            Conditional Transformer to denoise the encoded video latents.
-        vae ([`AutoencoderKLHunyuanVideo`]):
-            Variational Auto-Encoder Model [hunyuanvideo-community/HunyuanVideo
-            (vae)](https://huggingface.co/hunyuanvideo-community/HunyuanVideo) to encode and decode videos to and from
-            latent representations.
-        text_encoder ([`Qwen2_5_VLForConditionalGeneration`]):
-            Frozen text-encoder [Qwen2.5-VL](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct).
-        tokenizer ([`AutoProcessor`]):
-            Tokenizer for Qwen2.5-VL.
-        text_encoder_2 ([`CLIPTextModel`]):
-            Frozen [CLIP](https://huggingface.co/docs/transformers/model_doc/clip#transformers.CLIPTextModel),
-            specifically the [clip-vit-large-patch14](https://huggingface.co/openai/clip-vit-large-patch14) variant.
-        tokenizer_2 ([`CLIPTokenizer`]):
-            Tokenizer for CLIP.
-        scheduler ([`FlowMatchEulerDiscreteScheduler`]):
-            A scheduler to be used in combination with `transformer` to denoise the encoded video latents.
-    """
 
     model_cpu_offload_seq = "text_encoder->text_encoder_2->transformer->vae"
     _callback_tensor_inputs = [
@@ -207,16 +114,7 @@ class Kandinsky5T2VPipeline(DiffusionPipeline, KandinskyLoraLoaderMixin):
         self.video_processor = VideoProcessor(vae_scale_factor=self.vae_scale_factor_spatial)
 
     def _get_scale_factor(self, height: int, width: int) -> tuple:
-        """
-        Calculate the scale factor based on resolution.
 
-        Args:
-            height (int): Video height
-            width (int): Video width
-
-        Returns:
-            tuple: Scale factor as (temporal_scale, height_scale, width_scale)
-        """
 
         def between_480p(x):
             return 480 <= x <= 854
@@ -228,24 +126,7 @@ class Kandinsky5T2VPipeline(DiffusionPipeline, KandinskyLoraLoaderMixin):
 
     @staticmethod
     def fast_sta_nabla(T: int, H: int, W: int, wT: int = 3, wH: int = 3, wW: int = 3, device="cuda") -> torch.Tensor:
-        """
-        Create a sparse temporal attention (STA) mask for efficient video generation.
 
-        This method generates a mask that limits attention to nearby frames and spatial positions, reducing
-        computational complexity for video generation.
-
-        Args:
-            T (int): Number of temporal frames
-            H (int): Height in latent space
-            W (int): Width in latent space
-            wT (int): Temporal attention window size
-            wH (int): Height attention window size
-            wW (int): Width attention window size
-            device (str): Device to create tensor on
-
-        Returns:
-            torch.Tensor: Sparse attention mask of shape (T*H*W, T*H*W)
-        """
         l = torch.Tensor([T, H, W]).amax()
         r = torch.arange(0, l, 1, dtype=torch.int16, device=device)
         mat = (r.unsqueeze(1) - r.unsqueeze(0)).abs()
@@ -262,19 +143,7 @@ class Kandinsky5T2VPipeline(DiffusionPipeline, KandinskyLoraLoaderMixin):
         return sta.reshape(T * H * W, T * H * W)
 
     def get_sparse_params(self, sample, device):
-        """
-        Generate sparse attention parameters for the transformer based on sample dimensions.
 
-        This method computes the sparse attention configuration needed for efficient video processing in the
-        transformer model.
-
-        Args:
-            sample (torch.Tensor): Input sample tensor
-            device (torch.device): Device to place tensors on
-
-        Returns:
-            Dict: Dictionary containing sparse attention parameters
-        """
         assert self.transformer.config.patch_size[0] == 1
         B, T, H, W, _ = sample.shape
         T, H, W = (
@@ -317,22 +186,7 @@ class Kandinsky5T2VPipeline(DiffusionPipeline, KandinskyLoraLoaderMixin):
         max_sequence_length: int = 256,
         dtype: Optional[torch.dtype] = None,
     ):
-        """
-        Encode prompt using Qwen2.5-VL text encoder.
 
-        This method processes the input prompt through the Qwen2.5-VL model to generate text embeddings suitable for
-        video generation.
-
-        Args:
-            prompt (Union[str, List[str]]): Input prompt or list of prompts
-            device (torch.device): Device to run encoding on
-            num_videos_per_prompt (int): Number of videos to generate per prompt
-            max_sequence_length (int): Maximum sequence length for tokenization
-            dtype (torch.dtype): Data type for embeddings
-
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor]: Text embeddings and cumulative sequence lengths
-        """
         device = device or self._execution_device
         dtype = dtype or self.text_encoder.dtype
 
@@ -386,21 +240,7 @@ class Kandinsky5T2VPipeline(DiffusionPipeline, KandinskyLoraLoaderMixin):
         device: Optional[torch.device] = None,
         dtype: Optional[torch.dtype] = None,
     ):
-        """
-        Encode prompt using CLIP text encoder.
 
-        This method processes the input prompt through the CLIP model to generate pooled embeddings that capture
-        semantic information.
-
-        Args:
-            prompt (Union[str, List[str]]): Input prompt or list of prompts
-            device (torch.device): Device to run encoding on
-            num_videos_per_prompt (int): Number of videos to generate per prompt
-            dtype (torch.dtype): Data type for embeddings
-
-        Returns:
-            torch.Tensor: Pooled text embeddings from CLIP
-        """
         device = device or self._execution_device
         dtype = dtype or self.text_encoder_2.dtype
 
@@ -425,31 +265,8 @@ class Kandinsky5T2VPipeline(DiffusionPipeline, KandinskyLoraLoaderMixin):
         device: Optional[torch.device] = None,
         dtype: Optional[torch.dtype] = None,
     ):
-        r"""
-        Encodes a single prompt (positive or negative) into text encoder hidden states.
-
-        This method combines embeddings from both Qwen2.5-VL and CLIP text encoders to create comprehensive text
-        representations for video generation.
-
-        Args:
-            prompt (`str` or `List[str]`):
-                Prompt to be encoded.
-            num_videos_per_prompt (`int`, *optional*, defaults to 1):
-                Number of videos to generate per prompt.
-            max_sequence_length (`int`, *optional*, defaults to 512):
-                Maximum sequence length for text encoding.
-            device (`torch.device`, *optional*):
-                Torch device.
-            dtype (`torch.dtype`, *optional*):
-                Torch dtype.
-
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-                - Qwen text embeddings of shape (batch_size * num_videos_per_prompt, sequence_length, embedding_dim)
-                - CLIP pooled embeddings of shape (batch_size * num_videos_per_prompt, clip_embedding_dim)
-                - Cumulative sequence lengths (`cu_seqlens`) for Qwen embeddings of shape (batch_size *
-                  num_videos_per_prompt + 1,)
-        """
+        
+        """r"""
         device = device or self._execution_device
         dtype = dtype or self.text_encoder.dtype
 
@@ -525,25 +342,7 @@ class Kandinsky5T2VPipeline(DiffusionPipeline, KandinskyLoraLoaderMixin):
         callback_on_step_end_tensor_inputs=None,
         max_sequence_length=None,
     ):
-        """
-        Validate input parameters for the pipeline.
 
-        Args:
-            prompt: Input prompt
-            negative_prompt: Negative prompt for guidance
-            height: Video height
-            width: Video width
-            prompt_embeds_qwen: Pre-computed Qwen prompt embeddings
-            prompt_embeds_clip: Pre-computed CLIP prompt embeddings
-            negative_prompt_embeds_qwen: Pre-computed Qwen negative prompt embeddings
-            negative_prompt_embeds_clip: Pre-computed CLIP negative prompt embeddings
-            prompt_cu_seqlens: Pre-computed cumulative sequence lengths for Qwen positive prompt
-            negative_prompt_cu_seqlens: Pre-computed cumulative sequence lengths for Qwen negative prompt
-            callback_on_step_end_tensor_inputs: Callback tensor inputs
-
-        Raises:
-            ValueError: If inputs are invalid
-        """
 
         if max_sequence_length is not None and max_sequence_length > 1024:
             raise ValueError("max_sequence_length must be less than 1024")
@@ -582,7 +381,7 @@ class Kandinsky5T2VPipeline(DiffusionPipeline, KandinskyLoraLoaderMixin):
                     "all three must be provided."
                 )
 
-        # Check if prompt or embeddings are provided (either prompt or all required embedding components for positive)
+        # Check if prompt or embeddings are provid...
         if prompt is None and prompt_embeds_qwen is None:
             raise ValueError(
                 "Provide either `prompt` or `prompt_embeds_qwen` (and corresponding `prompt_embeds_clip` and `prompt_cu_seqlens`). Cannot leave all undefined."
@@ -605,28 +404,10 @@ class Kandinsky5T2VPipeline(DiffusionPipeline, KandinskyLoraLoaderMixin):
         num_frames: int = 81,
         dtype: Optional[torch.dtype] = None,
         device: Optional[torch.device] = None,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+        generator: Optional[torch.Generator] = None,
         latents: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        """
-        Prepare initial latent variables for video generation.
 
-        This method creates random noise latents or uses provided latents as starting point for the denoising process.
-
-        Args:
-            batch_size (int): Number of videos to generate
-            num_channels_latents (int): Number of channels in latent space
-            height (int): Height of generated video
-            width (int): Width of generated video
-            num_frames (int): Number of frames in video
-            dtype (torch.dtype): Data type for latents
-            device (torch.device): Device to create latents on
-            generator (torch.Generator): Random number generator
-            latents (torch.Tensor): Pre-existing latents to use
-
-        Returns:
-            torch.Tensor: Prepared latent tensor
-        """
         if latents is not None:
             return latents.to(device=device, dtype=dtype)
 
@@ -666,17 +447,17 @@ class Kandinsky5T2VPipeline(DiffusionPipeline, KandinskyLoraLoaderMixin):
 
     @property
     def guidance_scale(self):
-        """Get the current guidance scale value."""
+
         return self._guidance_scale
 
     @property
     def num_timesteps(self):
-        """Get the number of denoising timesteps."""
+
         return self._num_timesteps
 
     @property
     def interrupt(self):
-        """Check if generation has been interrupted."""
+
         return self._interrupt
 
     @torch.no_grad()
@@ -684,14 +465,14 @@ class Kandinsky5T2VPipeline(DiffusionPipeline, KandinskyLoraLoaderMixin):
     def __call__(
         self,
         prompt: Union[str, List[str]] = None,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        negative_prompt: Optional[str] = None,
         height: int = 512,
         width: int = 768,
         num_frames: int = 121,
         num_inference_steps: int = 50,
         guidance_scale: float = 5.0,
         num_videos_per_prompt: Optional[int] = 1,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+        generator: Optional[torch.Generator] = None,
         latents: Optional[torch.Tensor] = None,
         prompt_embeds_qwen: Optional[torch.Tensor] = None,
         prompt_embeds_clip: Optional[torch.Tensor] = None,
@@ -707,53 +488,8 @@ class Kandinsky5T2VPipeline(DiffusionPipeline, KandinskyLoraLoaderMixin):
         callback_on_step_end_tensor_inputs: List[str] = ["latents"],
         max_sequence_length: int = 512,
     ):
-        r"""
-        The call function to the pipeline for generation.
-
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to guide the video generation. If not defined, pass `prompt_embeds` instead.
-            negative_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to avoid during video generation. If not defined, pass `negative_prompt_embeds`
-                instead. Ignored when not using guidance (`guidance_scale` < `1`).
-            height (`int`, defaults to `512`):
-                The height in pixels of the generated video.
-            width (`int`, defaults to `768`):
-                The width in pixels of the generated video.
-            num_frames (`int`, defaults to `25`):
-                The number of frames in the generated video.
-            num_inference_steps (`int`, defaults to `50`):
-                The number of denoising steps.
-            guidance_scale (`float`, defaults to `5.0`):
-                Guidance scale as defined in classifier-free guidance.
-            num_videos_per_prompt (`int`, *optional*, defaults to 1):
-                The number of videos to generate per prompt.
-            generator (`torch.Generator` or `List[torch.Generator]`, *optional*):
-                A torch generator to make generation deterministic.
-            latents (`torch.Tensor`, *optional*):
-                Pre-generated noisy latents.
-            prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated text embeddings.
-            negative_prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated negative text embeddings.
-            output_type (`str`, *optional*, defaults to `"pil"`):
-                The output format of the generated video.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether or not to return a [`KandinskyPipelineOutput`].
-            callback_on_step_end (`Callable`, `PipelineCallback`, `MultiPipelineCallbacks`, *optional*):
-                A function that is called at the end of each denoising step.
-            callback_on_step_end_tensor_inputs (`List`, *optional*):
-                The list of tensor inputs for the `callback_on_step_end` function.
-            max_sequence_length (`int`, defaults to `512`):
-                The maximum sequence length for text encoding.
-
-        Examples:
-
-        Returns:
-            [`~KandinskyPipelineOutput`] or `tuple`:
-                If `return_dict` is `True`, [`KandinskyPipelineOutput`] is returned, otherwise a `tuple` is returned
-                where the first element is a list with the generated images.
-        """
+        
+        """r"""
         if isinstance(callback_on_step_end, (PipelineCallback, MultiPipelineCallbacks)):
             callback_on_step_end_tensor_inputs = callback_on_step_end.tensor_inputs
 

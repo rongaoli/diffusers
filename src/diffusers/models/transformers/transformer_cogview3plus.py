@@ -1,18 +1,3 @@
-# Copyright 2025 The CogView team, Tsinghua University & ZhipuAI and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-
 from typing import Tuple, Union
 
 import torch
@@ -27,24 +12,10 @@ from ..modeling_outputs import Transformer2DModelOutput
 from ..modeling_utils import ModelMixin
 from ..normalization import AdaLayerNormContinuous, CogView3PlusAdaLayerNormZeroTextImage
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 class CogView3PlusTransformerBlock(nn.Module):
-    r"""
-    Transformer block used in [CogView](https://github.com/THUDM/CogView3) model.
 
-    Args:
-        dim (`int`):
-            The number of channels in the input and output.
-        num_attention_heads (`int`):
-            The number of heads to use for multi-head attention.
-        attention_head_dim (`int`):
-            The number of channels in each head.
-        time_embed_dim (`int`):
-            The number of channels in timestep embedding.
-    """
 
     def __init__(
         self,
@@ -124,41 +95,8 @@ class CogView3PlusTransformerBlock(nn.Module):
             encoder_hidden_states = encoder_hidden_states.clip(-65504, 65504)
         return hidden_states, encoder_hidden_states
 
-
 class CogView3PlusTransformer2DModel(ModelMixin, AttentionMixin, ConfigMixin):
-    r"""
-    The Transformer model introduced in [CogView3: Finer and Faster Text-to-Image Generation via Relay
-    Diffusion](https://huggingface.co/papers/2403.05121).
 
-    Args:
-        patch_size (`int`, defaults to `2`):
-            The size of the patches to use in the patch embedding layer.
-        in_channels (`int`, defaults to `16`):
-            The number of channels in the input.
-        num_layers (`int`, defaults to `30`):
-            The number of layers of Transformer blocks to use.
-        attention_head_dim (`int`, defaults to `40`):
-            The number of channels in each head.
-        num_attention_heads (`int`, defaults to `64`):
-            The number of heads to use for multi-head attention.
-        out_channels (`int`, defaults to `16`):
-            The number of channels in the output.
-        text_embed_dim (`int`, defaults to `4096`):
-            Input dimension of text embeddings from the text encoder.
-        time_embed_dim (`int`, defaults to `512`):
-            Output dimension of timestep embeddings.
-        condition_dim (`int`, defaults to `256`):
-            The embedding dimension of the input SDXL-style resolution conditions (original_size, target_size,
-            crop_coords).
-        pos_embed_max_size (`int`, defaults to `128`):
-            The maximum resolution of the positional embeddings, from which slices of shape `H x W` are taken and added
-            to input patched latents, where `H` and `W` are the latent height and width respectively. A value of 128
-            means that the maximum supported height and width for image generation is `128 * vae_scale_factor *
-            patch_size => 128 * 8 * 2 => 2048`.
-        sample_size (`int`, defaults to `128`):
-            The base resolution of input latents. If height/width is not provided during generation, this value is used
-            to determine the resolution as `sample_size * vae_scale_factor => 128 * 8 => 1024`
-    """
 
     _supports_gradient_checkpointing = True
     _skip_layerwise_casting_patterns = ["patch_embed", "norm"]
@@ -234,14 +172,7 @@ class CogView3PlusTransformer2DModel(ModelMixin, AttentionMixin, ConfigMixin):
         crop_coords: torch.Tensor,
         return_dict: bool = True,
     ) -> Union[Tuple[torch.Tensor], Transformer2DModelOutput]:
-        """
         The [`CogView3PlusTransformer2DModel`] forward method.
-
-        Args:
-            hidden_states (`torch.Tensor`):
-                Input `hidden_states` of shape `(batch size, channel, height, width)`.
-            encoder_hidden_states (`torch.Tensor`):
-                Conditional embeddings (embeddings computed from the input conditions such as prompts) of shape
                 `(batch_size, sequence_len, text_embed_dim)`
             timestep (`torch.LongTensor`):
                 Used to indicate denoising step.
@@ -257,54 +188,3 @@ class CogView3PlusTransformer2DModel(ModelMixin, AttentionMixin, ConfigMixin):
             return_dict (`bool`, *optional*, defaults to `True`):
                 Whether or not to return a [`~models.transformer_2d.Transformer2DModelOutput`] instead of a plain
                 tuple.
-
-        Returns:
-            `torch.Tensor` or [`~models.transformer_2d.Transformer2DModelOutput`]:
-                The denoised latents using provided inputs as conditioning.
-        """
-        height, width = hidden_states.shape[-2:]
-        text_seq_length = encoder_hidden_states.shape[1]
-
-        hidden_states = self.patch_embed(
-            hidden_states, encoder_hidden_states
-        )  # takes care of adding positional embeddings too.
-        emb = self.time_condition_embed(timestep, original_size, target_size, crop_coords, hidden_states.dtype)
-
-        encoder_hidden_states = hidden_states[:, :text_seq_length]
-        hidden_states = hidden_states[:, text_seq_length:]
-
-        for index_block, block in enumerate(self.transformer_blocks):
-            if torch.is_grad_enabled() and self.gradient_checkpointing:
-                hidden_states, encoder_hidden_states = self._gradient_checkpointing_func(
-                    block,
-                    hidden_states,
-                    encoder_hidden_states,
-                    emb,
-                )
-            else:
-                hidden_states, encoder_hidden_states = block(
-                    hidden_states=hidden_states,
-                    encoder_hidden_states=encoder_hidden_states,
-                    emb=emb,
-                )
-
-        hidden_states = self.norm_out(hidden_states, emb)
-        hidden_states = self.proj_out(hidden_states)  # (batch_size, height*width, patch_size*patch_size*out_channels)
-
-        # unpatchify
-        patch_size = self.config.patch_size
-        height = height // patch_size
-        width = width // patch_size
-
-        hidden_states = hidden_states.reshape(
-            shape=(hidden_states.shape[0], height, width, self.out_channels, patch_size, patch_size)
-        )
-        hidden_states = torch.einsum("nhwcpq->nchpwq", hidden_states)
-        output = hidden_states.reshape(
-            shape=(hidden_states.shape[0], self.out_channels, height * patch_size, width * patch_size)
-        )
-
-        if not return_dict:
-            return (output,)
-
-        return Transformer2DModelOutput(sample=output)

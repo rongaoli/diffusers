@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import math
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
@@ -20,37 +6,13 @@ import torch
 from ..configuration_utils import register_to_config
 from .guider_utils import BaseGuidance, GuiderOutput, rescale_noise_cfg
 
-
 if TYPE_CHECKING:
     from ..modular_pipelines.modular_pipeline import BlockState
 
-
 class AdaptiveProjectedGuidance(BaseGuidance):
-    """
-    Adaptive Projected Guidance (APG): https://huggingface.co/papers/2410.02416
+    
+    class AdaptiveProjectedGuidance(BaseGuidance):
 
-    Args:
-        guidance_scale (`float`, defaults to `7.5`):
-            The scale parameter for classifier-free guidance. Higher values result in stronger conditioning on the text
-            prompt, while lower values allow for more freedom in generation. Higher values may lead to saturation and
-            deterioration of image quality.
-        adaptive_projected_guidance_momentum (`float`, defaults to `None`):
-            The momentum parameter for the adaptive projected guidance. Disabled if set to `None`.
-        adaptive_projected_guidance_rescale (`float`, defaults to `15.0`):
-            The rescale factor applied to the noise predictions. This is used to improve image quality and fix
-        guidance_rescale (`float`, defaults to `0.0`):
-            The rescale factor applied to the noise predictions. This is used to improve image quality and fix
-            overexposure. Based on Section 3.4 from [Common Diffusion Noise Schedules and Sample Steps are
-            Flawed](https://huggingface.co/papers/2305.08891).
-        use_original_formulation (`bool`, defaults to `False`):
-            Whether to use the original formulation of classifier-free guidance as proposed in the paper. By default,
-            we use the diffusers-native implementation that has been in the codebase for a long time. See
-            [~guiders.classifier_free_guidance.ClassifierFreeGuidance] for more details.
-        start (`float`, defaults to `0.0`):
-            The fraction of the total number of denoising steps after which guidance starts.
-        stop (`float`, defaults to `1.0`):
-            The fraction of the total number of denoising steps after which guidance stops.
-    """
 
     _input_predictions = ["pred_cond", "pred_uncond"]
 
@@ -151,7 +113,6 @@ class AdaptiveProjectedGuidance(BaseGuidance):
 
         return is_within_range and not is_close
 
-
 class MomentumBuffer:
     def __init__(self, momentum: float):
         self.momentum = momentum
@@ -162,9 +123,38 @@ class MomentumBuffer:
         self.running_average = update_value + new_average
 
     def __repr__(self) -> str:
-        """
-        Returns a string representation showing momentum, shape, statistics, and a slice of the running_average.
-        """
+        class MomentumBuffer:
+    def __init__(self, momentum: float):
+        self.momentum = momentum
+        self.running_average = 0
+
+    def update(self, update_value: torch.Tensor):
+        new_average = self.momentum * self.running_average
+        self.running_average = update_value + new_average
+
+    def __repr__(self) -> str:
+        
+        class MomentumBuffer:
+    def __init__(self, momentum: float):
+        self.momentum = momentum
+        self.running_average = 0
+
+    def update(self, update_value: torch.Tensor):
+        new_average = self.momentum * self.running_average
+        self.running_average = update_value + new_average
+
+    def __repr__(self) -> str:
+        class MomentumBuffer:
+    def __init__(self, momentum: float):
+        self.momentum = momentum
+        self.running_average = 0
+
+    def update(self, update_value: torch.Tensor):
+        new_average = self.momentum * self.running_average
+        self.running_average = update_value + new_average
+
+    def __repr__(self) -> str:
+
         if isinstance(self.running_average, torch.Tensor):
             shape = tuple(self.running_average.shape)
 
@@ -181,7 +171,7 @@ class MomentumBuffer:
             slice_indices = tuple(slice(None, min(3, dim)) for dim in shape)
             sliced_data = self.running_average[slice_indices]
 
-            # Format the slice for display (convert to float32 for numpy compatibility with bfloat16)
+            # Format the slice for display (conver...
             slice_str = str(sliced_data.detach().float().cpu().numpy())
             if len(slice_str) > 200:  # Truncate if too long
                 slice_str = slice_str[:200] + "..."
@@ -198,7 +188,6 @@ class MomentumBuffer:
             )
         else:
             return f"MomentumBuffer(momentum={self.momentum}, running_average={self.running_average})"
-
 
 def normalized_guidance(
     pred_cond: torch.Tensor,

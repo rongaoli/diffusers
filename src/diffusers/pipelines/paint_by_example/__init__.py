@@ -14,7 +14,6 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
 
@@ -28,7 +27,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["image_encoder"] = ["PaintByExampleImageEncoder"]
     _import_structure["pipeline_paint_by_example"] = ["PaintByExamplePipeline"]
-
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:

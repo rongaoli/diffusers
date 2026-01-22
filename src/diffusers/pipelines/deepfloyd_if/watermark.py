@@ -8,7 +8,6 @@ from ...configuration_utils import ConfigMixin
 from ...models.modeling_utils import ModelMixin
 from ...utils import PIL_INTERPOLATION
 
-
 class IFWatermarker(ModelMixin, ConfigMixin):
     def __init__(self):
         super().__init__()
@@ -17,7 +16,7 @@ class IFWatermarker(ModelMixin, ConfigMixin):
         self.watermark_image_as_pil = None
 
     def apply_watermark(self, images: List[PIL.Image.Image], sample_size=None):
-        # Copied from https://github.com/deep-floyd/IF/blob/b77482e36ca2031cb94dbca1001fc1e6400bf4ab/deepfloyd_if/modules/base.py#L287
+        # Copied from https://github.com/deep-floy...
 
         h = images[0].height
         w = images[0].width

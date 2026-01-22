@@ -1,17 +1,3 @@
-# Copyright 2025 Alibaba Z-Image Team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from ...utils import logging
 from ..modular_pipeline import AutoPipelineBlocks, SequentialPipelineBlocks
 from ..modular_pipeline_utils import InsertableDict
@@ -32,9 +18,7 @@ from .encoders import (
     ZImageVaeImageEncoderStep,
 )
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 # z-image
 # text2image
@@ -57,7 +41,6 @@ class ZImageCoreDenoiseStep(SequentialPipelineBlocks):
             + " - `ZImageSetTimestepsStep` is used to set the timesteps\n"
             + " - `ZImageDenoiseStep` is used to denoise the latents\n"
         )
-
 
 # z-image: image2image
 ## denoise
@@ -95,7 +78,6 @@ class ZImageImage2ImageCoreDenoiseStep(SequentialPipelineBlocks):
             + " - `ZImageDenoiseStep` is used to denoise the latents\n"
         )
 
-
 ## auto blocks
 class ZImageAutoDenoiseStep(AutoPipelineBlocks):
     block_classes = [
@@ -116,7 +98,6 @@ class ZImageAutoDenoiseStep(AutoPipelineBlocks):
             + " - if `image_latents` is not provided, `ZImageCoreDenoiseStep` will be used.\n"
         )
 
-
 class ZImageAutoVaeImageEncoderStep(AutoPipelineBlocks):
     block_classes = [ZImageVaeImageEncoderStep]
     block_names = ["vae_encoder"]
@@ -128,7 +109,6 @@ class ZImageAutoVaeImageEncoderStep(AutoPipelineBlocks):
         +"This is an auto pipeline block that works for image2image tasks."
         +" - `ZImageVaeImageEncoderStep` is used when `image` is provided."
         +" - if `image` is not provided, step will be skipped."
-
 
 class ZImageAutoBlocks(SequentialPipelineBlocks):
     block_classes = [
@@ -145,7 +125,6 @@ class ZImageAutoBlocks(SequentialPipelineBlocks):
         +" - for text-to-image generation, all you need to provide is `prompt`\n"
         +" - for image-to-image generation, you need to provide `image`\n"
         +" - if `image` is not provided, step will be skipped."
-
 
 # presets
 TEXT2IMAGE_BLOCKS = InsertableDict(
@@ -173,7 +152,6 @@ IMAGE2IMAGE_BLOCKS = InsertableDict(
         ("decode", ZImageVaeDecoderStep),
     ]
 )
-
 
 AUTO_BLOCKS = InsertableDict(
     [

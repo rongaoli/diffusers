@@ -1,16 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 from contextlib import nullcontext
 
 from ..models.embeddings import (
@@ -22,17 +9,13 @@ from ..models.modeling_utils import _LOW_CPU_MEM_USAGE_DEFAULT
 from ..utils import is_accelerate_available, is_torch_version, logging
 from ..utils.torch_utils import empty_device_cache
 
-
 if is_accelerate_available():
     pass
 
 logger = logging.get_logger(__name__)
 
-
 class FluxTransformer2DLoadersMixin:
-    """
-    Load layers into a [`FluxTransformer2DModel`].
-    """
+
 
     def _convert_ip_adapter_image_proj_to_diffusers(self, state_dict, low_cpu_mem_usage=_LOW_CPU_MEM_USAGE_DEFAULT):
         if low_cpu_mem_usage:

@@ -10,7 +10,6 @@ from ...utils import (
     is_transformers_version,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
 
@@ -23,7 +22,6 @@ except OptionalDependencyNotAvailable:
     _dummy_objects.update(get_objects_from_module(dummy_torch_and_transformers_objects))
 else:
     _import_structure["pipeline_musicldm"] = ["MusicLDMPipeline"]
-
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:

@@ -1,19 +1,3 @@
-# Copyright 2025 UC Berkeley Team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# DISCLAIMER: This file is strongly influenced by https://github.com/ermongroup/ddim
-
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -31,7 +15,6 @@ from .scheduling_utils_flax import (
     get_velocity_common,
 )
 
-
 @flax.struct.dataclass
 class DDPMSchedulerState:
     common: CommonSchedulerState
@@ -45,44 +28,64 @@ class DDPMSchedulerState:
     def create(cls, common: CommonSchedulerState, init_noise_sigma: jnp.ndarray, timesteps: jnp.ndarray):
         return cls(common=common, init_noise_sigma=init_noise_sigma, timesteps=timesteps)
 
+@dataclass
+class FlaxDDPMSchedulerOutput(FlaxSchedulerOutput):
+    state: DDPMSchedulerState
+
+class FlaxDDPMScheduler(FlaxSchedulerMixin, ConfigMixin):
+    class DDPMSchedulerState:
+    common: CommonSchedulerState
+
+    # setable values
+    init_noise_sigma: jnp.ndarray
+    timesteps: jnp.ndarray
+    num_inference_steps: Optional[int] = None
+
+    @classmethod
+    def create(cls, common: CommonSchedulerState, init_noise_sigma: jnp.ndarray, timesteps: jnp.ndarray):
+        return cls(common=common, init_noise_sigma=init_noise_sigma, timesteps=timesteps)
 
 @dataclass
 class FlaxDDPMSchedulerOutput(FlaxSchedulerOutput):
     state: DDPMSchedulerState
 
+class FlaxDDPMScheduler(FlaxSchedulerMixin, ConfigMixin):
+    
+    class DDPMSchedulerState:
+    common: CommonSchedulerState
+
+    # setable values
+    init_noise_sigma: jnp.ndarray
+    timesteps: jnp.ndarray
+    num_inference_steps: Optional[int] = None
+
+    @classmethod
+    def create(cls, common: CommonSchedulerState, init_noise_sigma: jnp.ndarray, timesteps: jnp.ndarray):
+        return cls(common=common, init_noise_sigma=init_noise_sigma, timesteps=timesteps)
+
+@dataclass
+class FlaxDDPMSchedulerOutput(FlaxSchedulerOutput):
+    state: DDPMSchedulerState
 
 class FlaxDDPMScheduler(FlaxSchedulerMixin, ConfigMixin):
-    """
-    Denoising diffusion probabilistic models (DDPMs) explores the connections between denoising score matching and
-    Langevin dynamics sampling.
+    class DDPMSchedulerState:
+    common: CommonSchedulerState
 
-    [`~ConfigMixin`] takes care of storing all config attributes that are passed in the scheduler's `__init__`
-    function, such as `num_train_timesteps`. They can be accessed via `scheduler.config.num_train_timesteps`.
-    [`SchedulerMixin`] provides general loading and saving functionality via the [`SchedulerMixin.save_pretrained`] and
-    [`~SchedulerMixin.from_pretrained`] functions.
+    # setable values
+    init_noise_sigma: jnp.ndarray
+    timesteps: jnp.ndarray
+    num_inference_steps: Optional[int] = None
 
-    For more details, see the original paper: https://huggingface.co/papers/2006.11239
+    @classmethod
+    def create(cls, common: CommonSchedulerState, init_noise_sigma: jnp.ndarray, timesteps: jnp.ndarray):
+        return cls(common=common, init_noise_sigma=init_noise_sigma, timesteps=timesteps)
 
-    Args:
-        num_train_timesteps (`int`): number of diffusion steps used to train the model.
-        beta_start (`float`): the starting `beta` value of inference.
-        beta_end (`float`): the final `beta` value.
-        beta_schedule (`str`):
-            the beta schedule, a mapping from a beta range to a sequence of betas for stepping the model. Choose from
-            `linear`, `scaled_linear`, or `squaredcos_cap_v2`.
-        trained_betas (`np.ndarray`, optional):
-            option to pass an array of betas directly to the constructor to bypass `beta_start`, `beta_end` etc.
-        variance_type (`str`):
-            options to clip the variance used when adding noise to the denoised sample. Choose from `fixed_small`,
-            `fixed_small_log`, `fixed_large`, `fixed_large_log`, `learned` or `learned_range`.
-        clip_sample (`bool`, default `True`):
-            option to clip predicted sample between -1 and 1 for numerical stability.
-        prediction_type (`str`, default `epsilon`):
-            indicates whether the model predicts the noise (epsilon), or the samples. One of `epsilon`, `sample`.
-            `v-prediction` is not supported for this scheduler.
-        dtype (`jnp.dtype`, *optional*, defaults to `jnp.float32`):
-            the `dtype` used for params and computation.
-    """
+@dataclass
+class FlaxDDPMSchedulerOutput(FlaxSchedulerOutput):
+    state: DDPMSchedulerState
+
+class FlaxDDPMScheduler(FlaxSchedulerMixin, ConfigMixin):
+
 
     _compatibles = [e.name for e in FlaxKarrasDiffusionSchedulers]
 
@@ -125,29 +128,13 @@ class FlaxDDPMScheduler(FlaxSchedulerMixin, ConfigMixin):
     def scale_model_input(
         self, state: DDPMSchedulerState, sample: jnp.ndarray, timestep: Optional[int] = None
     ) -> jnp.ndarray:
-        """
-        Args:
-            state (`PNDMSchedulerState`): the `FlaxPNDMScheduler` state data class instance.
-            sample (`jnp.ndarray`): input sample
-            timestep (`int`, optional): current timestep
 
-        Returns:
-            `jnp.ndarray`: scaled input sample
-        """
         return sample
 
     def set_timesteps(
         self, state: DDPMSchedulerState, num_inference_steps: int, shape: Tuple = ()
     ) -> DDPMSchedulerState:
-        """
-        Sets the discrete timesteps used for the diffusion chain. Supporting function to be run before inference.
 
-        Args:
-            state (`DDIMSchedulerState`):
-                the `FlaxDDPMScheduler` state data class instance.
-            num_inference_steps (`int`):
-                the number of diffusion steps used when generating samples with a pre-trained model.
-        """
 
         step_ratio = self.config.num_train_timesteps // num_inference_steps
         # creates integer timesteps by multiplying by ratio
@@ -163,7 +150,7 @@ class FlaxDDPMScheduler(FlaxSchedulerMixin, ConfigMixin):
         alpha_prod_t = state.common.alphas_cumprod[t]
         alpha_prod_t_prev = jnp.where(t > 0, state.common.alphas_cumprod[t - 1], jnp.array(1.0, dtype=self.dtype))
 
-        # For t > 0, compute predicted variance βt (see formula (6) and (7) from https://huggingface.co/papers/2006.11239)
+        # For t > 0, compute predicted variance βt...
         # and sample from it to get previous sample
         # x_{t-1} ~ N(pred_prev_sample, variance) == add variance to pred_sample
         variance = (1 - alpha_prod_t_prev) / (1 - alpha_prod_t) * state.common.betas[t]
@@ -201,24 +188,7 @@ class FlaxDDPMScheduler(FlaxSchedulerMixin, ConfigMixin):
         key: Optional[jax.Array] = None,
         return_dict: bool = True,
     ) -> Union[FlaxDDPMSchedulerOutput, Tuple]:
-        """
-        Predict the sample at the previous timestep by reversing the SDE. Core function to propagate the diffusion
-        process from the learned model outputs (most often the predicted noise).
 
-        Args:
-            state (`DDPMSchedulerState`): the `FlaxDDPMScheduler` state data class instance.
-            model_output (`jnp.ndarray`): direct output from learned diffusion model.
-            timestep (`int`): current discrete timestep in the diffusion chain.
-            sample (`jnp.ndarray`):
-                current instance of sample being created by diffusion process.
-            key (`jax.Array`): a PRNG key.
-            return_dict (`bool`): option for returning tuple rather than FlaxDDPMSchedulerOutput class
-
-        Returns:
-            [`FlaxDDPMSchedulerOutput`] or `tuple`: [`FlaxDDPMSchedulerOutput`] if `return_dict` is True, otherwise a
-            `tuple`. When returning a tuple, the first element is the sample tensor.
-
-        """
         t = timestep
 
         if key is None:

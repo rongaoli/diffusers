@@ -8,7 +8,6 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
 
@@ -28,7 +27,6 @@ else:
     _import_structure["modeling_text_decoder"] = ["UniDiffuserTextDecoder"]
     _import_structure["modeling_uvit"] = ["UniDiffuserModel", "UTransformer2DModel"]
     _import_structure["pipeline_unidiffuser"] = ["ImageTextPipelineOutput", "UniDiffuserPipeline"]
-
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:

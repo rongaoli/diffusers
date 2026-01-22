@@ -13,9 +13,7 @@ from ...utils.torch_utils import maybe_allow_in_graph
 from ..attention import Attention
 from ..embeddings import TimestepEmbedding, Timesteps
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 class HiDreamImageFeedForwardSwiGLU(nn.Module):
     def __init__(
@@ -39,7 +37,6 @@ class HiDreamImageFeedForwardSwiGLU(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.w2(torch.nn.functional.silu(self.w1(x)) * self.w3(x))
 
-
 class HiDreamImagePooledEmbed(nn.Module):
     def __init__(self, text_emb_dim, hidden_size):
         super().__init__()
@@ -47,7 +44,6 @@ class HiDreamImagePooledEmbed(nn.Module):
 
     def forward(self, pooled_embed: torch.Tensor) -> torch.Tensor:
         return self.pooled_embedder(pooled_embed)
-
 
 class HiDreamImageTimestepEmbed(nn.Module):
     def __init__(self, hidden_size, frequency_embedding_size=256):
@@ -59,7 +55,6 @@ class HiDreamImageTimestepEmbed(nn.Module):
         t_emb = self.time_proj(timesteps).to(dtype=wdtype)
         t_emb = self.timestep_embedder(t_emb)
         return t_emb
-
 
 class HiDreamImageOutEmbed(nn.Module):
     def __init__(self, hidden_size, patch_size, out_channels):
@@ -73,7 +68,6 @@ class HiDreamImageOutEmbed(nn.Module):
         hidden_states = self.norm_final(hidden_states) * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
         hidden_states = self.linear(hidden_states)
         return hidden_states
-
 
 class HiDreamImagePatchEmbed(nn.Module):
     def __init__(
@@ -90,7 +84,6 @@ class HiDreamImagePatchEmbed(nn.Module):
     def forward(self, latent) -> torch.Tensor:
         latent = self.proj(latent)
         return latent
-
 
 def rope(pos: torch.Tensor, dim: int, theta: int) -> torch.Tensor:
     assert dim % 2 == 0, "The dimension must be even."
@@ -112,7 +105,6 @@ def rope(pos: torch.Tensor, dim: int, theta: int) -> torch.Tensor:
     out = stacked_out.view(batch_size, -1, dim // 2, 2, 2)
     return out.float()
 
-
 class HiDreamImageEmbedND(nn.Module):
     def __init__(self, theta: int, axes_dim: List[int]):
         super().__init__()
@@ -127,14 +119,12 @@ class HiDreamImageEmbedND(nn.Module):
         )
         return emb.unsqueeze(2)
 
-
 def apply_rope(xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     xq_ = xq.float().reshape(*xq.shape[:-1], -1, 1, 2)
     xk_ = xk.float().reshape(*xk.shape[:-1], -1, 1, 2)
     xq_out = freqs_cis[..., 0] * xq_[..., 0] + freqs_cis[..., 1] * xq_[..., 1]
     xk_out = freqs_cis[..., 0] * xk_[..., 0] + freqs_cis[..., 1] * xk_[..., 1]
     return xq_out.reshape(*xq.shape).type_as(xq), xk_out.reshape(*xk.shape).type_as(xk)
-
 
 @maybe_allow_in_graph
 class HiDreamAttention(Attention):
@@ -197,9 +187,181 @@ class HiDreamAttention(Attention):
             image_rotary_emb=image_rotary_emb,
         )
 
+class HiDreamAttnProcessor:
+    class HiDreamImageFeedForwardSwiGLU(nn.Module):
+    def __init__(
+        self,
+        dim: int,
+        hidden_dim: int,
+        multiple_of: int = 256,
+        ffn_dim_multiplier: Optional[float] = None,
+    ):
+        super().__init__()
+        hidden_dim = int(2 * hidden_dim / 3)
+        # custom dim factor multiplier
+        if ffn_dim_multiplier is not None:
+            hidden_dim = int(ffn_dim_multiplier * hidden_dim)
+        hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
+
+        self.w1 = nn.Linear(dim, hidden_dim, bias=False)
+        self.w2 = nn.Linear(hidden_dim, dim, bias=False)
+        self.w3 = nn.Linear(dim, hidden_dim, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.w2(torch.nn.functional.silu(self.w1(x)) * self.w3(x))
+
+class HiDreamImagePooledEmbed(nn.Module):
+    def __init__(self, text_emb_dim, hidden_size):
+        super().__init__()
+        self.pooled_embedder = TimestepEmbedding(in_channels=text_emb_dim, time_embed_dim=hidden_size)
+
+    def forward(self, pooled_embed: torch.Tensor) -> torch.Tensor:
+        return self.pooled_embedder(pooled_embed)
+
+class HiDreamImageTimestepEmbed(nn.Module):
+    def __init__(self, hidden_size, frequency_embedding_size=256):
+        super().__init__()
+        self.time_proj = Timesteps(num_channels=frequency_embedding_size, flip_sin_to_cos=True, downscale_freq_shift=0)
+        self.timestep_embedder = TimestepEmbedding(in_channels=frequency_embedding_size, time_embed_dim=hidden_size)
+
+    def forward(self, timesteps: torch.Tensor, wdtype: Optional[torch.dtype] = None) -> torch.Tensor:
+        t_emb = self.time_proj(timesteps).to(dtype=wdtype)
+        t_emb = self.timestep_embedder(t_emb)
+        return t_emb
+
+class HiDreamImageOutEmbed(nn.Module):
+    def __init__(self, hidden_size, patch_size, out_channels):
+        super().__init__()
+        self.norm_final = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.linear = nn.Linear(hidden_size, patch_size * patch_size * out_channels, bias=True)
+        self.adaLN_modulation = nn.Sequential(nn.SiLU(), nn.Linear(hidden_size, 2 * hidden_size, bias=True))
+
+    def forward(self, hidden_states: torch.Tensor, temb: torch.Tensor) -> torch.Tensor:
+        shift, scale = self.adaLN_modulation(temb).chunk(2, dim=1)
+        hidden_states = self.norm_final(hidden_states) * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
+        hidden_states = self.linear(hidden_states)
+        return hidden_states
+
+class HiDreamImagePatchEmbed(nn.Module):
+    def __init__(
+        self,
+        patch_size=2,
+        in_channels=4,
+        out_channels=1024,
+    ):
+        super().__init__()
+        self.patch_size = patch_size
+        self.out_channels = out_channels
+        self.proj = nn.Linear(in_channels * patch_size * patch_size, out_channels, bias=True)
+
+    def forward(self, latent) -> torch.Tensor:
+        latent = self.proj(latent)
+        return latent
+
+def rope(pos: torch.Tensor, dim: int, theta: int) -> torch.Tensor:
+    assert dim % 2 == 0, "The dimension must be even."
+
+    is_mps = pos.device.type == "mps"
+    is_npu = pos.device.type == "npu"
+
+    dtype = torch.float32 if (is_mps or is_npu) else torch.float64
+
+    scale = torch.arange(0, dim, 2, dtype=dtype, device=pos.device) / dim
+    omega = 1.0 / (theta**scale)
+
+    batch_size, seq_length = pos.shape
+    out = torch.einsum("...n,d->...nd", pos, omega)
+    cos_out = torch.cos(out)
+    sin_out = torch.sin(out)
+
+    stacked_out = torch.stack([cos_out, -sin_out, sin_out, cos_out], dim=-1)
+    out = stacked_out.view(batch_size, -1, dim // 2, 2, 2)
+    return out.float()
+
+class HiDreamImageEmbedND(nn.Module):
+    def __init__(self, theta: int, axes_dim: List[int]):
+        super().__init__()
+        self.theta = theta
+        self.axes_dim = axes_dim
+
+    def forward(self, ids: torch.Tensor) -> torch.Tensor:
+        n_axes = ids.shape[-1]
+        emb = torch.cat(
+            [rope(ids[..., i], self.axes_dim[i], self.theta) for i in range(n_axes)],
+            dim=-3,
+        )
+        return emb.unsqueeze(2)
+
+def apply_rope(xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    xq_ = xq.float().reshape(*xq.shape[:-1], -1, 1, 2)
+    xk_ = xk.float().reshape(*xk.shape[:-1], -1, 1, 2)
+    xq_out = freqs_cis[..., 0] * xq_[..., 0] + freqs_cis[..., 1] * xq_[..., 1]
+    xk_out = freqs_cis[..., 0] * xk_[..., 0] + freqs_cis[..., 1] * xk_[..., 1]
+    return xq_out.reshape(*xq.shape).type_as(xq), xk_out.reshape(*xk.shape).type_as(xk)
+
+@maybe_allow_in_graph
+class HiDreamAttention(Attention):
+    def __init__(
+        self,
+        query_dim: int,
+        heads: int = 8,
+        dim_head: int = 64,
+        upcast_attention: bool = False,
+        upcast_softmax: bool = False,
+        scale_qk: bool = True,
+        eps: float = 1e-5,
+        processor=None,
+        out_dim: int = None,
+        single: bool = False,
+    ):
+        super(Attention, self).__init__()
+        self.inner_dim = out_dim if out_dim is not None else dim_head * heads
+        self.query_dim = query_dim
+        self.upcast_attention = upcast_attention
+        self.upcast_softmax = upcast_softmax
+        self.out_dim = out_dim if out_dim is not None else query_dim
+
+        self.scale_qk = scale_qk
+        self.scale = dim_head**-0.5 if self.scale_qk else 1.0
+
+        self.heads = out_dim // dim_head if out_dim is not None else heads
+        self.sliceable_head_dim = heads
+        self.single = single
+
+        self.to_q = nn.Linear(query_dim, self.inner_dim)
+        self.to_k = nn.Linear(self.inner_dim, self.inner_dim)
+        self.to_v = nn.Linear(self.inner_dim, self.inner_dim)
+        self.to_out = nn.Linear(self.inner_dim, self.out_dim)
+        self.q_rms_norm = nn.RMSNorm(self.inner_dim, eps)
+        self.k_rms_norm = nn.RMSNorm(self.inner_dim, eps)
+
+        if not single:
+            self.to_q_t = nn.Linear(query_dim, self.inner_dim)
+            self.to_k_t = nn.Linear(self.inner_dim, self.inner_dim)
+            self.to_v_t = nn.Linear(self.inner_dim, self.inner_dim)
+            self.to_out_t = nn.Linear(self.inner_dim, self.out_dim)
+            self.q_rms_norm_t = nn.RMSNorm(self.inner_dim, eps)
+            self.k_rms_norm_t = nn.RMSNorm(self.inner_dim, eps)
+
+        self.set_processor(processor)
+
+    def forward(
+        self,
+        norm_hidden_states: torch.Tensor,
+        hidden_states_masks: torch.Tensor = None,
+        norm_encoder_hidden_states: torch.Tensor = None,
+        image_rotary_emb: torch.Tensor = None,
+    ) -> torch.Tensor:
+        return self.processor(
+            self,
+            hidden_states=norm_hidden_states,
+            hidden_states_masks=hidden_states_masks,
+            encoder_hidden_states=norm_encoder_hidden_states,
+            image_rotary_emb=image_rotary_emb,
+        )
 
 class HiDreamAttnProcessor:
-    """Attention processor used typically in processing the SD3-like self-attention projections."""
+
 
     def __call__(
         self,
@@ -272,7 +434,6 @@ class HiDreamAttnProcessor:
             hidden_states = attn.to_out(hidden_states)
             return hidden_states
 
-
 # Modified from https://github.com/deepseek-ai/DeepSeek-V3/blob/main/inference/model.py
 class MoEGate(nn.Module):
     def __init__(
@@ -340,7 +501,6 @@ class MoEGate(nn.Module):
             aux_loss = None
         return topk_idx, topk_weight, aux_loss
 
-
 # Modified from https://github.com/deepseek-ai/DeepSeek-V3/blob/main/inference/model.py
 class MOEFeedForwardSwiGLU(nn.Module):
     def __init__(
@@ -406,7 +566,6 @@ class MOEFeedForwardSwiGLU(nn.Module):
             expert_cache.scatter_reduce_(0, exp_token_idx.view(-1, 1).repeat(1, x.shape[-1]), expert_out, reduce="sum")
         return expert_cache
 
-
 class TextProjection(nn.Module):
     def __init__(self, in_features, hidden_size):
         super().__init__()
@@ -415,7 +574,6 @@ class TextProjection(nn.Module):
     def forward(self, caption):
         hidden_states = self.linear(caption)
         return hidden_states
-
 
 @maybe_allow_in_graph
 class HiDreamImageSingleTransformerBlock(nn.Module):
@@ -484,7 +642,6 @@ class HiDreamImageSingleTransformerBlock(nn.Module):
         ff_output_i = gate_mlp_i * self.ff_i(norm_hidden_states.to(dtype=wtype))
         hidden_states = ff_output_i + hidden_states
         return hidden_states
-
 
 @maybe_allow_in_graph
 class HiDreamImageTransformerBlock(nn.Module):
@@ -579,7 +736,6 @@ class HiDreamImageTransformerBlock(nn.Module):
         encoder_hidden_states = ff_output_t + encoder_hidden_states
         return hidden_states, encoder_hidden_states
 
-
 class HiDreamBlock(nn.Module):
     def __init__(self, block: Union[HiDreamImageTransformerBlock, HiDreamImageSingleTransformerBlock]):
         super().__init__()
@@ -600,7 +756,6 @@ class HiDreamBlock(nn.Module):
             temb=temb,
             image_rotary_emb=image_rotary_emb,
         )
-
 
 class HiDreamImageTransformer2DModel(ModelMixin, ConfigMixin, PeftAdapterMixin, FromOriginalModelMixin):
     _supports_gradient_checkpointing = True

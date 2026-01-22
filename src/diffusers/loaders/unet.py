@@ -1,16 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 import os
 from collections import defaultdict
 from contextlib import nullcontext
@@ -49,90 +36,21 @@ from .lora_base import _func_optionally_disable_offloading
 from .lora_pipeline import LORA_WEIGHT_NAME, LORA_WEIGHT_NAME_SAFE, TEXT_ENCODER_NAME, UNET_NAME
 from .utils import AttnProcsLayers
 
-
 logger = logging.get_logger(__name__)
-
 
 CUSTOM_DIFFUSION_WEIGHT_NAME = "pytorch_custom_diffusion_weights.bin"
 CUSTOM_DIFFUSION_WEIGHT_NAME_SAFE = "pytorch_custom_diffusion_weights.safetensors"
 
-
 class UNet2DConditionLoadersMixin:
-    """
-    Load LoRA layers into a [`UNet2DCondtionModel`].
-    """
+
 
     text_encoder_name = TEXT_ENCODER_NAME
     unet_name = UNET_NAME
 
     @validate_hf_hub_args
     def load_attn_procs(self, pretrained_model_name_or_path_or_dict: Union[str, Dict[str, torch.Tensor]], **kwargs):
-        r"""
-        Load pretrained attention processor layers into [`UNet2DConditionModel`]. Attention processor layers have to be
-        defined in
-        [`attention_processor.py`](https://github.com/huggingface/diffusers/blob/main/src/diffusers/models/attention_processor.py)
-        and be a `torch.nn.Module` class. Currently supported: LoRA, Custom Diffusion. For LoRA, one must install
-        `peft`: `pip install -U peft`.
-
-        Parameters:
-            pretrained_model_name_or_path_or_dict (`str` or `os.PathLike` or `dict`):
-                Can be either:
-
-                    - A string, the model id (for example `google/ddpm-celebahq-256`) of a pretrained model hosted on
-                      the Hub.
-                    - A path to a directory (for example `./my_model_directory`) containing the model weights saved
-                      with [`ModelMixin.save_pretrained`].
-                    - A [torch state
-                      dict](https://pytorch.org/tutorials/beginner/saving_loading_models.html#what-is-a-state-dict).
-
-            cache_dir (`Union[str, os.PathLike]`, *optional*):
-                Path to a directory where a downloaded pretrained model configuration is cached if the standard cache
-                is not used.
-            force_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to force the (re-)download of the model weights and configuration files, overriding the
-                cached versions if they exist.
-
-            proxies (`Dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, for example, `{'http': 'foo.bar:3128',
-                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
-            local_files_only (`bool`, *optional*, defaults to `False`):
-                Whether to only load local model weights and configuration files or not. If set to `True`, the model
-                won't be downloaded from the Hub.
-            token (`str` or *bool*, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, the token generated from
-                `diffusers-cli login` (stored in `~/.huggingface`) is used.
-            revision (`str`, *optional*, defaults to `"main"`):
-                The specific model version to use. It can be a branch name, a tag name, a commit id, or any identifier
-                allowed by Git.
-            subfolder (`str`, *optional*, defaults to `""`):
-                The subfolder location of a model file within a larger model repository on the Hub or locally.
-            network_alphas (`Dict[str, float]`):
-                The value of the network alpha used for stable learning and preventing underflow. This value has the
-                same meaning as the `--network_alpha` option in the kohya-ss trainer script. Refer to [this
-                link](https://github.com/darkstorm2150/sd-scripts/blob/main/docs/train_network_README-en.md#execute-learning).
-            adapter_name (`str`, *optional*, defaults to None):
-                Adapter name to be used for referencing the loaded adapter model. If not specified, it will use
-                `default_{i}` where i is the total number of adapters being loaded.
-            weight_name (`str`, *optional*, defaults to None):
-                Name of the serialized state dict file.
-            low_cpu_mem_usage (`bool`, *optional*):
-                Speed up model loading by only loading the pretrained LoRA weights and not initializing the random
-                weights.
-
-        Example:
-
-        ```py
-        from diffusers import AutoPipelineForText2Image
-        import torch
-
-        pipeline = AutoPipelineForText2Image.from_pretrained(
-            "stabilityai/stable-diffusion-xl-base-1.0", torch_dtype=torch.float16
-        ).to("cuda")
-        pipeline.unet.load_attn_procs(
-            "jbilcke-hf/sdxl-cinematic-1", weight_name="pytorch_lora_weights.safetensors", adapter_name="cinematic"
-        )
-        ```
-        """
+        
+        """r"""
         from ..hooks.group_offloading import _maybe_remove_and_reapply_group_offloading
 
         cache_dir = kwargs.pop("cache_dir", None)
@@ -230,10 +148,10 @@ class UNet2DConditionLoadersMixin:
             )
 
         # <Unsafe code
-        # We can be sure that the following works as it just sets attention processors, lora layers and puts all in the same dtype
+        # We can be sure that the following works...
         # Now we remove any existing hooks to `_pipeline`.
 
-        # For LoRA, the UNet is already offloaded at this stage as it is handled inside `_process_lora`.
+        # For LoRA, the UNet is already offloaded...
         if is_custom_diffusion and _pipeline is not None:
             is_model_cpu_offload, is_sequential_cpu_offload, is_group_offload = self._optionally_disable_offloading(
                 _pipeline=_pipeline
@@ -292,10 +210,10 @@ class UNet2DConditionLoadersMixin:
         self, state_dict, unet_identifier_key, network_alphas, adapter_name, _pipeline, low_cpu_mem_usage
     ):
         # This method does the following things:
-        # 1. Filters the `state_dict` with keys matching  `unet_identifier_key` when using the non-legacy
+        # 1. Filters the `state_dict` with keys ma...
         #    format. For legacy format no filtering is applied.
         # 2. Converts the `state_dict` to the `peft` compatible format.
-        # 3. Creates a `LoraConfig` and then injects the converted `state_dict` into the UNet per the
+        # 3. Creates a `LoraConfig` and then injec...
         #    `LoraConfig` specs.
         # 4. It also reports if the underlying `_pipeline` has any kind of offloading inside of it.
         if not USE_PEFT_BACKEND:
@@ -330,7 +248,7 @@ class UNet2DConditionLoadersMixin:
             state_dict = convert_unet_state_dict_to_peft(state_dict_to_be_used)
 
             if network_alphas is not None:
-                # The alphas state dict have the same structure as Unet, thus we convert it to peft format using
+                # The alphas state dict have the s...
                 # `convert_unet_state_dict_to_peft` method.
                 network_alphas = convert_unet_state_dict_to_peft(network_alphas)
 
@@ -419,38 +337,8 @@ class UNet2DConditionLoadersMixin:
         safe_serialization: bool = True,
         **kwargs,
     ):
-        r"""
-        Save attention processor layers to a directory so that it can be reloaded with the
-        [`~loaders.UNet2DConditionLoadersMixin.load_attn_procs`] method.
-
-        Arguments:
-            save_directory (`str` or `os.PathLike`):
-                Directory to save an attention processor to (will be created if it doesn't exist).
-            is_main_process (`bool`, *optional*, defaults to `True`):
-                Whether the process calling this is the main process or not. Useful during distributed training and you
-                need to call this function on all processes. In this case, set `is_main_process=True` only on the main
-                process to avoid race conditions.
-            save_function (`Callable`):
-                The function to use to save the state dictionary. Useful during distributed training when you need to
-                replace `torch.save` with another method. Can be configured with the environment variable
-                `DIFFUSERS_SAVE_MODE`.
-            safe_serialization (`bool`, *optional*, defaults to `True`):
-                Whether to save the model using `safetensors` or with `pickle`.
-
-        Example:
-
-        ```py
-        import torch
-        from diffusers import DiffusionPipeline
-
-        pipeline = DiffusionPipeline.from_pretrained(
-            "CompVis/stable-diffusion-v1-4",
-            torch_dtype=torch.float16,
-        ).to("cuda")
-        pipeline.unet.load_attn_procs("path-to-save-model", weight_name="pytorch_custom_diffusion_weights.bin")
-        pipeline.unet.save_attn_procs("path-to-save-model", weight_name="pytorch_custom_diffusion_weights.bin")
-        ```
-        """
+        
+        """r"""
         from ..models.attention_processor import (
             CustomDiffusionAttnProcessor,
             CustomDiffusionAttnProcessor2_0,

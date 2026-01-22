@@ -10,7 +10,6 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 _dummy_objects = {}
 _additional_imports = {}
 _import_structure = {"pipeline_output": ["StableDiffusionXLPipelineOutput"]}
@@ -35,7 +34,6 @@ if is_transformers_available() and is_flax_available():
 
     _additional_imports.update({"PNDMSchedulerState": PNDMSchedulerState})
     _import_structure["pipeline_flax_stable_diffusion_xl"] = ["FlaxStableDiffusionXLPipeline"]
-
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:

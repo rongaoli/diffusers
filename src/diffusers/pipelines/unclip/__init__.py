@@ -9,7 +9,6 @@ from ...utils import (
     is_transformers_version,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
 
@@ -26,7 +25,6 @@ else:
     _import_structure["pipeline_unclip"] = ["UnCLIPPipeline"]
     _import_structure["pipeline_unclip_image_variation"] = ["UnCLIPImageVariationPipeline"]
     _import_structure["text_proj"] = ["UnCLIPTextProjModel"]
-
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:

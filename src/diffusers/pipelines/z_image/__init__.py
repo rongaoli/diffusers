@@ -9,7 +9,6 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
 
@@ -27,7 +26,6 @@ else:
     _import_structure["pipeline_z_image_controlnet_inpaint"] = ["ZImageControlNetInpaintPipeline"]
     _import_structure["pipeline_z_image_img2img"] = ["ZImageImg2ImgPipeline"]
     _import_structure["pipeline_z_image_omni"] = ["ZImageOmniPipeline"]
-
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:

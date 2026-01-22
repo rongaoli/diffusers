@@ -1,19 +1,4 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""
 Generic utilities
-"""
 
 from collections import OrderedDict
 from dataclasses import fields, is_dataclass
@@ -23,11 +8,8 @@ import numpy as np
 
 from .import_utils import is_torch_available, is_torch_version
 
-
 def is_tensor(x) -> bool:
-    """
-    Tests if `x` is a `torch.Tensor` or `np.ndarray`.
-    """
+
     if is_torch_available():
         import torch
 
@@ -36,23 +18,11 @@ def is_tensor(x) -> bool:
 
     return isinstance(x, np.ndarray)
 
-
 class BaseOutput(OrderedDict):
-    """
-    Base class for all model outputs as dataclass. Has a `__getitem__` that allows indexing by integer or slice (like a
-    tuple) or strings (like a dictionary) that will ignore the `None` attributes. Otherwise behaves like a regular
-    Python dictionary.
 
-    > [!WARNING] > You can't unpack a [`BaseOutput`] directly. Use the [`~utils.BaseOutput.to_tuple`] method to convert
-    it to a tuple > first.
-    """
 
     def __init_subclass__(cls) -> None:
-        """Register subclasses as pytree nodes.
 
-        This is necessary to synchronize gradients when using `torch.nn.parallel.DistributedDataParallel` with
-        `static_graph=True` with modules that output `ModelOutput` subclasses.
-        """
         if is_torch_available():
             import torch.utils._pytree
 
@@ -128,7 +98,5 @@ class BaseOutput(OrderedDict):
         return callable, args, *remaining
 
     def to_tuple(self) -> Tuple[Any, ...]:
-        """
-        Convert self to a tuple containing all the attributes/keys that are not `None`.
-        """
+
         return tuple(self[k] for k in self.keys())

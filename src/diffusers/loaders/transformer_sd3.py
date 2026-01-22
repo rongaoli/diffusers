@@ -1,16 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 from contextlib import nullcontext
 from typing import Dict
 
@@ -21,12 +8,10 @@ from ..models.modeling_utils import _LOW_CPU_MEM_USAGE_DEFAULT
 from ..utils import is_accelerate_available, is_torch_version, logging
 from ..utils.torch_utils import empty_device_cache
 
-
 logger = logging.get_logger(__name__)
 
-
 class SD3Transformer2DLoadersMixin:
-    """Load IP-Adapters and LoRA layers into a `[SD3Transformer2DModel]`."""
+
 
     def _convert_ip_adapter_attn_to_diffusers(
         self, state_dict: Dict, low_cpu_mem_usage: bool = _LOW_CPU_MEM_USAGE_DEFAULT
@@ -156,18 +141,7 @@ class SD3Transformer2DLoadersMixin:
         return image_proj
 
     def _load_ip_adapter_weights(self, state_dict: Dict, low_cpu_mem_usage: bool = _LOW_CPU_MEM_USAGE_DEFAULT) -> None:
-        """Sets IP-Adapter attention processors, image projection, and loads state_dict.
 
-        Args:
-            state_dict (`Dict`):
-                State dict with keys "ip_adapter", which contains parameters for attention processors, and
-                "image_proj", which contains parameters for image projection net.
-            low_cpu_mem_usage (`bool`, *optional*, defaults to `True` if torch version >= 1.9.0 else `False`):
-                Speed up model loading only loading the pretrained weights and not initializing the weights. This also
-                tries to not use more than 1x model size in CPU memory (including peak memory) while loading the model.
-                Only supported for PyTorch >= 1.9.0. If you are using an older version of PyTorch, setting this
-                argument to `True` will raise an error.
-        """
 
         attn_procs = self._convert_ip_adapter_attn_to_diffusers(state_dict["ip_adapter"], low_cpu_mem_usage)
         self.set_attn_processor(attn_procs)

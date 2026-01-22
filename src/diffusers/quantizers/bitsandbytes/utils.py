@@ -1,20 +1,5 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""
 Adapted from
 https://github.com/huggingface/transformers/blob/c409cd81777fb27aadc043ed3d8339dbc020fb3b/src/transformers/integrations/bitsandbytes.py
-"""
 
 import inspect
 from inspect import signature
@@ -22,7 +7,6 @@ from typing import Union
 
 from ...utils import is_accelerate_available, is_bitsandbytes_available, is_torch_available, logging
 from ..quantization_config import QuantizationMethod
-
 
 if is_torch_available():
     import torch
@@ -38,7 +22,6 @@ if is_accelerate_available():
 
 logger = logging.get_logger(__name__)
 
-
 def _replace_with_bnb_linear(
     model,
     modules_to_not_convert=None,
@@ -46,11 +29,7 @@ def _replace_with_bnb_linear(
     quantization_config=None,
     has_been_replaced=False,
 ):
-    """
-    Private method that wraps the recursion for module replacement.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
-    """
     for name, module in model.named_children():
         if current_key_name is None:
             current_key_name = []
@@ -113,33 +92,60 @@ def _replace_with_bnb_linear(
         current_key_name.pop(-1)
     return model, has_been_replaced
 
+def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name=None, quantization_config=None):
+    class in case we need to transpose the weight later
+                    model._modules[name].source_cls = type(module)
+                    # Force requires grad to False to avoid unexpected errors
+                    model._modules[name].requires_grad_(False)
+        if len(list(module.children())) > 0:
+            _, has_been_replaced = _replace_with_bnb_linear(
+                module,
+                modules_to_not_convert,
+                current_key_name,
+                quantization_config,
+                has_been_replaced=has_been_replaced,
+            )
+        # Remove the last key for recursion
+        current_key_name.pop(-1)
+    return model, has_been_replaced
 
 def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name=None, quantization_config=None):
-    """
-    Helper function to replace the `nn.Linear` layers within `model` with either `bnb.nn.Linear8bit` or
-    `bnb.nn.Linear4bit` using the `bitsandbytes` library.
+    
+    class in case we need to transpose the weight later
+                    model._modules[name].source_cls = type(module)
+                    # Force requires grad to False to avoid unexpected errors
+                    model._modules[name].requires_grad_(False)
+        if len(list(module.children())) > 0:
+            _, has_been_replaced = _replace_with_bnb_linear(
+                module,
+                modules_to_not_convert,
+                current_key_name,
+                quantization_config,
+                has_been_replaced=has_been_replaced,
+            )
+        # Remove the last key for recursion
+        current_key_name.pop(-1)
+    return model, has_been_replaced
 
-    References:
-        * `bnb.nn.Linear8bit`: [LLM.int8(): 8-bit Matrix Multiplication for Transformers at
-          Scale](https://huggingface.co/papers/2208.07339)
-        * `bnb.nn.Linear4bit`: [QLoRA: Efficient Finetuning of Quantized
-          LLMs](https://huggingface.co/papers/2305.14314)
+def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name=None, quantization_config=None):
+    class in case we need to transpose the weight later
+                    model._modules[name].source_cls = type(module)
+                    # Force requires grad to False to avoid unexpected errors
+                    model._modules[name].requires_grad_(False)
+        if len(list(module.children())) > 0:
+            _, has_been_replaced = _replace_with_bnb_linear(
+                module,
+                modules_to_not_convert,
+                current_key_name,
+                quantization_config,
+                has_been_replaced=has_been_replaced,
+            )
+        # Remove the last key for recursion
+        current_key_name.pop(-1)
+    return model, has_been_replaced
 
-    Parameters:
-        model (`torch.nn.Module`):
-            Input model or `torch.nn.Module` as the function is run recursively.
-        modules_to_not_convert (`List[`str`]`, *optional*, defaults to `[]`):
-            Names of the modules to not convert in `Linear8bitLt`. In practice we keep the `modules_to_not_convert` in
-            full precision for numerical stability reasons.
-        current_key_name (`List[`str`]`, *optional*):
-            An array to track the current key of the recursion. This is used to check whether the current key (part of
-            it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
-            `disk`).
-        quantization_config ('transformers.utils.quantization_config.BitsAndBytesConfig'):
-            To configure and manage settings related to quantization, a technique used to compress neural network
-            models by reducing the precision of the weights and activations, thus making models more efficient in terms
-            of both storage and computation.
-    """
+def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name=None, quantization_config=None):
+
     model, _ = _replace_with_bnb_linear(model, modules_to_not_convert, current_key_name, quantization_config)
 
     has_been_replaced = any(
@@ -155,14 +161,9 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
 
     return model
 
-
-# Adapted from PEFT: https://github.com/huggingface/peft/blob/6d458b300fc2ed82e19f796b53af4c97d03ea604/src/peft/utils/integrations.py#L81
+# Adapted from PEFT: https://github.com/huggingfac...
 def dequantize_bnb_weight(weight: "torch.nn.Parameter", state=None, dtype: "torch.dtype" = None):
-    """
-    Helper function to dequantize 4bit or 8bit bnb weights.
 
-    If the weight is not a bnb quantized weight, it will be returned as is.
-    """
     if not isinstance(weight, torch.nn.Parameter):
         raise TypeError(f"Input weight should be of type nn.Parameter, got {type(weight)} instead")
 
@@ -193,13 +194,8 @@ def dequantize_bnb_weight(weight: "torch.nn.Parameter", state=None, dtype: "torc
         dequantized = dequantized.to(dtype)
     return dequantized
 
-
 def _create_accelerate_new_hook(old_hook):
-    r"""
-    Creates a new hook based on the old hook. Use it only if you know what you are doing ! This method is a copy of:
-    https://github.com/huggingface/peft/blob/748f7968f3a31ec06a1c2b0328993319ad9a150a/src/peft/utils/other.py#L245 with
-    some changes
-    """
+
     old_hook_cls = getattr(accelerate.hooks, old_hook.__class__.__name__)
     old_hook_attr = old_hook.__dict__
     filtered_old_hook_attr = {}
@@ -210,7 +206,6 @@ def _create_accelerate_new_hook(old_hook):
     new_hook = old_hook_cls(**filtered_old_hook_attr)
     return new_hook
 
-
 def _dequantize_and_replace(
     model,
     dtype,
@@ -219,13 +214,7 @@ def _dequantize_and_replace(
     quantization_config=None,
     has_been_replaced=False,
 ):
-    """
-    Converts a quantized model into its dequantized original version. The newly converted model will have some
-    performance drop compared to the original model before quantization - use it only for specific usecases such as
-    QLoRA adapters merging.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
-    """
     quant_method = quantization_config.quantization_method()
 
     target_cls = bnb.nn.Linear8bitLt if quant_method == "llm_int8" else bnb.nn.Linear4bit
@@ -282,7 +271,6 @@ def _dequantize_and_replace(
         current_key_name.pop(-1)
     return model, has_been_replaced
 
-
 def dequantize_and_replace(
     model,
     modules_to_not_convert=None,
@@ -303,7 +291,6 @@ def dequantize_and_replace(
         )
 
     return model
-
 
 def _check_bnb_status(module) -> Union[bool, bool]:
     is_loaded_in_4bit_bnb = (

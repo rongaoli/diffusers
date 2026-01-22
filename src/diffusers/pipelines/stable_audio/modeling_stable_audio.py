@@ -1,17 +1,3 @@
-# Copyright 2025 Stability AI and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from dataclasses import dataclass
 from math import pi
 from typing import Optional
@@ -23,12 +9,10 @@ from ...configuration_utils import ConfigMixin, register_to_config
 from ...models.modeling_utils import ModelMixin
 from ...utils import BaseOutput, logging
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 class StableAudioPositionalEmbedding(nn.Module):
-    """Used for continuous time"""
+
 
     def __init__(self, dim: int):
         super().__init__()
@@ -43,39 +27,16 @@ class StableAudioPositionalEmbedding(nn.Module):
         fouriered = torch.cat((times, fouriered), dim=-1)
         return fouriered
 
-
 @dataclass
 class StableAudioProjectionModelOutput(BaseOutput):
-    """
-    Args:
-    Class for StableAudio projection layer's outputs.
-        text_hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states obtained by linearly projecting the hidden-states for the text encoder.
-        seconds_start_hidden_states (`torch.Tensor` of shape `(batch_size, 1, hidden_size)`, *optional*):
-            Sequence of hidden-states obtained by linearly projecting the audio start hidden states.
-        seconds_end_hidden_states (`torch.Tensor` of shape `(batch_size, 1, hidden_size)`, *optional*):
-            Sequence of hidden-states obtained by linearly projecting the audio end hidden states.
-    """
+
 
     text_hidden_states: Optional[torch.Tensor] = None
     seconds_start_hidden_states: Optional[torch.Tensor] = None
     seconds_end_hidden_states: Optional[torch.Tensor] = None
 
-
 class StableAudioNumberConditioner(nn.Module):
-    """
-    A simple linear projection model to map numbers to a latent space.
 
-    Args:
-        number_embedding_dim (`int`):
-            Dimensionality of the number embeddings.
-        min_value (`int`):
-            The minimum value of the seconds number conditioning modules.
-        max_value (`int`):
-            The maximum value of the seconds number conditioning modules
-        internal_dim (`int`):
-            Dimensionality of the intermediate number hidden states.
-    """
 
     def __init__(
         self,
@@ -111,21 +72,8 @@ class StableAudioNumberConditioner(nn.Module):
 
         return float_embeds
 
-
 class StableAudioProjectionModel(ModelMixin, ConfigMixin):
-    """
-    A simple linear projection model to map the conditioning values to a shared latent space.
 
-    Args:
-        text_encoder_dim (`int`):
-            Dimensionality of the text embeddings from the text encoder (T5).
-        conditioning_dim (`int`):
-            Dimensionality of the output conditioning tensors.
-        min_value (`int`):
-            The minimum value of the seconds number conditioning modules.
-        max_value (`int`):
-            The maximum value of the seconds number conditioning modules
-    """
 
     @register_to_config
     def __init__(self, text_encoder_dim, conditioning_dim, min_value, max_value):

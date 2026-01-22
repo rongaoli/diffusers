@@ -18,56 +18,14 @@ from ..attention_processor import (
 from ..embeddings import TimestepEmbedding, Timesteps
 from ..modeling_utils import ModelMixin
 
-
 @dataclass
 class PriorTransformerOutput(BaseOutput):
-    """
-    The output of [`PriorTransformer`].
 
-    Args:
-        predicted_image_embedding (`torch.Tensor` of shape `(batch_size, embedding_dim)`):
-            The predicted CLIP image embedding conditioned on the CLIP text embedding input.
-    """
 
     predicted_image_embedding: torch.Tensor
 
-
 class PriorTransformer(ModelMixin, AttentionMixin, ConfigMixin, UNet2DConditionLoadersMixin, PeftAdapterMixin):
-    """
-    A Prior Transformer model.
 
-    Parameters:
-        num_attention_heads (`int`, *optional*, defaults to 32): The number of heads to use for multi-head attention.
-        attention_head_dim (`int`, *optional*, defaults to 64): The number of channels in each head.
-        num_layers (`int`, *optional*, defaults to 20): The number of layers of Transformer blocks to use.
-        embedding_dim (`int`, *optional*, defaults to 768): The dimension of the model input `hidden_states`
-        num_embeddings (`int`, *optional*, defaults to 77):
-            The number of embeddings of the model input `hidden_states`
-        additional_embeddings (`int`, *optional*, defaults to 4): The number of additional tokens appended to the
-            projected `hidden_states`. The actual length of the used `hidden_states` is `num_embeddings +
-            additional_embeddings`.
-        dropout (`float`, *optional*, defaults to 0.0): The dropout probability to use.
-        time_embed_act_fn (`str`, *optional*, defaults to 'silu'):
-            The activation function to use to create timestep embeddings.
-        norm_in_type (`str`, *optional*, defaults to None): The normalization layer to apply on hidden states before
-            passing to Transformer blocks. Set it to `None` if normalization is not needed.
-        embedding_proj_norm_type (`str`, *optional*, defaults to None):
-            The normalization layer to apply on the input `proj_embedding`. Set it to `None` if normalization is not
-            needed.
-        encoder_hid_proj_type (`str`, *optional*, defaults to `linear`):
-            The projection layer to apply on the input `encoder_hidden_states`. Set it to `None` if
-            `encoder_hidden_states` is `None`.
-        added_emb_type (`str`, *optional*, defaults to `prd`): Additional embeddings to condition the model.
-            Choose from `prd` or `None`. if choose `prd`, it will prepend a token indicating the (quantized) dot
-            product between the text embedding and image embedding as proposed in the unclip paper
-            https://huggingface.co/papers/2204.06125 If it is `None`, no additional embeddings will be prepended.
-        time_embed_dim (`int, *optional*, defaults to None): The dimension of timestep embeddings.
-            If None, will be set to `num_attention_heads * attention_head_dim`
-        embedding_proj_dim (`int`, *optional*, default to None):
-            The dimension of `proj_embedding`. If None, will be set to `embedding_dim`.
-        clip_embed_dim (`int`, *optional*, default to None):
-            The dimension of the output. If None, will be set to `embedding_dim`.
-    """
 
     @register_to_config
     def __init__(
@@ -165,11 +123,9 @@ class PriorTransformer(ModelMixin, AttentionMixin, ConfigMixin, UNet2DConditionL
         self.clip_mean = nn.Parameter(torch.zeros(1, clip_embed_dim))
         self.clip_std = nn.Parameter(torch.zeros(1, clip_embed_dim))
 
-    # Copied from diffusers.models.unets.unet_2d_condition.UNet2DConditionModel.set_default_attn_processor
+    # Copied from diffusers.models.unets.unet_2d_c...
     def set_default_attn_processor(self):
-        """
-        Disables custom attention processors and sets the default attention implementation.
-        """
+
         if all(proc.__class__ in ADDED_KV_ATTENTION_PROCESSORS for proc in self.attn_processors.values()):
             processor = AttnAddedKVProcessor()
         elif all(proc.__class__ in CROSS_ATTENTION_PROCESSORS for proc in self.attn_processors.values()):
@@ -190,29 +146,7 @@ class PriorTransformer(ModelMixin, AttentionMixin, ConfigMixin, UNet2DConditionL
         attention_mask: Optional[torch.BoolTensor] = None,
         return_dict: bool = True,
     ):
-        """
-        The [`PriorTransformer`] forward method.
 
-        Args:
-            hidden_states (`torch.Tensor` of shape `(batch_size, embedding_dim)`):
-                The currently predicted image embeddings.
-            timestep (`torch.LongTensor`):
-                Current denoising step.
-            proj_embedding (`torch.Tensor` of shape `(batch_size, embedding_dim)`):
-                Projected embedding vector the denoising process is conditioned on.
-            encoder_hidden_states (`torch.Tensor` of shape `(batch_size, num_embeddings, embedding_dim)`):
-                Hidden states of the text embeddings the denoising process is conditioned on.
-            attention_mask (`torch.BoolTensor` of shape `(batch_size, num_embeddings)`):
-                Text mask for the text embeddings.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether or not to return a [`~models.transformers.prior_transformer.PriorTransformerOutput`] instead of
-                a plain tuple.
-
-        Returns:
-            [`~models.transformers.prior_transformer.PriorTransformerOutput`] or `tuple`:
-                If return_dict is True, a [`~models.transformers.prior_transformer.PriorTransformerOutput`] is
-                returned, otherwise a tuple is returned where the first element is the sample tensor.
-        """
         batch_size = hidden_states.shape[0]
 
         timesteps = timestep
@@ -272,7 +206,7 @@ class PriorTransformer(ModelMixin, AttentionMixin, ConfigMixin, UNet2DConditionL
             dim=1,
         )
 
-        # Allow positional_embedding to not include the `addtional_embeddings` and instead pad it with zeros for these additional tokens
+        # Allow positional_embedding to not includ...
         additional_embeddings_len = additional_embeddings_len + proj_embeddings.shape[1] + 1
         if positional_embeddings.shape[1] < hidden_states.shape[1]:
             positional_embeddings = F.pad(

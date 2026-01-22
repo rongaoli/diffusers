@@ -9,7 +9,6 @@ from ...utils import (
     is_transformers_version,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
 
@@ -24,7 +23,6 @@ except OptionalDependencyNotAvailable:
     _dummy_objects.update({"AudioLDMPipeline": AudioLDMPipeline})
 else:
     _import_structure["pipeline_audioldm"] = ["AudioLDMPipeline"]
-
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:

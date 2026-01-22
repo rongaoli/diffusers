@@ -9,7 +9,6 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
 
@@ -31,7 +30,6 @@ else:
     _import_structure["pipeline_kandinsky_inpaint"] = ["KandinskyInpaintPipeline"]
     _import_structure["pipeline_kandinsky_prior"] = ["KandinskyPriorPipeline", "KandinskyPriorPipelineOutput"]
     _import_structure["text_encoder"] = ["MultilingualCLIP"]
-
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:

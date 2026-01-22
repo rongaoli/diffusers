@@ -1,20 +1,3 @@
-# Copyright (c) 2022 Pablo Pernías MIT License
-# Copyright 2025 UC Berkeley Team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# DISCLAIMER: This file is strongly influenced by https://github.com/ermongroup/ddim
-
 import math
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -26,44 +9,20 @@ from ..utils import BaseOutput
 from ..utils.torch_utils import randn_tensor
 from .scheduling_utils import SchedulerMixin
 
-
 @dataclass
 class DDPMWuerstchenSchedulerOutput(BaseOutput):
-    """
-    Output class for the scheduler's step function output.
+    
+    class DDPMWuerstchenSchedulerOutput(BaseOutput):
 
-    Args:
-        prev_sample (`torch.Tensor` of shape `(batch_size, num_channels, height, width)` for images):
-            Computed sample (x_{t-1}) of previous timestep. `prev_sample` should be used as next model input in the
-            denoising loop.
-    """
 
     prev_sample: torch.Tensor
-
 
 def betas_for_alpha_bar(
     num_diffusion_timesteps,
     max_beta=0.999,
     alpha_transform_type="cosine",
 ):
-    """
-    Create a beta schedule that discretizes the given alpha_t_bar function, which defines the cumulative product of
-    (1-beta) over time from t = [0,1].
 
-    Contains a function alpha_bar that takes an argument t and transforms it to the cumulative product of (1-beta) up
-    to that part of the diffusion process.
-
-
-    Args:
-        num_diffusion_timesteps (`int`): the number of betas to produce.
-        max_beta (`float`): the maximum beta to use; use values lower than 1 to
-                     prevent singularities.
-        alpha_transform_type (`str`, *optional*, default to `cosine`): the type of noise schedule for alpha_bar.
-                     Choose from `cosine` or `exp`
-
-    Returns:
-        betas (`np.ndarray`): the betas used by the scheduler to step the model outputs
-    """
     if alpha_transform_type == "cosine":
 
         def alpha_bar_fn(t):
@@ -84,23 +43,10 @@ def betas_for_alpha_bar(
         betas.append(min(1 - alpha_bar_fn(t2) / alpha_bar_fn(t1), max_beta))
     return torch.tensor(betas, dtype=torch.float32)
 
-
 class DDPMWuerstchenScheduler(SchedulerMixin, ConfigMixin):
-    """
-    Denoising diffusion probabilistic models (DDPMs) explores the connections between denoising score matching and
-    Langevin dynamics sampling.
+    
+    class DDPMWuerstchenScheduler(SchedulerMixin, ConfigMixin):
 
-    [`~ConfigMixin`] takes care of storing all config attributes that are passed in the scheduler's `__init__`
-    function, such as `num_train_timesteps`. They can be accessed via `scheduler.config.num_train_timesteps`.
-    [`SchedulerMixin`] provides general loading and saving functionality via the [`SchedulerMixin.save_pretrained`] and
-    [`~SchedulerMixin.from_pretrained`] functions.
-
-    For more details, see the original paper: https://huggingface.co/papers/2006.11239
-
-    Args:
-        scaler (`float`): ....
-        s (`float`): ....
-    """
 
     @register_to_config
     def __init__(
@@ -126,17 +72,7 @@ class DDPMWuerstchenScheduler(SchedulerMixin, ConfigMixin):
         return alpha_cumprod.clamp(0.0001, 0.9999)
 
     def scale_model_input(self, sample: torch.Tensor, timestep: Optional[int] = None) -> torch.Tensor:
-        """
-        Ensures interchangeability with schedulers that need to scale the denoising model input depending on the
-        current timestep.
 
-        Args:
-            sample (`torch.Tensor`): input sample
-            timestep (`int`, optional): current timestep
-
-        Returns:
-            `torch.Tensor`: scaled input sample
-        """
         return sample
 
     def set_timesteps(
@@ -145,16 +81,7 @@ class DDPMWuerstchenScheduler(SchedulerMixin, ConfigMixin):
         timesteps: Optional[List[int]] = None,
         device: Union[str, torch.device] = None,
     ):
-        """
-        Sets the discrete timesteps used for the diffusion chain. Supporting function to be run before inference.
 
-        Args:
-            num_inference_steps (`Dict[float, int]`):
-                the number of diffusion steps used when generating samples with a pre-trained model. If passed, then
-                `timesteps` must be `None`.
-            device (`str` or `torch.device`, optional):
-                the device to which the timesteps are moved to. {2 / 3: 20, 0.0: 10}
-        """
         if timesteps is None:
             timesteps = torch.linspace(1.0, 0.0, num_inference_steps + 1, device=device)
         if not isinstance(timesteps, torch.Tensor):
@@ -169,23 +96,7 @@ class DDPMWuerstchenScheduler(SchedulerMixin, ConfigMixin):
         generator=None,
         return_dict: bool = True,
     ) -> Union[DDPMWuerstchenSchedulerOutput, Tuple]:
-        """
-        Predict the sample at the previous timestep by reversing the SDE. Core function to propagate the diffusion
-        process from the learned model outputs (most often the predicted noise).
 
-        Args:
-            model_output (`torch.Tensor`): direct output from learned diffusion model.
-            timestep (`int`): current discrete timestep in the diffusion chain.
-            sample (`torch.Tensor`):
-                current instance of sample being created by diffusion process.
-            generator: random number generator.
-            return_dict (`bool`): option for returning tuple rather than DDPMWuerstchenSchedulerOutput class
-
-        Returns:
-            [`DDPMWuerstchenSchedulerOutput`] or `tuple`: [`DDPMWuerstchenSchedulerOutput`] if `return_dict` is True,
-            otherwise a `tuple`. When returning a tuple, the first element is the sample tensor.
-
-        """
         dtype = model_output.dtype
         device = model_output.device
         t = timestep

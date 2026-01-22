@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import math
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
@@ -22,58 +8,13 @@ from ..hooks import HookRegistry
 from ..hooks.smoothed_energy_guidance_utils import SmoothedEnergyGuidanceConfig, _apply_smoothed_energy_guidance_hook
 from .guider_utils import BaseGuidance, GuiderOutput, rescale_noise_cfg
 
-
 if TYPE_CHECKING:
     from ..modular_pipelines.modular_pipeline import BlockState
 
-
 class SmoothedEnergyGuidance(BaseGuidance):
-    """
-    Smoothed Energy Guidance (SEG): https://huggingface.co/papers/2408.00760
+    
+    class SmoothedEnergyGuidance(BaseGuidance):
 
-    SEG is only supported as an experimental prototype feature for now, so the implementation may be modified in the
-    future without warning or guarantee of reproducibility. This implementation assumes:
-    - Generated images are square (height == width)
-    - The model does not combine different modalities together (e.g., text and image latent streams are not combined
-      together such as Flux)
-
-    Args:
-        guidance_scale (`float`, defaults to `7.5`):
-            The scale parameter for classifier-free guidance. Higher values result in stronger conditioning on the text
-            prompt, while lower values allow for more freedom in generation. Higher values may lead to saturation and
-            deterioration of image quality.
-        seg_guidance_scale (`float`, defaults to `3.0`):
-            The scale parameter for smoothed energy guidance. Anatomy and structure coherence may improve with higher
-            values, but it may also lead to overexposure and saturation.
-        seg_blur_sigma (`float`, defaults to `9999999.0`):
-            The amount by which we blur the attention weights. Setting this value greater than 9999.0 results in
-            infinite blur, which means uniform queries. Controlling it exponentially is empirically effective.
-        seg_blur_threshold_inf (`float`, defaults to `9999.0`):
-            The threshold above which the blur is considered infinite.
-        seg_guidance_start (`float`, defaults to `0.0`):
-            The fraction of the total number of denoising steps after which smoothed energy guidance starts.
-        seg_guidance_stop (`float`, defaults to `1.0`):
-            The fraction of the total number of denoising steps after which smoothed energy guidance stops.
-        seg_guidance_layers (`int` or `List[int]`, *optional*):
-            The layer indices to apply smoothed energy guidance to. Can be a single integer or a list of integers. If
-            not provided, `seg_guidance_config` must be provided. The recommended values are `[7, 8, 9]` for Stable
-            Diffusion 3.5 Medium.
-        seg_guidance_config (`SmoothedEnergyGuidanceConfig` or `List[SmoothedEnergyGuidanceConfig]`, *optional*):
-            The configuration for the smoothed energy layer guidance. Can be a single `SmoothedEnergyGuidanceConfig` or
-            a list of `SmoothedEnergyGuidanceConfig`. If not provided, `seg_guidance_layers` must be provided.
-        guidance_rescale (`float`, defaults to `0.0`):
-            The rescale factor applied to the noise predictions. This is used to improve image quality and fix
-            overexposure. Based on Section 3.4 from [Common Diffusion Noise Schedules and Sample Steps are
-            Flawed](https://huggingface.co/papers/2305.08891).
-        use_original_formulation (`bool`, defaults to `False`):
-            Whether to use the original formulation of classifier-free guidance as proposed in the paper. By default,
-            we use the diffusers-native implementation that has been in the codebase for a long time. See
-            [~guiders.classifier_free_guidance.ClassifierFreeGuidance] for more details.
-        start (`float`, defaults to `0.01`):
-            The fraction of the total number of denoising steps after which guidance starts.
-        stop (`float`, defaults to `0.2`):
-            The fraction of the total number of denoising steps after which guidance stops.
-    """
 
     _input_predictions = ["pred_cond", "pred_uncond", "pred_cond_seg"]
 
@@ -86,7 +27,7 @@ class SmoothedEnergyGuidance(BaseGuidance):
         seg_blur_threshold_inf: float = 9999.0,
         seg_guidance_start: float = 0.0,
         seg_guidance_stop: float = 1.0,
-        seg_guidance_layers: Optional[Union[int, List[int]]] = None,
+        seg_guidance_layers: Optional[int] = None,
         seg_guidance_config: Union[SmoothedEnergyGuidanceConfig, List[SmoothedEnergyGuidanceConfig]] = None,
         guidance_rescale: float = 0.0,
         use_original_formulation: bool = False,

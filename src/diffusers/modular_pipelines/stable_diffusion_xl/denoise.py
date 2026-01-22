@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import inspect
 from typing import Any, List, Optional, Tuple
 
@@ -31,9 +17,7 @@ from ..modular_pipeline import (
 from ..modular_pipeline_utils import ComponentSpec, InputParam, OutputParam
 from .modular_pipeline import StableDiffusionXLModularPipeline
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 # YiYi experimenting composible denoise loop
 # loop step (1): prepare latent input for denoiser
@@ -70,7 +54,6 @@ class StableDiffusionXLLoopBeforeDenoiser(ModularPipelineBlocks):
         block_state.scaled_latents = components.scheduler.scale_model_input(block_state.latents, t)
 
         return components, block_state
-
 
 # loop step (1): prepare latent input for denoiser (with inpainting)
 class StableDiffusionXLInpaintLoopBeforeDenoiser(ModularPipelineBlocks):
@@ -142,7 +125,6 @@ class StableDiffusionXLInpaintLoopBeforeDenoiser(ModularPipelineBlocks):
 
         return components, block_state
 
-
 # loop step (2): denoise the latents with guidance
 class StableDiffusionXLLoopDenoiser(ModularPipelineBlocks):
     model_name = "stable-diffusion-xl"
@@ -199,8 +181,8 @@ class StableDiffusionXLLoopDenoiser(ModularPipelineBlocks):
     def __call__(
         self, components: StableDiffusionXLModularPipeline, block_state: BlockState, i: int, t: int
     ) -> PipelineState:
-        #  Map the keys we'll see on each `guider_state_batch` (e.g. guider_state_batch.prompt_embeds)
-        #  to the corresponding (cond, uncond) fields on block_state. (e.g. block_state.prompt_embeds, block_state.negative_prompt_embeds)
+        #  Map the keys we'll see on each `guider_...
+        #  to the corresponding (cond, uncond) fie...
         guider_inputs = {
             "prompt_embeds": (
                 getattr(block_state, "prompt_embeds", None),
@@ -222,12 +204,12 @@ class StableDiffusionXLLoopDenoiser(ModularPipelineBlocks):
 
         components.guider.set_state(step=i, num_inference_steps=block_state.num_inference_steps, timestep=t)
 
-        # The guider splits model inputs into separate batches for conditional/unconditional predictions.
-        # For CFG with guider_inputs = {"encoder_hidden_states": (prompt_embeds, negative_prompt_embeds)}:
+        # The guider splits model inputs into sepa...
+        # For CFG with guider_inputs = {"encoder_h...
         # you will get a guider_state with two batches:
         #   guider_state = [
-        #       {"encoder_hidden_states": prompt_embeds, "__guidance_identifier__": "pred_cond"},      # conditional batch
-        #       {"encoder_hidden_states": negative_prompt_embeds, "__guidance_identifier__": "pred_uncond"},  # unconditional batch
+        #       {"encoder_hidden_states": prompt_e...
+        #       {"encoder_hidden_states": negative...
         #   ]
         # Other guidance methods may return 1 batch (no guidance) or 3+ batches (e.g., PAG, APG).
         guider_state = components.guider.prepare_inputs(guider_inputs)
@@ -239,7 +221,7 @@ class StableDiffusionXLLoopDenoiser(ModularPipelineBlocks):
             prompt_embeds = cond_kwargs.pop("prompt_embeds")
 
             # Predict the noise residual
-            # store the noise_pred in guider_state_batch so that we can apply guidance across all batches
+            # store the noise_pred in guider_state...
             guider_state_batch.noise_pred = components.unet(
                 block_state.scaled_latents,
                 t,
@@ -255,7 +237,6 @@ class StableDiffusionXLLoopDenoiser(ModularPipelineBlocks):
         block_state.noise_pred = components.guider(guider_state)[0]
 
         return components, block_state
-
 
 # loop step (2): denoise the latents with guidance (with controlnet)
 class StableDiffusionXLControlNetLoopDenoiser(ModularPipelineBlocks):
@@ -356,8 +337,8 @@ class StableDiffusionXLControlNetLoopDenoiser(ModularPipelineBlocks):
             components.controlnet.forward, **block_state.controlnet_kwargs
         )
 
-        #  Map the keys we'll see on each `guider_state_batch` (e.g. guider_state_batch.prompt_embeds)
-        #  to the corresponding (cond, uncond) fields on block_state. (e.g. block_state.prompt_embeds, block_state.negative_prompt_embeds)
+        #  Map the keys we'll see on each `guider_...
+        #  to the corresponding (cond, uncond) fie...
         guider_inputs = {
             "prompt_embeds": (
                 getattr(block_state, "prompt_embeds", None),
@@ -395,12 +376,12 @@ class StableDiffusionXLControlNetLoopDenoiser(ModularPipelineBlocks):
         # guided denoiser step
         components.guider.set_state(step=i, num_inference_steps=block_state.num_inference_steps, timestep=t)
 
-        # The guider splits model inputs into separate batches for conditional/unconditional predictions.
-        # For CFG with guider_inputs = {"encoder_hidden_states": (prompt_embeds, negative_prompt_embeds)}:
+        # The guider splits model inputs into sepa...
+        # For CFG with guider_inputs = {"encoder_h...
         # you will get a guider_state with two batches:
         #   guider_state = [
-        #       {"encoder_hidden_states": prompt_embeds, "__guidance_identifier__": "pred_cond"},      # conditional batch
-        #       {"encoder_hidden_states": negative_prompt_embeds, "__guidance_identifier__": "pred_uncond"},  # unconditional batch
+        #       {"encoder_hidden_states": prompt_e...
+        #       {"encoder_hidden_states": negative...
         #   ]
         # Other guidance methods may return 1 batch (no guidance) or 3+ batches (e.g., PAG, APG).
         guider_state = components.guider.prepare_inputs(guider_inputs)
@@ -466,7 +447,6 @@ class StableDiffusionXLControlNetLoopDenoiser(ModularPipelineBlocks):
 
         return components, block_state
 
-
 # loop step (3): scheduler step to update latents
 class StableDiffusionXLLoopAfterDenoiser(ModularPipelineBlocks):
     model_name = "stable-diffusion-xl"
@@ -526,11 +506,10 @@ class StableDiffusionXLLoopAfterDenoiser(ModularPipelineBlocks):
 
         if block_state.latents.dtype != block_state.latents_dtype:
             if torch.backends.mps.is_available():
-                # some platforms (eg. apple mps) misbehave due to a pytorch bug: https://github.com/pytorch/pytorch/pull/99272
+                # some platforms (eg. apple mps) m...
                 block_state.latents = block_state.latents.to(block_state.latents_dtype)
 
         return components, block_state
-
 
 # loop step (3): scheduler step to update latents (with inpainting)
 class StableDiffusionXLInpaintLoopAfterDenoiser(ModularPipelineBlocks):
@@ -623,7 +602,7 @@ class StableDiffusionXLInpaintLoopAfterDenoiser(ModularPipelineBlocks):
 
         if block_state.latents.dtype != block_state.latents_dtype:
             if torch.backends.mps.is_available():
-                # some platforms (eg. apple mps) misbehave due to a pytorch bug: https://github.com/pytorch/pytorch/pull/99272
+                # some platforms (eg. apple mps) m...
                 block_state.latents = block_state.latents.to(block_state.latents_dtype)
 
         # adjust latent for inpainting
@@ -640,7 +619,6 @@ class StableDiffusionXLInpaintLoopAfterDenoiser(ModularPipelineBlocks):
             ) * block_state.init_latents_proper + block_state.mask * block_state.latents
 
         return components, block_state
-
 
 # the loop wrapper that iterates over the timesteps
 class StableDiffusionXLDenoiseLoopWrapper(LoopSequentialPipelineBlocks):
@@ -709,7 +687,6 @@ class StableDiffusionXLDenoiseLoopWrapper(LoopSequentialPipelineBlocks):
 
         return components, state
 
-
 # composing the denoising loops
 class StableDiffusionXLDenoiseStep(StableDiffusionXLDenoiseLoopWrapper):
     block_classes = [
@@ -730,7 +707,6 @@ class StableDiffusionXLDenoiseStep(StableDiffusionXLDenoiseLoopWrapper):
             " - `StableDiffusionXLLoopAfterDenoiser`\n"
             "This block supports both text2img and img2img tasks."
         )
-
 
 # control_cond
 class StableDiffusionXLControlNetDenoiseStep(StableDiffusionXLDenoiseLoopWrapper):
@@ -753,7 +729,6 @@ class StableDiffusionXLControlNetDenoiseStep(StableDiffusionXLDenoiseLoopWrapper
             "This block supports using controlnet for both text2img and img2img tasks."
         )
 
-
 # mask
 class StableDiffusionXLInpaintDenoiseStep(StableDiffusionXLDenoiseLoopWrapper):
     block_classes = [
@@ -774,7 +749,6 @@ class StableDiffusionXLInpaintDenoiseStep(StableDiffusionXLDenoiseLoopWrapper):
             " - `StableDiffusionXLInpaintLoopAfterDenoiser`\n"
             "This block onlysupports inpainting tasks."
         )
-
 
 # control_cond + mask
 class StableDiffusionXLInpaintControlNetDenoiseStep(StableDiffusionXLDenoiseLoopWrapper):

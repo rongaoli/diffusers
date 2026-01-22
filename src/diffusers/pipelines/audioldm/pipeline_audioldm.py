@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import inspect
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -26,7 +12,6 @@ from ...utils import is_torch_xla_available, logging, replace_example_docstring
 from ...utils.torch_utils import randn_tensor
 from ..pipeline_utils import AudioPipelineOutput, DeprecatedPipelineMixin, DiffusionPipeline, StableDiffusionMixin
 
-
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
@@ -36,50 +21,8 @@ else:
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 EXAMPLE_DOC_STRING = """
-    Examples:
-        ```py
-        >>> from diffusers import AudioLDMPipeline
-        >>> import torch
-        >>> import scipy
-
-        >>> repo_id = "cvssp/audioldm-s-full-v2"
-        >>> pipe = AudioLDMPipeline.from_pretrained(repo_id, torch_dtype=torch.float16)
-        >>> pipe = pipe.to("cuda")
-
-        >>> prompt = "Techno music with a strong, upbeat tempo and high melodic riffs"
-        >>> audio = pipe(prompt, num_inference_steps=10, audio_length_in_s=5.0).audios[0]
-
-        >>> # save the audio sample as a .wav file
-        >>> scipy.io.wavfile.write("techno.wav", rate=16000, data=audio)
-        ```
-"""
-
-
-class AudioLDMPipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableDiffusionMixin):
-    r"""
-    Pipeline for text-to-audio generation using AudioLDM.
-
-    This model inherits from [`DiffusionPipeline`]. Check the superclass documentation for the generic methods
-    implemented for all pipelines (downloading, saving, running on a particular device, etc.).
-
-    Args:
-        vae ([`AutoencoderKL`]):
-            Variational Auto-Encoder (VAE) model to encode and decode images to and from latent representations.
-        text_encoder ([`~transformers.ClapTextModelWithProjection`]):
-            Frozen text-encoder (`ClapTextModelWithProjection`, specifically the
-            [laion/clap-htsat-unfused](https://huggingface.co/laion/clap-htsat-unfused) variant.
-        tokenizer ([`PreTrainedTokenizer`]):
-            A [`~transformers.RobertaTokenizer`] to tokenize text.
-        unet ([`UNet2DConditionModel`]):
-            A `UNet2DConditionModel` to denoise the encoded audio latents.
-        scheduler ([`SchedulerMixin`]):
-            A scheduler to be used in combination with `unet` to denoise the encoded audio latents. Can be one of
-            [`DDIMScheduler`], [`LMSDiscreteScheduler`], or [`PNDMScheduler`].
-        vocoder ([`~transformers.SpeechT5HifiGan`]):
-            Vocoder of class `SpeechT5HifiGan`.
-    """
+        使用示例见文档
 
     _last_supported_version = "0.33.1"
     model_cpu_offload_seq = "text_encoder->unet->vae"
@@ -115,30 +58,8 @@ class AudioLDMPipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableDiffusi
         prompt_embeds: Optional[torch.Tensor] = None,
         negative_prompt_embeds: Optional[torch.Tensor] = None,
     ):
-        r"""
-        Encodes the prompt into text encoder hidden states.
-
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                prompt to be encoded
-            device (`torch.device`):
-                torch device
-            num_waveforms_per_prompt (`int`):
-                number of waveforms that should be generated per prompt
-            do_classifier_free_guidance (`bool`):
-                whether to use classifier free guidance or not
-            negative_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts not to guide the audio generation. If not defined, one has to pass
-                `negative_prompt_embeds` instead. Ignored when not using guidance (i.e., ignored if `guidance_scale` is
-                less than `1`).
-            prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt weighting. If not
-                provided, text embeddings will be generated from `prompt` input argument.
-            negative_prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated negative text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt
-                weighting. If not provided, negative_prompt_embeds will be generated from `negative_prompt` input
-                argument.
-        """
+        
+        """r"""
         if prompt is not None and isinstance(prompt, str):
             batch_size = 1
         elif prompt is not None and isinstance(prompt, list):
@@ -229,7 +150,7 @@ class AudioLDMPipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableDiffusi
             negative_prompt_embeds = F.normalize(negative_prompt_embeds, dim=-1)
 
         if do_classifier_free_guidance:
-            # duplicate unconditional embeddings for each generation per prompt, using mps friendly method
+            # duplicate unconditional embeddings f...
             seq_len = negative_prompt_embeds.shape[1]
 
             negative_prompt_embeds = negative_prompt_embeds.to(dtype=self.text_encoder.dtype, device=device)
@@ -254,13 +175,13 @@ class AudioLDMPipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableDiffusi
             mel_spectrogram = mel_spectrogram.squeeze(1)
 
         waveform = self.vocoder(mel_spectrogram)
-        # we always cast to float32 as this does not cause significant overhead and is compatible with bfloat16
+        # we always cast to float32 as this does n...
         waveform = waveform.cpu().float()
         return waveform
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_extra_step_kwargs
+    # Copied from diffusers.pipelines.stable_diffu...
     def prepare_extra_step_kwargs(self, generator, eta):
-        # prepare extra kwargs for the scheduler step, since not all schedulers have the same signature
+        # prepare extra kwargs for the scheduler s...
         # eta (η) is only used with the DDIMScheduler, it will be ignored for other schedulers.
         # eta corresponds to η in DDIM paper: https://huggingface.co/papers/2010.02502
         # and should be between [0, 1]
@@ -334,7 +255,7 @@ class AudioLDMPipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableDiffusi
                     f" {negative_prompt_embeds.shape}."
                 )
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_latents with width->self.vocoder.config.model_in_dim
+    # Copied from diffusers.pipelines.stable_diffu...
     def prepare_latents(self, batch_size, num_channels_latents, height, dtype, device, generator, latents=None):
         shape = (
             batch_size,
@@ -365,10 +286,10 @@ class AudioLDMPipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableDiffusi
         audio_length_in_s: Optional[float] = None,
         num_inference_steps: int = 10,
         guidance_scale: float = 2.5,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        negative_prompt: Optional[str] = None,
         num_waveforms_per_prompt: Optional[int] = 1,
         eta: float = 0.0,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+        generator: Optional[torch.Generator] = None,
         latents: Optional[torch.Tensor] = None,
         prompt_embeds: Optional[torch.Tensor] = None,
         negative_prompt_embeds: Optional[torch.Tensor] = None,
@@ -378,19 +299,8 @@ class AudioLDMPipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableDiffusi
         cross_attention_kwargs: Optional[Dict[str, Any]] = None,
         output_type: Optional[str] = "np",
     ):
-        r"""
-        The call function to the pipeline for generation.
 
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to guide audio generation. If not defined, you need to pass `prompt_embeds`.
-            audio_length_in_s (`int`, *optional*, defaults to 5.12):
-                The length of the generated audio sample in seconds.
-            num_inference_steps (`int`, *optional*, defaults to 10):
-                The number of denoising steps. More denoising steps usually lead to a higher quality audio at the
-                expense of slower inference.
-            guidance_scale (`float`, *optional*, defaults to 2.5):
-                A higher guidance scale value encourages the model to generate audio that is closely linked to the text
+        The call function to the pipeline for generation.
                 `prompt` at the expense of lower sound quality. Guidance scale is enabled when `guidance_scale > 1`.
             negative_prompt (`str` or `List[str]`, *optional*):
                 The prompt or prompts to guide what to not include in audio generation. If not defined, you need to
@@ -429,130 +339,3 @@ class AudioLDMPipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableDiffusi
                 `"pt"` to return a PyTorch `torch.Tensor` object.
 
         Examples:
-
-        Returns:
-            [`~pipelines.AudioPipelineOutput`] or `tuple`:
-                If `return_dict` is `True`, [`~pipelines.AudioPipelineOutput`] is returned, otherwise a `tuple` is
-                returned where the first element is a list with the generated audio.
-        """
-        # 0. Convert audio input length from seconds to spectrogram height
-        vocoder_upsample_factor = np.prod(self.vocoder.config.upsample_rates) / self.vocoder.config.sampling_rate
-
-        if audio_length_in_s is None:
-            audio_length_in_s = self.unet.config.sample_size * self.vae_scale_factor * vocoder_upsample_factor
-
-        height = int(audio_length_in_s / vocoder_upsample_factor)
-
-        original_waveform_length = int(audio_length_in_s * self.vocoder.config.sampling_rate)
-        if height % self.vae_scale_factor != 0:
-            height = int(np.ceil(height / self.vae_scale_factor)) * self.vae_scale_factor
-            logger.info(
-                f"Audio length in seconds {audio_length_in_s} is increased to {height * vocoder_upsample_factor} "
-                f"so that it can be handled by the model. It will be cut to {audio_length_in_s} after the "
-                f"denoising process."
-            )
-
-        # 1. Check inputs. Raise error if not correct
-        self.check_inputs(
-            prompt,
-            audio_length_in_s,
-            vocoder_upsample_factor,
-            callback_steps,
-            negative_prompt,
-            prompt_embeds,
-            negative_prompt_embeds,
-        )
-
-        # 2. Define call parameters
-        if prompt is not None and isinstance(prompt, str):
-            batch_size = 1
-        elif prompt is not None and isinstance(prompt, list):
-            batch_size = len(prompt)
-        else:
-            batch_size = prompt_embeds.shape[0]
-
-        device = self._execution_device
-        # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
-        # of the Imagen paper: https://huggingface.co/papers/2205.11487 . `guidance_scale = 1`
-        # corresponds to doing no classifier free guidance.
-        do_classifier_free_guidance = guidance_scale > 1.0
-
-        # 3. Encode input prompt
-        prompt_embeds = self._encode_prompt(
-            prompt,
-            device,
-            num_waveforms_per_prompt,
-            do_classifier_free_guidance,
-            negative_prompt,
-            prompt_embeds=prompt_embeds,
-            negative_prompt_embeds=negative_prompt_embeds,
-        )
-
-        # 4. Prepare timesteps
-        self.scheduler.set_timesteps(num_inference_steps, device=device)
-        timesteps = self.scheduler.timesteps
-
-        # 5. Prepare latent variables
-        num_channels_latents = self.unet.config.in_channels
-        latents = self.prepare_latents(
-            batch_size * num_waveforms_per_prompt,
-            num_channels_latents,
-            height,
-            prompt_embeds.dtype,
-            device,
-            generator,
-            latents,
-        )
-
-        # 6. Prepare extra step kwargs
-        extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
-
-        # 7. Denoising loop
-        num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
-        with self.progress_bar(total=num_inference_steps) as progress_bar:
-            for i, t in enumerate(timesteps):
-                # expand the latents if we are doing classifier free guidance
-                latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
-                latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
-
-                # predict the noise residual
-                noise_pred = self.unet(
-                    latent_model_input,
-                    t,
-                    encoder_hidden_states=None,
-                    class_labels=prompt_embeds,
-                    cross_attention_kwargs=cross_attention_kwargs,
-                ).sample
-
-                # perform guidance
-                if do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                    noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
-
-                # compute the previous noisy sample x_t -> x_t-1
-                latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
-
-                # call the callback, if provided
-                if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
-                    progress_bar.update()
-                    if callback is not None and i % callback_steps == 0:
-                        step_idx = i // getattr(self.scheduler, "order", 1)
-                        callback(step_idx, t, latents)
-
-                if XLA_AVAILABLE:
-                    xm.mark_step()
-
-        # 8. Post-processing
-        mel_spectrogram = self.decode_latents(latents)
-
-        audio = self.mel_spectrogram_to_waveform(mel_spectrogram)
-
-        audio = audio[:, :original_waveform_length]
-
-        if output_type == "np":
-            audio = audio.numpy()
-
-        if not return_dict:
-            return (audio,)
-
-        return AudioPipelineOutput(audios=audio)

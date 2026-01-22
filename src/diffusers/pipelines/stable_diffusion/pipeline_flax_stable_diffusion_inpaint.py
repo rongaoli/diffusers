@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import warnings
 from functools import partial
 from typing import Dict, List, Optional, Union
@@ -38,96 +24,16 @@ from ..pipeline_flax_utils import FlaxDiffusionPipeline
 from .pipeline_output import FlaxStableDiffusionPipelineOutput
 from .safety_checker_flax import FlaxStableDiffusionSafetyChecker
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Set to True to use python for loop instead of jax.fori_loop for easier debugging
 DEBUG = False
 
 EXAMPLE_DOC_STRING = """
-    Examples:
-        ```py
-        >>> import jax
-        >>> import numpy as np
-        >>> from flax.jax_utils import replicate
-        >>> from flax.training.common_utils import shard
-        >>> import PIL
-        >>> import requests
-        >>> from io import BytesIO
-        >>> from diffusers import FlaxStableDiffusionInpaintPipeline
-
-
-        >>> def download_image(url):
-        ...     response = requests.get(url)
-        ...     return PIL.Image.open(BytesIO(response.content)).convert("RGB")
-
-
-        >>> img_url = "https://raw.githubusercontent.com/CompVis/latent-diffusion/main/data/inpainting_examples/overture-creations-5sI6fQgYIuo.png"
-        >>> mask_url = "https://raw.githubusercontent.com/CompVis/latent-diffusion/main/data/inpainting_examples/overture-creations-5sI6fQgYIuo_mask.png"
-
-        >>> init_image = download_image(img_url).resize((512, 512))
-        >>> mask_image = download_image(mask_url).resize((512, 512))
-
-        >>> pipeline, params = FlaxStableDiffusionInpaintPipeline.from_pretrained(
-        ...     "xvjiarui/stable-diffusion-2-inpainting"
-        ... )
-
-        >>> prompt = "Face of a yellow cat, high resolution, sitting on a park bench"
-        >>> prng_seed = jax.random.PRNGKey(0)
-        >>> num_inference_steps = 50
-
-        >>> num_samples = jax.device_count()
-        >>> prompt = num_samples * [prompt]
-        >>> init_image = num_samples * [init_image]
-        >>> mask_image = num_samples * [mask_image]
-        >>> prompt_ids, processed_masked_images, processed_masks = pipeline.prepare_inputs(
-        ...     prompt, init_image, mask_image
-        ... )
-        # shard inputs and rng
-
-        >>> params = replicate(params)
-        >>> prng_seed = jax.random.split(prng_seed, jax.device_count())
-        >>> prompt_ids = shard(prompt_ids)
-        >>> processed_masked_images = shard(processed_masked_images)
-        >>> processed_masks = shard(processed_masks)
-
-        >>> images = pipeline(
-        ...     prompt_ids, processed_masks, processed_masked_images, params, prng_seed, num_inference_steps, jit=True
-        ... ).images
-        >>> images = pipeline.numpy_to_pil(np.asarray(images.reshape((num_samples,) + images.shape[-3:])))
-        ```
-"""
 
 
 class FlaxStableDiffusionInpaintPipeline(FlaxDiffusionPipeline):
-    r"""
-    Flax-based pipeline for text-guided image inpainting using Stable Diffusion.
 
-    > [!WARNING] > 🧪 This is an experimental feature!
-
-    This model inherits from [`FlaxDiffusionPipeline`]. Check the superclass documentation for the generic methods
-    implemented for all pipelines (downloading, saving, running on a particular device, etc.).
-
-    Args:
-        vae ([`FlaxAutoencoderKL`]):
-            Variational Auto-Encoder (VAE) model to encode and decode images to and from latent representations.
-        text_encoder ([`~transformers.FlaxCLIPTextModel`]):
-            Frozen text-encoder ([clip-vit-large-patch14](https://huggingface.co/openai/clip-vit-large-patch14)).
-        tokenizer ([`~transformers.CLIPTokenizer`]):
-            A `CLIPTokenizer` to tokenize text.
-        unet ([`FlaxUNet2DConditionModel`]):
-            A `FlaxUNet2DConditionModel` to denoise the encoded image latents.
-        scheduler ([`SchedulerMixin`]):
-            A scheduler to be used in combination with `unet` to denoise the encoded image latents. Can be one of
-            [`FlaxDDIMScheduler`], [`FlaxLMSDiscreteScheduler`], [`FlaxPNDMScheduler`], or
-            [`FlaxDPMSolverMultistepScheduler`].
-        safety_checker ([`FlaxStableDiffusionSafetyChecker`]):
-            Classification module that estimates whether generated images could be considered offensive or harmful.
-            Please refer to the [model card](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5) for
-            more details about a model's potential harms.
-        feature_extractor ([`~transformers.CLIPImageProcessor`]):
-            A `CLIPImageProcessor` to extract features from generated images; used as inputs to the `safety_checker`.
-    """
 
     def __init__(
         self,
@@ -408,21 +314,8 @@ class FlaxStableDiffusionInpaintPipeline(FlaxDiffusionPipeline):
         return_dict: bool = True,
         jit: bool = False,
     ):
-        r"""
-        Function invoked when calling the pipeline for generation.
 
-        Args:
-            prompt (`str` or `List[str]`):
-                The prompt or prompts to guide image generation.
-            height (`int`, *optional*, defaults to `self.unet.config.sample_size * self.vae_scale_factor`):
-                The height in pixels of the generated image.
-            width (`int`, *optional*, defaults to `self.unet.config.sample_size * self.vae_scale_factor`):
-                The width in pixels of the generated image.
-            num_inference_steps (`int`, *optional*, defaults to 50):
-                The number of denoising steps. More denoising steps usually lead to a higher quality image at the
-                expense of slower inference. This parameter is modulated by `strength`.
-            guidance_scale (`float`, *optional*, defaults to 7.5):
-                A higher guidance scale value encourages the model to generate images closely linked to the text
+        Function invoked when calling the pipeline for generation.
                 `prompt` at the expense of lower image quality. Guidance scale is enabled when `guidance_scale > 1`.
             latents (`jnp.ndarray`, *optional*):
                 Pre-generated noisy latents sampled from a Gaussian distribution, to be used as inputs for image
@@ -439,86 +332,6 @@ class FlaxStableDiffusionInpaintPipeline(FlaxDiffusionPipeline):
                 a plain tuple.
 
         Examples:
-
-        Returns:
-            [`~pipelines.stable_diffusion.FlaxStableDiffusionPipelineOutput`] or `tuple`:
-                If `return_dict` is `True`, [`~pipelines.stable_diffusion.FlaxStableDiffusionPipelineOutput`] is
-                returned, otherwise a `tuple` is returned where the first element is a list with the generated images
-                and the second element is a list of `bool`s indicating whether the corresponding generated image
-                contains "not-safe-for-work" (nsfw) content.
-        """
-        # 0. Default height and width to unet
-        height = height or self.unet.config.sample_size * self.vae_scale_factor
-        width = width or self.unet.config.sample_size * self.vae_scale_factor
-
-        masked_image = jax.image.resize(masked_image, (*masked_image.shape[:-2], height, width), method="bicubic")
-        mask = jax.image.resize(mask, (*mask.shape[:-2], height, width), method="nearest")
-
-        if isinstance(guidance_scale, float):
-            # Convert to a tensor so each device gets a copy. Follow the prompt_ids for
-            # shape information, as they may be sharded (when `jit` is `True`), or not.
-            guidance_scale = jnp.array([guidance_scale] * prompt_ids.shape[0])
-            if len(prompt_ids.shape) > 2:
-                # Assume sharded
-                guidance_scale = guidance_scale[:, None]
-
-        if jit:
-            images = _p_generate(
-                self,
-                prompt_ids,
-                mask,
-                masked_image,
-                params,
-                prng_seed,
-                num_inference_steps,
-                height,
-                width,
-                guidance_scale,
-                latents,
-                neg_prompt_ids,
-            )
-        else:
-            images = self._generate(
-                prompt_ids,
-                mask,
-                masked_image,
-                params,
-                prng_seed,
-                num_inference_steps,
-                height,
-                width,
-                guidance_scale,
-                latents,
-                neg_prompt_ids,
-            )
-
-        if self.safety_checker is not None:
-            safety_params = params["safety_checker"]
-            images_uint8_casted = (images * 255).round().astype("uint8")
-            num_devices, batch_size = images.shape[:2]
-
-            images_uint8_casted = np.asarray(images_uint8_casted).reshape(num_devices * batch_size, height, width, 3)
-            images_uint8_casted, has_nsfw_concept = self._run_safety_checker(images_uint8_casted, safety_params, jit)
-            images = np.asarray(images)
-
-            # block images
-            if any(has_nsfw_concept):
-                for i, is_nsfw in enumerate(has_nsfw_concept):
-                    if is_nsfw:
-                        images[i] = np.asarray(images_uint8_casted[i])
-
-            images = images.reshape(num_devices, batch_size, height, width, 3)
-        else:
-            images = np.asarray(images)
-            has_nsfw_concept = False
-
-        if not return_dict:
-            return (images, has_nsfw_concept)
-
-        return FlaxStableDiffusionPipelineOutput(images=images, nsfw_content_detected=has_nsfw_concept)
-
-
-# Static argnums are pipe, num_inference_steps, height, width. A change would trigger recompilation.
 # Non-static args are (sharded) input tensors mapped over their first dimension (hence, `0`).
 @partial(
     jax.pmap,
@@ -553,18 +366,15 @@ def _p_generate(
         neg_prompt_ids,
     )
 
-
 @partial(jax.pmap, static_broadcasted_argnums=(0,))
 def _p_get_has_nsfw_concepts(pipe, features, params):
     return pipe._get_has_nsfw_concepts(features, params)
-
 
 def unshard(x: jnp.ndarray):
     # einops.rearrange(x, 'd b ... -> (d b) ...')
     num_devices, batch_size = x.shape[:2]
     rest = x.shape[2:]
     return x.reshape(num_devices * batch_size, *rest)
-
 
 def preprocess_image(image, dtype):
     w, h = image.size
@@ -573,7 +383,6 @@ def preprocess_image(image, dtype):
     image = jnp.array(image).astype(dtype) / 255.0
     image = image[None].transpose(0, 3, 1, 2)
     return 2.0 * image - 1.0
-
 
 def preprocess_mask(mask, dtype):
     w, h = mask.size

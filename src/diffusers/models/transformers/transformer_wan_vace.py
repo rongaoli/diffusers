@@ -1,17 +1,3 @@
-# Copyright 2025 The Wan Team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import math
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -34,9 +20,7 @@ from .transformer_wan import (
     WanTransformerBlock,
 )
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 class WanVACETransformerBlock(nn.Module):
     def __init__(
@@ -133,45 +117,108 @@ class WanVACETransformerBlock(nn.Module):
 
         return conditioning_states, control_hidden_states
 
+class WanVACETransformer3DModel(
+    ModelMixin, ConfigMixin, PeftAdapterMixin, FromOriginalModelMixin, CacheMixin, AttentionMixin
+):
+    class WanVACETransformerBlock(nn.Module):
+    def __init__(
+        self,
+        dim: int,
+        ffn_dim: int,
+        num_heads: int,
+        qk_norm: str = "rms_norm_across_heads",
+        cross_attn_norm: bool = False,
+        eps: float = 1e-6,
+        added_kv_proj_dim: Optional[int] = None,
+        apply_input_projection: bool = False,
+        apply_output_projection: bool = False,
+    ):
+        super().__init__()
+
+        # 1. Input projection
+        self.proj_in = None
+        if apply_input_projection:
+            self.proj_in = nn.Linear(dim, dim)
+
+        # 2. Self-attention
+        self.norm1 = FP32LayerNorm(dim, eps, elementwise_affine=False)
+        self.attn1 = WanAttention(
+            dim=dim,
+            heads=num_heads,
+            dim_head=dim // num_heads,
+            eps=eps,
+            processor=WanAttnProcessor(),
+        )
+
+        # 3. Cross-attention
+        self.attn2 = WanAttention(
+            dim=dim,
+            heads=num_heads,
+            dim_head=dim // num_heads,
+            eps=eps,
+            added_kv_proj_dim=added_kv_proj_dim,
+            processor=WanAttnProcessor(),
+        )
+        self.norm2 = FP32LayerNorm(dim, eps, elementwise_affine=True) if cross_attn_norm else nn.Identity()
+
+        # 4. Feed-forward
+        self.ffn = FeedForward(dim, inner_dim=ffn_dim, activation_fn="gelu-approximate")
+        self.norm3 = FP32LayerNorm(dim, eps, elementwise_affine=False)
+
+        # 5. Output projection
+        self.proj_out = None
+        if apply_output_projection:
+            self.proj_out = nn.Linear(dim, dim)
+
+        self.scale_shift_table = nn.Parameter(torch.randn(1, 6, dim) / dim**0.5)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        control_hidden_states: torch.Tensor,
+        temb: torch.Tensor,
+        rotary_emb: torch.Tensor,
+    ) -> torch.Tensor:
+        if self.proj_in is not None:
+            control_hidden_states = self.proj_in(control_hidden_states)
+            control_hidden_states = control_hidden_states + hidden_states
+
+        shift_msa, scale_msa, gate_msa, c_shift_msa, c_scale_msa, c_gate_msa = (
+            self.scale_shift_table.to(temb.device) + temb.float()
+        ).chunk(6, dim=1)
+
+        # 1. Self-attention
+        norm_hidden_states = (self.norm1(control_hidden_states.float()) * (1 + scale_msa) + shift_msa).type_as(
+            control_hidden_states
+        )
+        attn_output = self.attn1(norm_hidden_states, None, None, rotary_emb)
+        control_hidden_states = (control_hidden_states.float() + attn_output * gate_msa).type_as(control_hidden_states)
+
+        # 2. Cross-attention
+        norm_hidden_states = self.norm2(control_hidden_states.float()).type_as(control_hidden_states)
+        attn_output = self.attn2(norm_hidden_states, encoder_hidden_states, None, None)
+        control_hidden_states = control_hidden_states + attn_output
+
+        # 3. Feed-forward
+        norm_hidden_states = (self.norm3(control_hidden_states.float()) * (1 + c_scale_msa) + c_shift_msa).type_as(
+            control_hidden_states
+        )
+        ff_output = self.ffn(norm_hidden_states)
+        control_hidden_states = (control_hidden_states.float() + ff_output.float() * c_gate_msa).type_as(
+            control_hidden_states
+        )
+
+        conditioning_states = None
+        if self.proj_out is not None:
+            conditioning_states = self.proj_out(control_hidden_states)
+
+        return conditioning_states, control_hidden_states
 
 class WanVACETransformer3DModel(
     ModelMixin, ConfigMixin, PeftAdapterMixin, FromOriginalModelMixin, CacheMixin, AttentionMixin
 ):
-    r"""
-    A Transformer model for video-like data used in the Wan model.
 
-    Args:
-        patch_size (`Tuple[int]`, defaults to `(1, 2, 2)`):
-            3D patch dimensions for video embedding (t_patch, h_patch, w_patch).
-        num_attention_heads (`int`, defaults to `40`):
-            Fixed length for text embeddings.
-        attention_head_dim (`int`, defaults to `128`):
-            The number of channels in each head.
-        in_channels (`int`, defaults to `16`):
-            The number of channels in the input.
-        out_channels (`int`, defaults to `16`):
-            The number of channels in the output.
-        text_dim (`int`, defaults to `512`):
-            Input dimension for text embeddings.
-        freq_dim (`int`, defaults to `256`):
-            Dimension for sinusoidal time embeddings.
-        ffn_dim (`int`, defaults to `13824`):
-            Intermediate dimension in feed-forward network.
-        num_layers (`int`, defaults to `40`):
-            The number of layers of transformer blocks to use.
-        window_size (`Tuple[int]`, defaults to `(-1, -1)`):
-            Window size for local attention (-1 indicates global attention).
-        cross_attn_norm (`bool`, defaults to `True`):
-            Enable cross-attention normalization.
-        qk_norm (`bool`, defaults to `True`):
-            Enable query/key normalization.
-        eps (`float`, defaults to `1e-6`):
-            Epsilon value for normalization layers.
-        add_img_emb (`bool`, defaults to `False`):
-            Whether to use img_emb.
-        added_kv_proj_dim (`int`, *optional*, defaults to `None`):
-            The number of channels to use for the added key and value projections. If `None`, no projection is used.
-    """
 
     _supports_gradient_checkpointing = True
     _skip_layerwise_casting_patterns = ["patch_embedding", "vace_patch_embedding", "condition_embedder", "norm"]

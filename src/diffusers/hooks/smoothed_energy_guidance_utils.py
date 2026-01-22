@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import math
 from dataclasses import asdict, dataclass
 from typing import List, Optional
@@ -23,29 +9,15 @@ from ..utils import get_logger
 from ._common import _ALL_TRANSFORMER_BLOCK_IDENTIFIERS, _ATTENTION_CLASSES, _get_submodule_from_fqn
 from .hooks import HookRegistry, ModelHook
 
-
 logger = get_logger(__name__)  # pylint: disable=invalid-name
 
 _SMOOTHED_ENERGY_GUIDANCE_HOOK = "smoothed_energy_guidance_hook"
 
-
 @dataclass
 class SmoothedEnergyGuidanceConfig:
-    r"""
-    Configuration for skipping internal transformer blocks when executing a transformer model.
+    
+    class SmoothedEnergyGuidanceConfig:
 
-    Args:
-        indices (`List[int]`):
-            The indices of the layer to skip. This is typically the first layer in the transformer block.
-        fqn (`str`, defaults to `"auto"`):
-            The fully qualified name identifying the stack of transformer blocks. Typically, this is
-            `transformer_blocks`, `single_transformer_blocks`, `blocks`, `layers`, or `temporal_transformer_blocks`.
-            For automatic detection, set this to `"auto"`. "auto" only works on DiT models. For UNet models, you must
-            provide the correct fqn.
-        _query_proj_identifiers (`List[str]`, defaults to `None`):
-            The identifiers for the query projection layers. Typically, these are `to_q`, `query`, or `q_proj`. If
-            `None`, `to_q` is used by default.
-    """
 
     indices: List[int]
     fqn: str = "auto"
@@ -58,7 +30,6 @@ class SmoothedEnergyGuidanceConfig:
     def from_dict(data: dict) -> "SmoothedEnergyGuidanceConfig":
         return SmoothedEnergyGuidanceConfig(**data)
 
-
 class SmoothedEnergyGuidanceHook(ModelHook):
     def __init__(self, blur_sigma: float = 1.0, blur_threshold_inf: float = 9999.9) -> None:
         super().__init__()
@@ -66,11 +37,10 @@ class SmoothedEnergyGuidanceHook(ModelHook):
         self.blur_threshold_inf = blur_threshold_inf
 
     def post_forward(self, module: torch.nn.Module, output: torch.Tensor) -> torch.Tensor:
-        # Copied from https://github.com/SusungHong/SEG-SDXL/blob/cf8256d640d5373541cfea3b3b6caf93272cf986/pipeline_seg.py#L172C31-L172C102
+        # Copied from https://github.com/SusungHon...
         kernel_size = math.ceil(6 * self.blur_sigma) + 1 - math.ceil(6 * self.blur_sigma) % 2
         smoothed_output = _gaussian_blur_2d(output, kernel_size, self.blur_sigma, self.blur_threshold_inf)
         return smoothed_output
-
 
 def _apply_smoothed_energy_guidance_hook(
     module: torch.nn.Module, config: SmoothedEnergyGuidanceConfig, blur_sigma: float, name: Optional[str] = None
@@ -119,19 +89,193 @@ def _apply_smoothed_energy_guidance_hook(
             f"fully qualified name '{config.fqn}'. Please check the indices and fqn for correctness."
         )
 
-
-# Modified from https://github.com/SusungHong/SEG-SDXL/blob/cf8256d640d5373541cfea3b3b6caf93272cf986/pipeline_seg.py#L71
+# Modified from https://github.com/SusungHong/SEG-...
 def _gaussian_blur_2d(query: torch.Tensor, kernel_size: int, sigma: float, sigma_threshold_inf: float) -> torch.Tensor:
-    """
-    This implementation assumes that the input query is for visual (image/videos) tokens to apply the 2D gaussian blur.
-    However, some models use joint text-visual token attention for which this may not be suitable. Additionally, this
-    implementation also assumes that the visual tokens come from a square image/video. In practice, despite these
-    assumptions, applying the 2D square gaussian blur on the query projections generates reasonable results for
-    Smoothed Energy Guidance.
+    class SmoothedEnergyGuidanceHook(ModelHook):
+    def __init__(self, blur_sigma: float = 1.0, blur_threshold_inf: float = 9999.9) -> None:
+        super().__init__()
+        self.blur_sigma = blur_sigma
+        self.blur_threshold_inf = blur_threshold_inf
 
-    SEG is only supported as an experimental prototype feature for now, so the implementation may be modified in the
-    future without warning or guarantee of reproducibility.
-    """
+    def post_forward(self, module: torch.nn.Module, output: torch.Tensor) -> torch.Tensor:
+        # Copied from https://github.com/SusungHon...
+        kernel_size = math.ceil(6 * self.blur_sigma) + 1 - math.ceil(6 * self.blur_sigma) % 2
+        smoothed_output = _gaussian_blur_2d(output, kernel_size, self.blur_sigma, self.blur_threshold_inf)
+        return smoothed_output
+
+def _apply_smoothed_energy_guidance_hook(
+    module: torch.nn.Module, config: SmoothedEnergyGuidanceConfig, blur_sigma: float, name: Optional[str] = None
+) -> None:
+    name = name or _SMOOTHED_ENERGY_GUIDANCE_HOOK
+
+    if config.fqn == "auto":
+        for identifier in _ALL_TRANSFORMER_BLOCK_IDENTIFIERS:
+            if hasattr(module, identifier):
+                config.fqn = identifier
+                break
+        else:
+            raise ValueError(
+                "Could not find a suitable identifier for the transformer blocks automatically. Please provide a valid "
+                "`fqn` (fully qualified name) that identifies a stack of transformer blocks."
+            )
+
+    if config._query_proj_identifiers is None:
+        config._query_proj_identifiers = ["to_q"]
+
+    transformer_blocks = _get_submodule_from_fqn(module, config.fqn)
+    blocks_found = False
+    for i, block in enumerate(transformer_blocks):
+        if i not in config.indices:
+            continue
+
+        blocks_found = True
+
+        for submodule_name, submodule in block.named_modules():
+            if not isinstance(submodule, _ATTENTION_CLASSES) or submodule.is_cross_attention:
+                continue
+            for identifier in config._query_proj_identifiers:
+                query_proj = getattr(submodule, identifier, None)
+                if query_proj is None or not isinstance(query_proj, torch.nn.Linear):
+                    continue
+                logger.debug(
+                    f"Registering smoothed energy guidance hook on {config.fqn}.{i}.{submodule_name}.{identifier}"
+                )
+                registry = HookRegistry.check_if_exists_or_initialize(query_proj)
+                hook = SmoothedEnergyGuidanceHook(blur_sigma)
+                registry.register_hook(hook, name)
+
+    if not blocks_found:
+        raise ValueError(
+            f"Could not find any transformer blocks matching the provided indices {config.indices} and "
+            f"fully qualified name '{config.fqn}'. Please check the indices and fqn for correctness."
+        )
+
+# Modified from https://github.com/SusungHong/SEG-...
+def _gaussian_blur_2d(query: torch.Tensor, kernel_size: int, sigma: float, sigma_threshold_inf: float) -> torch.Tensor:
+    
+    class SmoothedEnergyGuidanceHook(ModelHook):
+    def __init__(self, blur_sigma: float = 1.0, blur_threshold_inf: float = 9999.9) -> None:
+        super().__init__()
+        self.blur_sigma = blur_sigma
+        self.blur_threshold_inf = blur_threshold_inf
+
+    def post_forward(self, module: torch.nn.Module, output: torch.Tensor) -> torch.Tensor:
+        # Copied from https://github.com/SusungHon...
+        kernel_size = math.ceil(6 * self.blur_sigma) + 1 - math.ceil(6 * self.blur_sigma) % 2
+        smoothed_output = _gaussian_blur_2d(output, kernel_size, self.blur_sigma, self.blur_threshold_inf)
+        return smoothed_output
+
+def _apply_smoothed_energy_guidance_hook(
+    module: torch.nn.Module, config: SmoothedEnergyGuidanceConfig, blur_sigma: float, name: Optional[str] = None
+) -> None:
+    name = name or _SMOOTHED_ENERGY_GUIDANCE_HOOK
+
+    if config.fqn == "auto":
+        for identifier in _ALL_TRANSFORMER_BLOCK_IDENTIFIERS:
+            if hasattr(module, identifier):
+                config.fqn = identifier
+                break
+        else:
+            raise ValueError(
+                "Could not find a suitable identifier for the transformer blocks automatically. Please provide a valid "
+                "`fqn` (fully qualified name) that identifies a stack of transformer blocks."
+            )
+
+    if config._query_proj_identifiers is None:
+        config._query_proj_identifiers = ["to_q"]
+
+    transformer_blocks = _get_submodule_from_fqn(module, config.fqn)
+    blocks_found = False
+    for i, block in enumerate(transformer_blocks):
+        if i not in config.indices:
+            continue
+
+        blocks_found = True
+
+        for submodule_name, submodule in block.named_modules():
+            if not isinstance(submodule, _ATTENTION_CLASSES) or submodule.is_cross_attention:
+                continue
+            for identifier in config._query_proj_identifiers:
+                query_proj = getattr(submodule, identifier, None)
+                if query_proj is None or not isinstance(query_proj, torch.nn.Linear):
+                    continue
+                logger.debug(
+                    f"Registering smoothed energy guidance hook on {config.fqn}.{i}.{submodule_name}.{identifier}"
+                )
+                registry = HookRegistry.check_if_exists_or_initialize(query_proj)
+                hook = SmoothedEnergyGuidanceHook(blur_sigma)
+                registry.register_hook(hook, name)
+
+    if not blocks_found:
+        raise ValueError(
+            f"Could not find any transformer blocks matching the provided indices {config.indices} and "
+            f"fully qualified name '{config.fqn}'. Please check the indices and fqn for correctness."
+        )
+
+# Modified from https://github.com/SusungHong/SEG-...
+def _gaussian_blur_2d(query: torch.Tensor, kernel_size: int, sigma: float, sigma_threshold_inf: float) -> torch.Tensor:
+    class SmoothedEnergyGuidanceHook(ModelHook):
+    def __init__(self, blur_sigma: float = 1.0, blur_threshold_inf: float = 9999.9) -> None:
+        super().__init__()
+        self.blur_sigma = blur_sigma
+        self.blur_threshold_inf = blur_threshold_inf
+
+    def post_forward(self, module: torch.nn.Module, output: torch.Tensor) -> torch.Tensor:
+        # Copied from https://github.com/SusungHon...
+        kernel_size = math.ceil(6 * self.blur_sigma) + 1 - math.ceil(6 * self.blur_sigma) % 2
+        smoothed_output = _gaussian_blur_2d(output, kernel_size, self.blur_sigma, self.blur_threshold_inf)
+        return smoothed_output
+
+def _apply_smoothed_energy_guidance_hook(
+    module: torch.nn.Module, config: SmoothedEnergyGuidanceConfig, blur_sigma: float, name: Optional[str] = None
+) -> None:
+    name = name or _SMOOTHED_ENERGY_GUIDANCE_HOOK
+
+    if config.fqn == "auto":
+        for identifier in _ALL_TRANSFORMER_BLOCK_IDENTIFIERS:
+            if hasattr(module, identifier):
+                config.fqn = identifier
+                break
+        else:
+            raise ValueError(
+                "Could not find a suitable identifier for the transformer blocks automatically. Please provide a valid "
+                "`fqn` (fully qualified name) that identifies a stack of transformer blocks."
+            )
+
+    if config._query_proj_identifiers is None:
+        config._query_proj_identifiers = ["to_q"]
+
+    transformer_blocks = _get_submodule_from_fqn(module, config.fqn)
+    blocks_found = False
+    for i, block in enumerate(transformer_blocks):
+        if i not in config.indices:
+            continue
+
+        blocks_found = True
+
+        for submodule_name, submodule in block.named_modules():
+            if not isinstance(submodule, _ATTENTION_CLASSES) or submodule.is_cross_attention:
+                continue
+            for identifier in config._query_proj_identifiers:
+                query_proj = getattr(submodule, identifier, None)
+                if query_proj is None or not isinstance(query_proj, torch.nn.Linear):
+                    continue
+                logger.debug(
+                    f"Registering smoothed energy guidance hook on {config.fqn}.{i}.{submodule_name}.{identifier}"
+                )
+                registry = HookRegistry.check_if_exists_or_initialize(query_proj)
+                hook = SmoothedEnergyGuidanceHook(blur_sigma)
+                registry.register_hook(hook, name)
+
+    if not blocks_found:
+        raise ValueError(
+            f"Could not find any transformer blocks matching the provided indices {config.indices} and "
+            f"fully qualified name '{config.fqn}'. Please check the indices and fqn for correctness."
+        )
+
+# Modified from https://github.com/SusungHong/SEG-...
+def _gaussian_blur_2d(query: torch.Tensor, kernel_size: int, sigma: float, sigma_threshold_inf: float) -> torch.Tensor:
+
     assert query.ndim == 3
 
     is_inf = sigma > sigma_threshold_inf

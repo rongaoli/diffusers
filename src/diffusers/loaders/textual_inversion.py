@@ -1,16 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 from typing import Dict, List, Optional, Union
 
 import safetensors
@@ -20,7 +7,6 @@ from torch import nn
 
 from ..models.modeling_utils import load_state_dict
 from ..utils import _get_model_file, is_accelerate_available, is_transformers_available, logging
-
 
 if is_transformers_available():
     from transformers import PreTrainedModel, PreTrainedTokenizer
@@ -32,7 +18,6 @@ logger = logging.get_logger(__name__)
 
 TEXT_INVERSION_NAME = "learned_embeds.bin"
 TEXT_INVERSION_NAME_SAFE = "learned_embeds.safetensors"
-
 
 @validate_hf_hub_args
 def load_textual_inversion_state_dicts(pretrained_model_name_or_paths, **kwargs):
@@ -106,27 +91,12 @@ def load_textual_inversion_state_dicts(pretrained_model_name_or_paths, **kwargs)
 
     return state_dicts
 
-
 class TextualInversionLoaderMixin:
-    r"""
-    Load Textual Inversion tokens and embeddings to the tokenizer and text encoder.
-    """
+
 
     def maybe_convert_prompt(self, prompt: Union[str, List[str]], tokenizer: "PreTrainedTokenizer"):  # noqa: F821
-        r"""
-        Processes prompts that include a special token corresponding to a multi-vector textual inversion embedding to
-        be replaced with multiple special tokens each corresponding to one of the vectors. If the prompt has no textual
-        inversion token or if the textual inversion token is a single vector, the input prompt is returned.
-
-        Parameters:
-            prompt (`str` or list of `str`):
-                The prompt or prompts to guide the image generation.
-            tokenizer (`PreTrainedTokenizer`):
-                The tokenizer responsible for encoding the prompt into input tokens.
-
-        Returns:
-            `str` or list of `str`: The converted prompt
-        """
+        
+        """r"""
         if not isinstance(prompt, List):
             prompts = [prompt]
         else:
@@ -140,21 +110,8 @@ class TextualInversionLoaderMixin:
         return prompts
 
     def _maybe_convert_prompt(self, prompt: str, tokenizer: "PreTrainedTokenizer"):  # noqa: F821
-        r"""
-        Maybe convert a prompt into a "multi vector"-compatible prompt. If the prompt includes a token that corresponds
-        to a multi-vector textual inversion embedding, this function will process the prompt so that the special token
-        is replaced with multiple special tokens each corresponding to one of the vectors. If the prompt has no textual
-        inversion token or a textual inversion token that is a single vector, the input prompt is simply returned.
-
-        Parameters:
-            prompt (`str`):
-                The prompt to guide the image generation.
-            tokenizer (`PreTrainedTokenizer`):
-                The tokenizer responsible for encoding the prompt into input tokens.
-
-        Returns:
-            `str`: The converted prompt
-        """
+        
+        """r"""
         tokens = tokenizer.tokenize(prompt)
         unique_tokens = set(tokens)
         for token in unique_tokens:
@@ -264,106 +221,13 @@ class TextualInversionLoaderMixin:
     def load_textual_inversion(
         self,
         pretrained_model_name_or_path: Union[str, List[str], Dict[str, torch.Tensor], List[Dict[str, torch.Tensor]]],
-        token: Optional[Union[str, List[str]]] = None,
+        token: Optional[str] = None,
         tokenizer: Optional["PreTrainedTokenizer"] = None,  # noqa: F821
         text_encoder: Optional["PreTrainedModel"] = None,  # noqa: F821
         **kwargs,
     ):
-        r"""
-        Load Textual Inversion embeddings into the text encoder of [`StableDiffusionPipeline`] (both 🤗 Diffusers and
-        Automatic1111 formats are supported).
-
-        Parameters:
-            pretrained_model_name_or_path (`str` or `os.PathLike` or `List[str or os.PathLike]` or `Dict` or `List[Dict]`):
-                Can be either one of the following or a list of them:
-
-                    - A string, the *model id* (for example `sd-concepts-library/low-poly-hd-logos-icons`) of a
-                      pretrained model hosted on the Hub.
-                    - A path to a *directory* (for example `./my_text_inversion_directory/`) containing the textual
-                      inversion weights.
-                    - A path to a *file* (for example `./my_text_inversions.pt`) containing textual inversion weights.
-                    - A [torch state
-                      dict](https://pytorch.org/tutorials/beginner/saving_loading_models.html#what-is-a-state-dict).
-
-            token (`str` or `List[str]`, *optional*):
-                Override the token to use for the textual inversion weights. If `pretrained_model_name_or_path` is a
-                list, then `token` must also be a list of equal length.
-            text_encoder ([`~transformers.CLIPTextModel`], *optional*):
-                Frozen text-encoder ([clip-vit-large-patch14](https://huggingface.co/openai/clip-vit-large-patch14)).
-                If not specified, function will take self.tokenizer.
-            tokenizer ([`~transformers.CLIPTokenizer`], *optional*):
-                A `CLIPTokenizer` to tokenize text. If not specified, function will take self.tokenizer.
-            weight_name (`str`, *optional*):
-                Name of a custom weight file. This should be used when:
-
-                    - The saved textual inversion file is in 🤗 Diffusers format, but was saved under a specific weight
-                      name such as `text_inv.bin`.
-                    - The saved textual inversion file is in the Automatic1111 format.
-            cache_dir (`Union[str, os.PathLike]`, *optional*):
-                Path to a directory where a downloaded pretrained model configuration is cached if the standard cache
-                is not used.
-            force_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to force the (re-)download of the model weights and configuration files, overriding the
-                cached versions if they exist.
-
-            proxies (`Dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, for example, `{'http': 'foo.bar:3128',
-                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
-            local_files_only (`bool`, *optional*, defaults to `False`):
-                Whether to only load local model weights and configuration files or not. If set to `True`, the model
-                won't be downloaded from the Hub.
-            hf_token (`str` or *bool*, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, the token generated from
-                `diffusers-cli login` (stored in `~/.huggingface`) is used.
-            revision (`str`, *optional*, defaults to `"main"`):
-                The specific model version to use. It can be a branch name, a tag name, a commit id, or any identifier
-                allowed by Git.
-            subfolder (`str`, *optional*, defaults to `""`):
-                The subfolder location of a model file within a larger model repository on the Hub or locally.
-            mirror (`str`, *optional*):
-                Mirror source to resolve accessibility issues if you're downloading a model in China. We do not
-                guarantee the timeliness or safety of the source, and you should refer to the mirror site for more
-                information.
-
-        Example:
-
-        To load a Textual Inversion embedding vector in 🤗 Diffusers format:
-
-        ```py
-        from diffusers import StableDiffusionPipeline
-        import torch
-
-        model_id = "stable-diffusion-v1-5/stable-diffusion-v1-5"
-        pipe = StableDiffusionPipeline.from_pretrained(model_id, torch_dtype=torch.float16).to("cuda")
-
-        pipe.load_textual_inversion("sd-concepts-library/cat-toy")
-
-        prompt = "A <cat-toy> backpack"
-
-        image = pipe(prompt, num_inference_steps=50).images[0]
-        image.save("cat-backpack.png")
-        ```
-
-        To load a Textual Inversion embedding vector in Automatic1111 format, make sure to download the vector first
-        (for example from [civitAI](https://civitai.com/models/3036?modelVersionId=9857)) and then load the vector
-        locally:
-
-        ```py
-        from diffusers import StableDiffusionPipeline
-        import torch
-
-        model_id = "stable-diffusion-v1-5/stable-diffusion-v1-5"
-        pipe = StableDiffusionPipeline.from_pretrained(model_id, torch_dtype=torch.float16).to("cuda")
-
-        pipe.load_textual_inversion("./charturnerv2.pt", token="charturnerv2")
-
-        prompt = "charturnerv2, multiple views of the same character in the same outfit, a character turnaround of a woman wearing a black jacket and red shirt, best quality, intricate details."
-
-        image = pipe(prompt, num_inference_steps=50).images[0]
-        image.save("character.png")
-        ```
-
-        """
+        
+        """r"""
         # 1. Set correct tokenizer and text encoder
         tokenizer = tokenizer or getattr(self, "tokenizer", None)
         text_encoder = text_encoder or getattr(self, "text_encoder", None)
@@ -384,7 +248,7 @@ class TextualInversionLoaderMixin:
         # 4. Load state dicts of textual embeddings
         state_dicts = load_textual_inversion_state_dicts(pretrained_model_name_or_paths, **kwargs)
 
-        # 4.1 Handle the special case when state_dict is a tensor that contains n embeddings for n tokens
+        # 4.1 Handle the special case when state_d...
         if len(tokens) > 1 and len(state_dicts) == 1:
             if isinstance(state_dicts[0], torch.Tensor):
                 state_dicts = list(state_dicts[0])
@@ -411,7 +275,7 @@ class TextualInversionLoaderMixin:
         # 7. Now we can be sure that loading the embedding matrix works
         # < Unsafe code:
 
-        # 7.1 Offload all hooks in case the pipeline was cpu offloaded before make sure, we offload and onload again
+        # 7.1 Offload all hooks in case the pipeli...
         is_model_cpu_offload = False
         is_sequential_cpu_offload = False
         if self.hf_device_map is None:
@@ -458,67 +322,15 @@ class TextualInversionLoaderMixin:
 
     def unload_textual_inversion(
         self,
-        tokens: Optional[Union[str, List[str]]] = None,
+        tokens: Optional[str] = None,
         tokenizer: Optional["PreTrainedTokenizer"] = None,
         text_encoder: Optional["PreTrainedModel"] = None,
     ):
-        r"""
-        Unload Textual Inversion embeddings from the text encoder of [`StableDiffusionPipeline`]
+        
+        """r"""
 
-        Example:
-        ```py
-        from diffusers import AutoPipelineForText2Image
-        import torch
+        使用示例见文档
 
-        pipeline = AutoPipelineForText2Image.from_pretrained("stable-diffusion-v1-5/stable-diffusion-v1-5")
-
-        # Example 1
-        pipeline.load_textual_inversion("sd-concepts-library/gta5-artwork")
-        pipeline.load_textual_inversion("sd-concepts-library/moeb-style")
-
-        # Remove all token embeddings
-        pipeline.unload_textual_inversion()
-
-        # Example 2
-        pipeline.load_textual_inversion("sd-concepts-library/moeb-style")
-        pipeline.load_textual_inversion("sd-concepts-library/gta5-artwork")
-
-        # Remove just one token
-        pipeline.unload_textual_inversion("<moe-bius>")
-
-        # Example 3: unload from SDXL
-        pipeline = AutoPipelineForText2Image.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0")
-        embedding_path = hf_hub_download(
-            repo_id="linoyts/web_y2k", filename="web_y2k_emb.safetensors", repo_type="model"
-        )
-
-        # load embeddings to the text encoders
-        state_dict = load_file(embedding_path)
-
-        # load embeddings of text_encoder 1 (CLIP ViT-L/14)
-        pipeline.load_textual_inversion(
-            state_dict["clip_l"],
-            tokens=["<s0>", "<s1>"],
-            text_encoder=pipeline.text_encoder,
-            tokenizer=pipeline.tokenizer,
-        )
-        # load embeddings of text_encoder 2 (CLIP ViT-G/14)
-        pipeline.load_textual_inversion(
-            state_dict["clip_g"],
-            tokens=["<s0>", "<s1>"],
-            text_encoder=pipeline.text_encoder_2,
-            tokenizer=pipeline.tokenizer_2,
-        )
-
-        # Unload explicitly from both text encoders and tokenizers
-        pipeline.unload_textual_inversion(
-            tokens=["<s0>", "<s1>"], text_encoder=pipeline.text_encoder, tokenizer=pipeline.tokenizer
-        )
-        pipeline.unload_textual_inversion(
-            tokens=["<s0>", "<s1>"], text_encoder=pipeline.text_encoder_2, tokenizer=pipeline.tokenizer_2
-        )
-        ```
-        """
 
         tokenizer = tokenizer or getattr(self, "tokenizer", None)
         text_encoder = text_encoder or getattr(self, "text_encoder", None)

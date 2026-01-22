@@ -12,18 +12,15 @@ import PIL.ImageOps
 from .import_utils import BACKENDS_MAPPING, is_imageio_available, is_opencv_available
 from .logging import get_logger
 
-
 global_rng = random.Random()
 
 logger = get_logger(__name__)
-
 
 @contextmanager
 def buffered_writer(raw_f):
     f = io.BufferedWriter(raw_f)
     yield f
     f.flush()
-
 
 def export_to_gif(image: List[PIL.Image.Image], output_gif_path: str = None, fps: int = 10) -> str:
     if output_gif_path is None:
@@ -39,11 +36,8 @@ def export_to_gif(image: List[PIL.Image.Image], output_gif_path: str = None, fps
     )
     return output_gif_path
 
-
 def export_to_ply(mesh, output_ply_path: str = None):
-    """
-    Write a PLY file for a mesh.
-    """
+
     if output_ply_path is None:
         output_ply_path = tempfile.NamedTemporaryFile(suffix=".ply").name
 
@@ -91,7 +85,6 @@ def export_to_ply(mesh, output_ply_path: str = None):
 
     return output_ply_path
 
-
 def export_to_obj(mesh, output_obj_path: str = None):
     if output_obj_path is None:
         output_obj_path = tempfile.NamedTemporaryFile(suffix=".obj").name
@@ -110,7 +103,6 @@ def export_to_obj(mesh, output_obj_path: str = None):
 
     with open(output_obj_path, "w") as f:
         f.writelines("\n".join(combined_data))
-
 
 def _legacy_export_to_video(
     video_frames: Union[List[np.ndarray], List[PIL.Image.Image]], output_video_path: str = None, fps: int = 10
@@ -137,7 +129,6 @@ def _legacy_export_to_video(
 
     return output_video_path
 
-
 def export_to_video(
     video_frames: Union[List[np.ndarray], List[PIL.Image.Image]],
     output_video_path: str = None,
@@ -146,24 +137,7 @@ def export_to_video(
     bitrate: Optional[int] = None,
     macro_block_size: Optional[int] = 16,
 ) -> str:
-    """
-    quality:
-        Video output quality. Default is 5. Uses variable bit rate. Highest quality is 10, lowest is 0. Set to None to
-        prevent variable bitrate flags to FFMPEG so you can manually specify them using output_params instead.
-        Specifying a fixed bitrate using `bitrate` disables this parameter.
 
-    bitrate:
-        Set a constant bitrate for the video encoding. Default is None causing `quality` parameter to be used instead.
-        Better quality videos with smaller file sizes will result from using the `quality` variable bitrate parameter
-        rather than specifying a fixed bitrate with this parameter.
-
-    macro_block_size:
-        Size constraint for video. Width and height, must be divisible by this number. If not divisible by this number
-        imageio will tell ffmpeg to scale the image up to the next closest size divisible by this number. Most codecs
-        are compatible with a macroblock size of 16 (default), some can go smaller (4, 8). To disable this automatic
-        feature set it to None or 1, however be warned many players can't decode videos that are odd in size and some
-        codecs will produce poor results or fail. See https://en.wikipedia.org/wiki/Macroblock.
-    """
     # TODO: Dhruv. Remove by Diffusers release 0.33.0
     # Added to prevent breaking existing code
     if not is_imageio_available():

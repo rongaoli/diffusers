@@ -32,7 +32,6 @@ from ...utils import (
 )
 from ...utils.torch_utils import randn_tensor
 
-
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
@@ -40,32 +39,9 @@ if is_torch_xla_available():
 else:
     XLA_AVAILABLE = False
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 EXAMPLE_DOC_STRING = """
-    Examples:
-        ```py
-        >>> import torch
-        >>> from diffusers import BriaPipeline
-
-        >>> pipe = BriaPipeline.from_pretrained("briaai/BRIA-3.2", torch_dtype=torch.bfloat16)
-        >>> pipe.to("cuda")
-        # BRIA's T5 text encoder is sensitive to precision. We need to cast it to bfloat16 and keep the final layer in float32.
-
-        >>> pipe.text_encoder = pipe.text_encoder.to(dtype=torch.bfloat16)
-        >>> for block in pipe.text_encoder.encoder.block:
-        ...     block.layer[-1].DenseReluDense.wo.to(dtype=torch.float32)
-        # BRIA's VAE is not supported in mixed precision, so we use float32.
-
-        >>> if pipe.vae.config.shift_factor == 0:
-        ...     pipe.vae.to(dtype=torch.float32)
-
-        >>> prompt = "Photorealistic food photography of a stack of fluffy pancakes on a white plate, with maple syrup being poured over them. On top of the pancakes are the words 'BRIA 3.2' in bold, yellow, 3D letters. The background is dark and out of focus."
-        >>> image = pipe(prompt).images[0]
-        >>> image.save("bria.png")
-        ```
-"""
 
 
 def is_ng_none(negative_prompt):
@@ -76,7 +52,6 @@ def is_ng_none(negative_prompt):
         or (type(negative_prompt) == list and negative_prompt[0] == "")
     )
 
-
 def get_original_sigmas(num_train_timesteps=1000, num_inference_steps=1000):
     timesteps = np.linspace(1, num_train_timesteps, num_train_timesteps, dtype=np.float32)[::-1].copy()
     sigmas = timesteps / num_train_timesteps
@@ -85,29 +60,8 @@ def get_original_sigmas(num_train_timesteps=1000, num_inference_steps=1000):
     new_sigmas = sigmas[inds]
     return new_sigmas
 
-
 class BriaPipeline(DiffusionPipeline):
-    r"""
-    Based on FluxPipeline with several changes:
-    - no pooled embeddings
-    - We use zero padding for prompts
-    - No guidance embedding since this is not a distilled version
 
-    Args:
-        transformer ([`BriaTransformer2DModel`]):
-            Conditional Transformer (MMDiT) architecture to denoise the encoded image latents.
-        scheduler ([`FlowMatchEulerDiscreteScheduler`]):
-            A scheduler to be used in combination with `transformer` to denoise the encoded image latents.
-        vae ([`AutoencoderKL`]):
-            Variational Auto-Encoder (VAE) Model to encode and decode images to and from latent representations.
-        text_encoder ([`T5EncoderModel`]):
-            Frozen text-encoder. Bria uses
-            [T5](https://huggingface.co/docs/transformers/model_doc/t5#transformers.T5EncoderModel), specifically the
-            [t5-v1_1-xxl](https://huggingface.co/google/t5-v1_1-xxl) variant.
-        tokenizer (`T5TokenizerFast`):
-            Tokenizer of class
-            [T5Tokenizer](https://huggingface.co/docs/transformers/model_doc/t5#transformers.T5Tokenizer).
-    """
 
     model_cpu_offload_seq = "text_encoder->text_encoder_2->image_encoder->transformer->vae"
     _optional_components = ["image_encoder", "feature_extractor"]
@@ -149,35 +103,14 @@ class BriaPipeline(DiffusionPipeline):
         device: Optional[torch.device] = None,
         num_images_per_prompt: int = 1,
         do_classifier_free_guidance: bool = True,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        negative_prompt: Optional[str] = None,
         prompt_embeds: Optional[torch.FloatTensor] = None,
         negative_prompt_embeds: Optional[torch.FloatTensor] = None,
         max_sequence_length: int = 128,
         lora_scale: Optional[float] = None,
     ):
-        r"""
-
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                prompt to be encoded
-            device: (`torch.device`):
-                torch device
-            num_images_per_prompt (`int`):
-                number of images that should be generated per prompt
-            do_classifier_free_guidance (`bool`):
-                whether to use classifier free guidance or not
-            negative_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts not to guide the image generation. If not defined, one has to pass
-                `negative_prompt_embeds` instead. Ignored when not using guidance (i.e., ignored if `guidance_scale` is
-                less than `1`).
-            prompt_embeds (`torch.FloatTensor`, *optional*):
-                Pre-generated text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt weighting. If not
-                provided, text embeddings will be generated from `prompt` input argument.
-            negative_prompt_embeds (`torch.FloatTensor`, *optional*):
-                Pre-generated negative text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt
-                weighting. If not provided, negative_prompt_embeds will be generated from `negative_prompt` input
-                argument.
-        """
+        
+        """r"""
         device = device or self._execution_device
 
         # set lora scale so that monkey patched LoRA
@@ -367,7 +300,7 @@ class BriaPipeline(DiffusionPipeline):
         prompt_embeds = torch.concat(prompt_embeds_list, dim=0)
         prompt_embeds = prompt_embeds.to(device=device)
 
-        # duplicate text embeddings and attention mask for each generation per prompt, using mps friendly method
+        # duplicate text embeddings and attention...
         prompt_embeds = prompt_embeds.repeat(1, num_images_per_prompt, 1)
         prompt_embeds = prompt_embeds.view(batch_size * num_images_per_prompt, max_sequence_length, -1)
         prompt_embeds = prompt_embeds.to(dtype=self.transformer.dtype)
@@ -455,9 +388,9 @@ class BriaPipeline(DiffusionPipeline):
         num_inference_steps: int = 30,
         timesteps: List[int] = None,
         guidance_scale: float = 5,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        negative_prompt: Optional[str] = None,
         num_images_per_prompt: Optional[int] = 1,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+        generator: Optional[torch.Generator] = None,
         latents: Optional[torch.FloatTensor] = None,
         prompt_embeds: Optional[torch.FloatTensor] = None,
         negative_prompt_embeds: Optional[torch.FloatTensor] = None,
@@ -470,28 +403,8 @@ class BriaPipeline(DiffusionPipeline):
         clip_value: Union[None, float] = None,
         normalize: bool = False,
     ):
-        r"""
-        Function invoked when calling the pipeline for generation.
 
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to guide the image generation. If not defined, one has to pass `prompt_embeds`.
-                instead.
-            height (`int`, *optional*, defaults to self.unet.config.sample_size * self.vae_scale_factor):
-                The height in pixels of the generated image. This is set to 1024 by default for the best results.
-            width (`int`, *optional*, defaults to self.unet.config.sample_size * self.vae_scale_factor):
-                The width in pixels of the generated image. This is set to 1024 by default for the best results.
-            num_inference_steps (`int`, *optional*, defaults to 50):
-                The number of denoising steps. More denoising steps usually lead to a higher quality image at the
-                expense of slower inference.
-            timesteps (`List[int]`, *optional*):
-                Custom timesteps to use for the denoising process with schedulers which support a `timesteps` argument
-                in their `set_timesteps` method. If not defined, the default behavior when `num_inference_steps` is
-                passed will be used. Must be in descending order.
-            guidance_scale (`float`, *optional*, defaults to 5.0):
-                Guidance scale as defined in [Classifier-Free Diffusion
-                Guidance](https://huggingface.co/papers/2207.12598). `guidance_scale` is defined as `w` of equation 2.
-                of [Imagen Paper](https://huggingface.co/papers/2205.11487). Guidance scale is enabled by setting
+        Function invoked when calling the pipeline for generation.
                 `guidance_scale > 1`. Higher guidance scale encourages to generate images that are closely linked to
                 the text `prompt`, usually at the expense of lower image quality.
             negative_prompt (`str` or `List[str]`, *optional*):
@@ -535,195 +448,3 @@ class BriaPipeline(DiffusionPipeline):
             max_sequence_length (`int` defaults to 256): Maximum sequence length to use with the `prompt`.
 
         Examples:
-
-          Returns:
-            [`~pipelines.bria.BriaPipelineOutput`] or `tuple`: [`~pipelines.bria.BriaPipelineOutput`] if `return_dict`
-            is True, otherwise a `tuple`. When returning a tuple, the first element is a list with the generated
-            images.
-        """
-
-        height = height or self.default_sample_size * self.vae_scale_factor
-        width = width or self.default_sample_size * self.vae_scale_factor
-
-        # 1. Check inputs. Raise error if not correct
-        self.check_inputs(
-            prompt=prompt,
-            height=height,
-            width=width,
-            prompt_embeds=prompt_embeds,
-            callback_on_step_end_tensor_inputs=callback_on_step_end_tensor_inputs,
-            max_sequence_length=max_sequence_length,
-        )
-
-        self._guidance_scale = guidance_scale
-        self.attention_kwargs = attention_kwargs
-        self._interrupt = False
-
-        # 2. Define call parameters
-        if prompt is not None and isinstance(prompt, str):
-            batch_size = 1
-        elif prompt is not None and isinstance(prompt, list):
-            batch_size = len(prompt)
-        else:
-            batch_size = prompt_embeds.shape[0]
-
-        device = self._execution_device
-
-        lora_scale = self.attention_kwargs.get("scale", None) if self.attention_kwargs is not None else None
-
-        (prompt_embeds, negative_prompt_embeds, text_ids) = self.encode_prompt(
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            do_classifier_free_guidance=self.do_classifier_free_guidance,
-            prompt_embeds=prompt_embeds,
-            negative_prompt_embeds=negative_prompt_embeds,
-            device=device,
-            num_images_per_prompt=num_images_per_prompt,
-            max_sequence_length=max_sequence_length,
-            lora_scale=lora_scale,
-        )
-
-        if self.do_classifier_free_guidance:
-            prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds], dim=0)
-
-        # 5. Prepare latent variables
-        num_channels_latents = self.transformer.config.in_channels // 4  # due to patch=2, we devide by 4
-        latents, latent_image_ids = self.prepare_latents(
-            batch_size * num_images_per_prompt,
-            num_channels_latents,
-            height,
-            width,
-            prompt_embeds.dtype,
-            device,
-            generator,
-            latents,
-        )
-
-        if (
-            isinstance(self.scheduler, FlowMatchEulerDiscreteScheduler)
-            and self.scheduler.config["use_dynamic_shifting"]
-        ):
-            sigmas = np.linspace(1.0, 1 / num_inference_steps, num_inference_steps)
-            image_seq_len = latents.shape[1]
-
-            mu = calculate_shift(
-                image_seq_len,
-                self.scheduler.config.base_image_seq_len,
-                self.scheduler.config.max_image_seq_len,
-                self.scheduler.config.base_shift,
-                self.scheduler.config.max_shift,
-            )
-            timesteps, num_inference_steps = retrieve_timesteps(
-                self.scheduler,
-                num_inference_steps,
-                device,
-                timesteps,
-                sigmas,
-                mu=mu,
-            )
-        else:
-            # 4. Prepare timesteps
-            # Sample from training sigmas
-            if isinstance(self.scheduler, DDIMScheduler) or isinstance(
-                self.scheduler, EulerAncestralDiscreteScheduler
-            ):
-                timesteps, num_inference_steps = retrieve_timesteps(
-                    self.scheduler, num_inference_steps, device, None, None
-                )
-            else:
-                sigmas = get_original_sigmas(
-                    num_train_timesteps=self.scheduler.config.num_train_timesteps,
-                    num_inference_steps=num_inference_steps,
-                )
-                timesteps, num_inference_steps = retrieve_timesteps(
-                    self.scheduler, num_inference_steps, device, timesteps, sigmas=sigmas
-                )
-
-        num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
-        self._num_timesteps = len(timesteps)
-
-        if len(latent_image_ids.shape) == 3:
-            latent_image_ids = latent_image_ids[0]
-        if len(text_ids.shape) == 3:
-            text_ids = text_ids[0]
-
-        # 6. Denoising loop
-        with self.progress_bar(total=num_inference_steps) as progress_bar:
-            for i, t in enumerate(timesteps):
-                if self.interrupt:
-                    continue
-
-                # expand the latents if we are doing classifier free guidance
-                latent_model_input = torch.cat([latents] * 2) if self.do_classifier_free_guidance else latents
-                if type(self.scheduler) != FlowMatchEulerDiscreteScheduler:
-                    latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
-
-                # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
-                timestep = t.expand(latent_model_input.shape[0])
-
-                # This is predicts "v" from flow-matching or eps from diffusion
-                noise_pred = self.transformer(
-                    hidden_states=latent_model_input,
-                    timestep=timestep,
-                    encoder_hidden_states=prompt_embeds,
-                    attention_kwargs=self.attention_kwargs,
-                    return_dict=False,
-                    txt_ids=text_ids,
-                    img_ids=latent_image_ids,
-                )[0]
-
-                # perform guidance
-                if self.do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                    cfg_noise_pred_text = noise_pred_text.std()
-                    noise_pred = noise_pred_uncond + self.guidance_scale * (noise_pred_text - noise_pred_uncond)
-
-                if normalize:
-                    noise_pred = noise_pred * (0.7 * (cfg_noise_pred_text / noise_pred.std())) + 0.3 * noise_pred
-
-                if clip_value:
-                    assert clip_value > 0
-                    noise_pred = noise_pred.clip(-clip_value, clip_value)
-
-                # compute the previous noisy sample x_t -> x_t-1
-                latents_dtype = latents.dtype
-                latents = self.scheduler.step(noise_pred, t, latents, return_dict=False)[0]
-
-                if latents.dtype != latents_dtype:
-                    if torch.backends.mps.is_available():
-                        # some platforms (eg. apple mps) misbehave due to a pytorch bug: https://github.com/pytorch/pytorch/pull/99272
-                        latents = latents.to(latents_dtype)
-
-                if callback_on_step_end is not None:
-                    callback_kwargs = {}
-                    for k in callback_on_step_end_tensor_inputs:
-                        callback_kwargs[k] = locals()[k]
-                    callback_outputs = callback_on_step_end(self, i, t, callback_kwargs)
-
-                    latents = callback_outputs.pop("latents", latents)
-                    prompt_embeds = callback_outputs.pop("prompt_embeds", prompt_embeds)
-                    negative_prompt_embeds = callback_outputs.pop("negative_prompt_embeds", negative_prompt_embeds)
-
-                # call the callback, if provided
-                if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
-                    progress_bar.update()
-
-                if XLA_AVAILABLE:
-                    xm.mark_step()
-
-        if output_type == "latent":
-            image = latents
-
-        else:
-            latents = self._unpack_latents(latents, height, width, self.vae_scale_factor)
-            latents = (latents.to(dtype=torch.float32) / self.vae.config.scaling_factor) + self.vae.config.shift_factor
-            image = self.vae.decode(latents.to(dtype=self.vae.dtype), return_dict=False)[0]
-            image = self.image_processor.postprocess(image, output_type=output_type)
-
-        # Offload all models
-        self.maybe_free_model_hooks()
-
-        if not return_dict:
-            return (image,)
-
-        return BriaPipelineOutput(images=image)

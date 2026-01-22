@@ -10,7 +10,6 @@ from ...utils import (
     is_transformers_version,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
 
@@ -24,7 +23,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_stable_audio"] = ["StableAudioProjectionModel"]
     _import_structure["pipeline_stable_audio"] = ["StableAudioPipeline"]
-
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:

@@ -13,9 +13,7 @@ from ...models.modeling_outputs import Transformer2DModelOutput
 from ...models.normalization import AdaLayerNorm
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 def _no_grad_trunc_normal_(tensor, mean, std, a, b):
     # Cut & paste from PyTorch official master until it's in a few official releases - RW
@@ -53,28 +51,14 @@ def _no_grad_trunc_normal_(tensor, mean, std, a, b):
         tensor.clamp_(min=a, max=b)
         return tensor
 
-
 def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
     # type: (torch.Tensor, float, float, float, float) -> torch.Tensor
-    r"""Fills the input Tensor with values drawn from a truncated
-    normal distribution. The values are effectively drawn from the normal distribution :math:`\mathcal{N}(\text{mean},
-    \text{std}^2)` with values outside :math:`[a, b]` redrawn until they are within the bounds. The method used for
-    generating the random values works best when :math:`a \leq \text{mean} \leq b`.
-
-    Args:
-        tensor: an n-dimensional `torch.Tensor`
-        mean: the mean of the normal distribution
-        std: the standard deviation of the normal distribution
-        a: the minimum cutoff value
-        b: the maximum cutoff value
-    Examples:
-        >>> w = torch.empty(3, 5) >>> nn.init.trunc_normal_(w)
-    """
+    
+    """r"""
     return _no_grad_trunc_normal_(tensor, mean, std, a, b)
 
-
 class PatchEmbed(nn.Module):
-    """2D Image to Patch Embedding"""
+
 
     def __init__(
         self,
@@ -118,7 +102,6 @@ class PatchEmbed(nn.Module):
         else:
             return latent
 
-
 class SkipBlock(nn.Module):
     def __init__(self, dim: int):
         super().__init__()
@@ -134,43 +117,30 @@ class SkipBlock(nn.Module):
 
         return x
 
+# Modified to support both pre-LayerNorm and post-LayerNorm configurations
+# Don't support AdaLayerNormZero for now
+# Modified from diffusers.models.attention.BasicTransformerBlock
+class UTransformerBlock(nn.Module):
+    class SkipBlock(nn.Module):
+    def __init__(self, dim: int):
+        super().__init__()
+
+        self.skip_linear = nn.Linear(2 * dim, dim)
+
+        # Use torch.nn.LayerNorm for now, following the original code
+        self.norm = nn.LayerNorm(dim)
+
+    def forward(self, x, skip):
+        x = self.skip_linear(torch.cat([x, skip], dim=-1))
+        x = self.norm(x)
+
+        return x
 
 # Modified to support both pre-LayerNorm and post-LayerNorm configurations
 # Don't support AdaLayerNormZero for now
 # Modified from diffusers.models.attention.BasicTransformerBlock
 class UTransformerBlock(nn.Module):
-    r"""
-    A modification of BasicTransformerBlock which supports pre-LayerNorm and post-LayerNorm configurations.
 
-    Parameters:
-        dim (`int`): The number of channels in the input and output.
-        num_attention_heads (`int`): The number of heads to use for multi-head attention.
-        attention_head_dim (`int`): The number of channels in each head.
-        dropout (`float`, *optional*, defaults to 0.0): The dropout probability to use.
-        cross_attention_dim (`int`, *optional*): The size of the encoder_hidden_states vector for cross attention.
-        activation_fn (`str`, *optional*, defaults to `"geglu"`):
-            Activation function to be used in feed-forward.
-        num_embeds_ada_norm (:obj: `int`, *optional*):
-            The number of diffusion steps used during training. See `Transformer2DModel`.
-        attention_bias (:obj: `bool`, *optional*, defaults to `False`):
-            Configure if the attentions should contain a bias parameter.
-        only_cross_attention (`bool`, *optional*):
-            Whether to use only cross-attention layers. In this case two cross attention layers are used.
-        double_self_attention (`bool`, *optional*):
-            Whether to use two self-attention layers. In this case no cross attention layers are used.
-        upcast_attention (`bool`, *optional*):
-            Whether to upcast the query and key to float32 when performing the attention calculation.
-        norm_elementwise_affine (`bool`, *optional*):
-            Whether to use learnable per-element affine parameters during layer normalization.
-        norm_type (`str`, defaults to `"layer_norm"`):
-            The layer norm implementation to use.
-        pre_layer_norm (`bool`, *optional*):
-            Whether to perform layer normalization before the attention and feedforward operations ("pre-LayerNorm"),
-            as opposed to after ("post-LayerNorm"). Note that `BasicTransformerBlock` uses pre-LayerNorm, e.g.
-            `pre_layer_norm = True`.
-        final_dropout (`bool`, *optional*):
-            Whether to use a final Dropout layer after the feedforward network.
-    """
 
     def __init__(
         self,
@@ -234,8 +204,8 @@ class UTransformerBlock(nn.Module):
             self.norm1 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine)
 
         if cross_attention_dim is not None or double_self_attention:
-            # We currently only use AdaLayerNormZero for self attention where there will only be one attention block.
-            # I.e. the number of returned modulation chunks from AdaLayerZero would not make sense if returned during
+            # We currently only use AdaLayerNormZe...
+            # I.e. the number of returned modulati...
             # the second cross attention block.
             self.norm2 = (
                 AdaLayerNorm(dim, num_embeds_ada_norm)
@@ -328,44 +298,10 @@ class UTransformerBlock(nn.Module):
 
         return hidden_states
 
-
 # Like UTransformerBlock except with LayerNorms on the residual backbone of the block
 # Modified from diffusers.models.attention.BasicTransformerBlock
 class UniDiffuserBlock(nn.Module):
-    r"""
-    A modification of BasicTransformerBlock which supports pre-LayerNorm and post-LayerNorm configurations and puts the
-    LayerNorms on the residual backbone of the block. This matches the transformer block in the [original UniDiffuser
-    implementation](https://github.com/thu-ml/unidiffuser/blob/main/libs/uvit_multi_post_ln_v1.py#L104).
 
-    Parameters:
-        dim (`int`): The number of channels in the input and output.
-        num_attention_heads (`int`): The number of heads to use for multi-head attention.
-        attention_head_dim (`int`): The number of channels in each head.
-        dropout (`float`, *optional*, defaults to 0.0): The dropout probability to use.
-        cross_attention_dim (`int`, *optional*): The size of the encoder_hidden_states vector for cross attention.
-        activation_fn (`str`, *optional*, defaults to `"geglu"`):
-            Activation function to be used in feed-forward.
-        num_embeds_ada_norm (:obj: `int`, *optional*):
-            The number of diffusion steps used during training. See `Transformer2DModel`.
-        attention_bias (:obj: `bool`, *optional*, defaults to `False`):
-            Configure if the attentions should contain a bias parameter.
-        only_cross_attention (`bool`, *optional*):
-            Whether to use only cross-attention layers. In this case two cross attention layers are used.
-        double_self_attention (`bool`, *optional*):
-            Whether to use two self-attention layers. In this case no cross attention layers are used.
-        upcast_attention (`bool`, *optional*):
-            Whether to upcast the query and key to float() when performing the attention calculation.
-        norm_elementwise_affine (`bool`, *optional*):
-            Whether to use learnable per-element affine parameters during layer normalization.
-        norm_type (`str`, defaults to `"layer_norm"`):
-            The layer norm implementation to use.
-        pre_layer_norm (`bool`, *optional*):
-            Whether to perform layer normalization before the attention and feedforward operations ("pre-LayerNorm"),
-            as opposed to after ("post-LayerNorm"). The original UniDiffuser implementation is post-LayerNorm
-            (`pre_layer_norm = False`).
-        final_dropout (`bool`, *optional*):
-            Whether to use a final Dropout layer after the feedforward network.
-    """
 
     def __init__(
         self,
@@ -429,8 +365,8 @@ class UniDiffuserBlock(nn.Module):
             self.norm1 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine)
 
         if cross_attention_dim is not None or double_self_attention:
-            # We currently only use AdaLayerNormZero for self attention where there will only be one attention block.
-            # I.e. the number of returned modulation chunks from AdaLayerZero would not make sense if returned during
+            # We currently only use AdaLayerNormZe...
+            # I.e. the number of returned modulati...
             # the second cross attention block.
             self.norm2 = (
                 AdaLayerNorm(dim, num_embeds_ada_norm)
@@ -523,68 +459,12 @@ class UniDiffuserBlock(nn.Module):
 
         return hidden_states
 
-
 # Modified from diffusers.models.transformer_2d.Transformer2DModel
 # Modify the transformer block structure to be U-Net like following U-ViT
 # Only supports patch-style input and torch.nn.LayerNorm currently
 # https://github.com/baofff/U-ViT
 class UTransformer2DModel(ModelMixin, ConfigMixin):
-    """
-    Transformer model based on the [U-ViT](https://github.com/baofff/U-ViT) architecture for image-like data. Compared
-    to [`Transformer2DModel`], this model has skip connections between transformer blocks in a "U"-shaped fashion,
-    similar to a U-Net. Supports only continuous (actual embeddings) inputs, which are embedded via a [`PatchEmbed`]
-    layer and then reshaped to (b, t, d).
 
-    Parameters:
-        num_attention_heads (`int`, *optional*, defaults to 16): The number of heads to use for multi-head attention.
-        attention_head_dim (`int`, *optional*, defaults to 88): The number of channels in each head.
-        in_channels (`int`, *optional*):
-            Pass if the input is continuous. The number of channels in the input.
-        out_channels (`int`, *optional*):
-            The number of output channels; if `None`, defaults to `in_channels`.
-        num_layers (`int`, *optional*, defaults to 1): The number of layers of Transformer blocks to use.
-        dropout (`float`, *optional*, defaults to 0.0): The dropout probability to use.
-        norm_num_groups (`int`, *optional*, defaults to `32`):
-            The number of groups to use when performing Group Normalization.
-        cross_attention_dim (`int`, *optional*): The number of encoder_hidden_states dimensions to use.
-        attention_bias (`bool`, *optional*):
-            Configure if the TransformerBlocks' attention should contain a bias parameter.
-        sample_size (`int`, *optional*): Pass if the input is discrete. The width of the latent images.
-            Note that this is fixed at training time as it is used for learning a number of position embeddings. See
-            `ImagePositionalEmbeddings`.
-        num_vector_embeds (`int`, *optional*):
-            Pass if the input is discrete. The number of classes of the vector embeddings of the latent pixels.
-            Includes the class for the masked latent pixel.
-        patch_size (`int`, *optional*, defaults to 2):
-            The patch size to use in the patch embedding.
-        activation_fn (`str`, *optional*, defaults to `"geglu"`): Activation function to be used in feed-forward.
-        num_embeds_ada_norm ( `int`, *optional*): Pass if at least one of the norm_layers is `AdaLayerNorm`.
-            The number of diffusion steps used during training. Note that this is fixed at training time as it is used
-            to learn a number of embeddings that are added to the hidden states. During inference, you can denoise for
-            up to but not more than steps than `num_embeds_ada_norm`.
-        use_linear_projection (int, *optional*): TODO: Not used
-        only_cross_attention (`bool`, *optional*):
-            Whether to use only cross-attention layers. In this case two cross attention layers are used in each
-            transformer block.
-        upcast_attention (`bool`, *optional*):
-            Whether to upcast the query and key to float() when performing the attention calculation.
-        norm_type (`str`, *optional*, defaults to `"layer_norm"`):
-            The Layer Normalization implementation to use. Defaults to `torch.nn.LayerNorm`.
-        block_type (`str`, *optional*, defaults to `"unidiffuser"`):
-            The transformer block implementation to use. If `"unidiffuser"`, has the LayerNorms on the residual
-            backbone of each transformer block; otherwise has them in the attention/feedforward branches (the standard
-            behavior in `diffusers`.)
-        pre_layer_norm (`bool`, *optional*):
-            Whether to perform layer normalization before the attention and feedforward operations ("pre-LayerNorm"),
-            as opposed to after ("post-LayerNorm"). The original UniDiffuser implementation is post-LayerNorm
-            (`pre_layer_norm = False`).
-        norm_elementwise_affine (`bool`, *optional*):
-            Whether to use learnable per-element affine parameters during layer normalization.
-        use_patch_pos_embed (`bool`, *optional*):
-            Whether to use position embeddings inside the patch embedding layer (`PatchEmbed`).
-        final_dropout (`bool`, *optional*):
-            Whether to use a final Dropout layer after the feedforward network.
-    """
 
     @register_to_config
     def __init__(
@@ -640,8 +520,8 @@ class UTransformer2DModel(ModelMixin, ConfigMixin):
         )
 
         # 3. Define transformers blocks
-        # Modify this to have in_blocks ("downsample" blocks, even though we don't actually downsample), a mid_block,
-        # and out_blocks ("upsample" blocks). Like a U-Net, there are skip connections from in_blocks to out_blocks in
+        # Modify this to have in_blocks ("downsamp...
+        # and out_blocks ("upsample" blocks). Like...
         # a "U"-shaped fashion (e.g. first in_block to last out_block, etc.).
         # Quick hack to make the transformer block type configurable
         if block_type == "unidiffuser":
@@ -687,7 +567,7 @@ class UTransformer2DModel(ModelMixin, ConfigMixin):
             final_dropout=ff_final_dropout,
         )
 
-        # For each skip connection, we use a SkipBlock (concatenation + Linear + LayerNorm) to process the inputs
+        # For each skip connection, we use a SkipB...
         # before each transformer out_block.
         self.transformer_out_blocks = nn.ModuleList(
             [
@@ -736,35 +616,7 @@ class UTransformer2DModel(ModelMixin, ConfigMixin):
         hidden_states_is_embedding: bool = False,
         unpatchify: bool = True,
     ):
-        """
-        Args:
-            hidden_states ( When discrete, `torch.LongTensor` of shape `(batch size, num latent pixels)`.
-                When continuous, `torch.Tensor` of shape `(batch size, channel, height, width)`): Input hidden_states
-            encoder_hidden_states ( `torch.LongTensor` of shape `(batch size, encoder_hidden_states dim)`, *optional*):
-                Conditional embeddings for cross attention layer. If not given, cross-attention defaults to
-                self-attention.
-            timestep ( `torch.long`, *optional*):
-                Optional timestep to be applied as an embedding in AdaLayerNorm's. Used to indicate denoising step.
-            class_labels ( `torch.LongTensor` of shape `(batch size, num classes)`, *optional*):
-                Optional class labels to be applied as an embedding in AdaLayerZeroNorm. Used to indicate class labels
-                conditioning.
-            cross_attention_kwargs (*optional*):
-                Keyword arguments to supply to the cross attention layers, if used.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether or not to return a [`models.unets.unet_2d_condition.UNet2DConditionOutput`] instead of a plain
-                tuple.
-            hidden_states_is_embedding (`bool`, *optional*, defaults to `False`):
-                Whether or not hidden_states is an embedding directly usable by the transformer. In this case we will
-                ignore input handling (e.g. continuous, vectorized, etc.) and directly feed hidden_states into the
-                transformer blocks.
-            unpatchify (`bool`, *optional*, defaults to `True`):
-                Whether to unpatchify the transformer output.
 
-        Returns:
-            [`~models.transformer_2d.Transformer2DModelOutput`] or `tuple`:
-            [`~models.transformer_2d.Transformer2DModelOutput`] if `return_dict` is True, otherwise a `tuple`. When
-            returning a tuple, the first element is the sample tensor.
-        """
         # 0. Check inputs
 
         if not unpatchify and return_dict:
@@ -829,70 +681,8 @@ class UTransformer2DModel(ModelMixin, ConfigMixin):
 
         return Transformer2DModelOutput(sample=output)
 
-
 class UniDiffuserModel(ModelMixin, ConfigMixin):
-    """
-    Transformer model for a image-text [UniDiffuser](https://huggingface.co/papers/2303.06555) model. This is a
-    modification of [`UTransformer2DModel`] with input and output heads for the VAE-embedded latent image, the
-    CLIP-embedded image, and the CLIP-embedded prompt (see paper for more details).
 
-    Parameters:
-        text_dim (`int`): The hidden dimension of the CLIP text model used to embed images.
-        clip_img_dim (`int`): The hidden dimension of the CLIP vision model used to embed prompts.
-        num_attention_heads (`int`, *optional*, defaults to 16): The number of heads to use for multi-head attention.
-        attention_head_dim (`int`, *optional*, defaults to 88): The number of channels in each head.
-        in_channels (`int`, *optional*):
-            Pass if the input is continuous. The number of channels in the input.
-        out_channels (`int`, *optional*):
-            The number of output channels; if `None`, defaults to `in_channels`.
-        num_layers (`int`, *optional*, defaults to 1): The number of layers of Transformer blocks to use.
-        dropout (`float`, *optional*, defaults to 0.0): The dropout probability to use.
-        norm_num_groups (`int`, *optional*, defaults to `32`):
-            The number of groups to use when performing Group Normalization.
-        cross_attention_dim (`int`, *optional*): The number of encoder_hidden_states dimensions to use.
-        attention_bias (`bool`, *optional*):
-            Configure if the TransformerBlocks' attention should contain a bias parameter.
-        sample_size (`int`, *optional*): Pass if the input is discrete. The width of the latent images.
-            Note that this is fixed at training time as it is used for learning a number of position embeddings. See
-            `ImagePositionalEmbeddings`.
-        num_vector_embeds (`int`, *optional*):
-            Pass if the input is discrete. The number of classes of the vector embeddings of the latent pixels.
-            Includes the class for the masked latent pixel.
-        patch_size (`int`, *optional*, defaults to 2):
-            The patch size to use in the patch embedding.
-        activation_fn (`str`, *optional*, defaults to `"geglu"`): Activation function to be used in feed-forward.
-        num_embeds_ada_norm ( `int`, *optional*): Pass if at least one of the norm_layers is `AdaLayerNorm`.
-            The number of diffusion steps used during training. Note that this is fixed at training time as it is used
-            to learn a number of embeddings that are added to the hidden states. During inference, you can denoise for
-            up to but not more than steps than `num_embeds_ada_norm`.
-        use_linear_projection (int, *optional*): TODO: Not used
-        only_cross_attention (`bool`, *optional*):
-            Whether to use only cross-attention layers. In this case two cross attention layers are used in each
-            transformer block.
-        upcast_attention (`bool`, *optional*):
-            Whether to upcast the query and key to float32 when performing the attention calculation.
-        norm_type (`str`, *optional*, defaults to `"layer_norm"`):
-            The Layer Normalization implementation to use. Defaults to `torch.nn.LayerNorm`.
-        block_type (`str`, *optional*, defaults to `"unidiffuser"`):
-            The transformer block implementation to use. If `"unidiffuser"`, has the LayerNorms on the residual
-            backbone of each transformer block; otherwise has them in the attention/feedforward branches (the standard
-            behavior in `diffusers`.)
-        pre_layer_norm (`bool`, *optional*):
-            Whether to perform layer normalization before the attention and feedforward operations ("pre-LayerNorm"),
-            as opposed to after ("post-LayerNorm"). The original UniDiffuser implementation is post-LayerNorm
-            (`pre_layer_norm = False`).
-        norm_elementwise_affine (`bool`, *optional*):
-            Whether to use learnable per-element affine parameters during layer normalization.
-        use_patch_pos_embed (`bool`, *optional*):
-            Whether to use position embeddings inside the patch embedding layer (`PatchEmbed`).
-        ff_final_dropout (`bool`, *optional*):
-            Whether to use a final Dropout layer after the feedforward network.
-        use_data_type_embedding (`bool`, *optional*):
-            Whether to use a data type embedding. This is only relevant for UniDiffuser-v1 style models; UniDiffuser-v1
-            is continue-trained from UniDiffuser-v0 on non-publically-available data and accepts a `data_type`
-            argument, which can either be `1` to use the weights trained on non-publically-available data or `0`
-            otherwise. This argument is subsequently embedded by the data type embedding, if used.
-    """
 
     @register_to_config
     def __init__(
@@ -1046,33 +836,7 @@ class UniDiffuserModel(ModelMixin, ConfigMixin):
         encoder_hidden_states=None,
         cross_attention_kwargs=None,
     ):
-        """
-        Args:
-            latent_image_embeds (`torch.Tensor` of shape `(batch size, latent channels, height, width)`):
-                Latent image representation from the VAE encoder.
-            image_embeds (`torch.Tensor` of shape `(batch size, 1, clip_img_dim)`):
-                CLIP-embedded image representation (unsqueezed in the first dimension).
-            prompt_embeds (`torch.Tensor` of shape `(batch size, seq_len, text_dim)`):
-                CLIP-embedded text representation.
-            timestep_img (`torch.long` or `float` or `int`):
-                Current denoising step for the image.
-            timestep_text (`torch.long` or `float` or `int`):
-                Current denoising step for the text.
-            data_type: (`torch.int` or `float` or `int`, *optional*, defaults to `1`):
-                Only used in UniDiffuser-v1-style models. Can be either `1`, to use weights trained on nonpublic data,
-                or `0` otherwise.
-            encoder_hidden_states ( `torch.LongTensor` of shape `(batch size, encoder_hidden_states dim)`, *optional*):
-                Conditional embeddings for cross attention layer. If not given, cross-attention defaults to
-                self-attention.
-            cross_attention_kwargs (*optional*):
-                Keyword arguments to supply to the cross attention layers, if used.
 
-
-        Returns:
-            `tuple`: Returns relevant parts of the model's noise prediction: the first element of the tuple is tbe VAE
-            image embedding, the second element is the CLIP image embedding, and the third element is the CLIP text
-            embedding.
-        """
         batch_size = latent_image_embeds.shape[0]
 
         # 1. Input
@@ -1139,7 +903,7 @@ class UniDiffuserModel(ModelMixin, ConfigMixin):
             )
 
         # 1.5. Prepare the positional embeddings and add to hidden states
-        # Note: I think img_vae should always have the proper shape, so there's no need to interpolate
+        # Note: I think img_vae should always have...
         # the position embeddings.
         if self.use_data_type_embedding:
             pos_embed = torch.cat(

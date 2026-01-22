@@ -2,7 +2,6 @@ from typing import TYPE_CHECKING
 
 from ....utils import DIFFUSERS_SLOW_IMPORT, _LazyModule
 
-
 _import_structure = {
     "mel": ["Mel"],
     "pipeline_audio_diffusion": ["AudioDiffusionPipeline"],

@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -35,29 +21,14 @@ from ..unets.unet_2d_blocks import UNetMidBlock2DCrossAttn
 from ..unets.unet_2d_condition import UNet2DConditionModel
 from ..unets.unet_motion_model import CrossAttnDownBlockMotion, DownBlockMotion
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 @dataclass
 class SparseControlNetOutput(BaseOutput):
-    """
-    The output of [`SparseControlNetModel`].
 
-    Args:
-        down_block_res_samples (`tuple[torch.Tensor]`):
-            A tuple of downsample activations at different resolutions for each downsampling block. Each tensor should
-            be of shape `(batch_size, channel * resolution, height //resolution, width // resolution)`. Output can be
-            used to condition the original UNet's downsampling activations.
-        mid_down_block_re_sample (`torch.Tensor`):
-            The activation of the middle block (the lowest sample resolution). Each tensor should be of shape
-            `(batch_size, channel * lowest_resolution, height // lowest_resolution, width // lowest_resolution)`.
-            Output can be used to condition the original UNet's middle block activation.
-    """
 
     down_block_res_samples: Tuple[torch.Tensor]
     mid_block_res_sample: torch.Tensor
-
 
 class SparseControlNetConditioningEmbedding(nn.Module):
     def __init__(
@@ -92,68 +63,42 @@ class SparseControlNetConditioningEmbedding(nn.Module):
         embedding = self.conv_out(embedding)
         return embedding
 
+class SparseControlNetModel(ModelMixin, AttentionMixin, ConfigMixin, FromOriginalModelMixin):
+    class SparseControlNetConditioningEmbedding(nn.Module):
+    def __init__(
+        self,
+        conditioning_embedding_channels: int,
+        conditioning_channels: int = 3,
+        block_out_channels: Tuple[int, ...] = (16, 32, 96, 256),
+    ):
+        super().__init__()
+
+        self.conv_in = nn.Conv2d(conditioning_channels, block_out_channels[0], kernel_size=3, padding=1)
+        self.blocks = nn.ModuleList([])
+
+        for i in range(len(block_out_channels) - 1):
+            channel_in = block_out_channels[i]
+            channel_out = block_out_channels[i + 1]
+            self.blocks.append(nn.Conv2d(channel_in, channel_in, kernel_size=3, padding=1))
+            self.blocks.append(nn.Conv2d(channel_in, channel_out, kernel_size=3, padding=1, stride=2))
+
+        self.conv_out = zero_module(
+            nn.Conv2d(block_out_channels[-1], conditioning_embedding_channels, kernel_size=3, padding=1)
+        )
+
+    def forward(self, conditioning: torch.Tensor) -> torch.Tensor:
+        embedding = self.conv_in(conditioning)
+        embedding = F.silu(embedding)
+
+        for block in self.blocks:
+            embedding = block(embedding)
+            embedding = F.silu(embedding)
+
+        embedding = self.conv_out(embedding)
+        return embedding
 
 class SparseControlNetModel(ModelMixin, AttentionMixin, ConfigMixin, FromOriginalModelMixin):
-    """
-    A SparseControlNet model as described in [SparseCtrl: Adding Sparse Controls to Text-to-Video Diffusion
-    Models](https://huggingface.co/papers/2311.16933).
 
-    Args:
-        in_channels (`int`, defaults to 4):
-            The number of channels in the input sample.
-        conditioning_channels (`int`, defaults to 4):
-            The number of input channels in the controlnet conditional embedding module. If
-            `concat_condition_embedding` is True, the value provided here is incremented by 1.
-        flip_sin_to_cos (`bool`, defaults to `True`):
-            Whether to flip the sin to cos in the time embedding.
-        freq_shift (`int`, defaults to 0):
-            The frequency shift to apply to the time embedding.
-        down_block_types (`tuple[str]`, defaults to `("CrossAttnDownBlock2D", "CrossAttnDownBlock2D", "CrossAttnDownBlock2D", "DownBlock2D")`):
-            The tuple of downsample blocks to use.
-        only_cross_attention (`Union[bool, Tuple[bool]]`, defaults to `False`):
-        block_out_channels (`tuple[int]`, defaults to `(320, 640, 1280, 1280)`):
-            The tuple of output channels for each block.
-        layers_per_block (`int`, defaults to 2):
-            The number of layers per block.
-        downsample_padding (`int`, defaults to 1):
-            The padding to use for the downsampling convolution.
-        mid_block_scale_factor (`float`, defaults to 1):
-            The scale factor to use for the mid block.
-        act_fn (`str`, defaults to "silu"):
-            The activation function to use.
-        norm_num_groups (`int`, *optional*, defaults to 32):
-            The number of groups to use for the normalization. If None, normalization and activation layers is skipped
-            in post-processing.
-        norm_eps (`float`, defaults to 1e-5):
-            The epsilon to use for the normalization.
-        cross_attention_dim (`int`, defaults to 1280):
-            The dimension of the cross attention features.
-        transformer_layers_per_block (`int` or `Tuple[int]`, *optional*, defaults to 1):
-            The number of transformer blocks of type [`~models.attention.BasicTransformerBlock`]. Only relevant for
-            [`~models.unet_2d_blocks.CrossAttnDownBlock2D`], [`~models.unet_2d_blocks.CrossAttnUpBlock2D`],
-            [`~models.unet_2d_blocks.UNetMidBlock2DCrossAttn`].
-        transformer_layers_per_mid_block (`int` or `Tuple[int]`, *optional*, defaults to 1):
-            The number of transformer layers to use in each layer in the middle block.
-        attention_head_dim (`int` or `Tuple[int]`, defaults to 8):
-            The dimension of the attention heads.
-        num_attention_heads (`int` or `Tuple[int]`, *optional*):
-            The number of heads to use for multi-head attention.
-        use_linear_projection (`bool`, defaults to `False`):
-        upcast_attention (`bool`, defaults to `False`):
-        resnet_time_scale_shift (`str`, defaults to `"default"`):
-            Time scale shift config for ResNet blocks (see `ResnetBlock2D`). Choose from `default` or `scale_shift`.
-        conditioning_embedding_out_channels (`Tuple[int]`, defaults to `(16, 32, 96, 256)`):
-            The tuple of output channel for each block in the `conditioning_embedding` layer.
-        global_pool_conditions (`bool`, defaults to `False`):
-            TODO(Patrick) - unused parameter
-        controlnet_conditioning_channel_order (`str`, defaults to `rgb`):
-        motion_max_seq_length (`int`, defaults to `32`):
-            The maximum sequence length to use in the motion module.
-        motion_num_attention_heads (`int` or `Tuple[int]`, defaults to `8`):
-            The number of heads to use in each attention layer of the motion module.
-        concat_conditioning_mask (`bool`, defaults to `True`):
-        use_simplified_condition_embedding (`bool`, defaults to `True`):
-    """
 
     _supports_gradient_checkpointing = True
 
@@ -200,9 +145,9 @@ class SparseControlNetModel(ModelMixin, AttentionMixin, ConfigMixin, FromOrigina
 
         # If `num_attention_heads` is not defined (which is the case for most models)
         # it will default to `attention_head_dim`. This looks weird upon first reading it and it is.
-        # The reason for this behavior is to correct for incorrectly named variables that were introduced
-        # when this library was created. The incorrect naming was only discovered much later in https://github.com/huggingface/diffusers/issues/2011#issuecomment-1547958131
-        # Changing `attention_head_dim` to `num_attention_heads` for 40,000+ configurations is too backwards breaking
+        # The reason for this behavior is to corre...
+        # when this library was created. The incor...
+        # Changing `attention_head_dim` to `num_at...
         # which is why we correct for the naming here.
         num_attention_heads = num_attention_heads or attention_head_dim
 
@@ -393,14 +338,8 @@ class SparseControlNetModel(ModelMixin, AttentionMixin, ConfigMixin, FromOrigina
         load_weights_from_unet: bool = True,
         conditioning_channels: int = 3,
     ) -> "SparseControlNetModel":
-        r"""
-        Instantiate a [`SparseControlNetModel`] from [`UNet2DConditionModel`].
-
-        Parameters:
-            unet (`UNet2DConditionModel`):
-                The UNet model weights to copy to the [`SparseControlNetModel`]. All configuration options are also
-                copied where applicable.
-        """
+        
+        """r"""
         transformer_layers_per_block = (
             unet.config.transformer_layers_per_block if "transformer_layers_per_block" in unet.config else 1
         )
@@ -448,11 +387,9 @@ class SparseControlNetModel(ModelMixin, AttentionMixin, ConfigMixin, FromOrigina
 
         return controlnet
 
-    # Copied from diffusers.models.unets.unet_2d_condition.UNet2DConditionModel.set_default_attn_processor
+    # Copied from diffusers.models.unets.unet_2d_c...
     def set_default_attn_processor(self):
-        """
-        Disables custom attention processors and sets the default attention implementation.
-        """
+
         if all(proc.__class__ in ADDED_KV_ATTENTION_PROCESSORS for proc in self.attn_processors.values()):
             processor = AttnAddedKVProcessor()
         elif all(proc.__class__ in CROSS_ATTENTION_PROCESSORS for proc in self.attn_processors.values()):
@@ -466,19 +403,8 @@ class SparseControlNetModel(ModelMixin, AttentionMixin, ConfigMixin, FromOrigina
 
     # Copied from diffusers.models.unets.unet_2d_condition.UNet2DConditionModel.set_attention_slice
     def set_attention_slice(self, slice_size: Union[str, int, List[int]]) -> None:
-        r"""
-        Enable sliced attention computation.
-
-        When this option is enabled, the attention module splits the input tensor in slices to compute attention in
-        several steps. This is useful for saving some memory in exchange for a small decrease in speed.
-
-        Args:
-            slice_size (`str` or `int` or `list(int)`, *optional*, defaults to `"auto"`):
-                When `"auto"`, input to the attention heads is halved, so attention is computed in two steps. If
-                `"max"`, maximum amount of memory is saved by running only one slice at a time. If a number is
-                provided, uses as many slices as `attention_head_dim // slice_size`. In this case, `attention_head_dim`
-                must be a multiple of `slice_size`.
-        """
+        
+        """r"""
         sliceable_head_dims = []
 
         def fn_recursive_retrieve_sliceable_dims(module: torch.nn.Module):
@@ -544,44 +470,7 @@ class SparseControlNetModel(ModelMixin, AttentionMixin, ConfigMixin, FromOrigina
         guess_mode: bool = False,
         return_dict: bool = True,
     ) -> Union[SparseControlNetOutput, Tuple[Tuple[torch.Tensor, ...], torch.Tensor]]:
-        """
-        The [`SparseControlNetModel`] forward method.
 
-        Args:
-            sample (`torch.Tensor`):
-                The noisy input tensor.
-            timestep (`Union[torch.Tensor, float, int]`):
-                The number of timesteps to denoise an input.
-            encoder_hidden_states (`torch.Tensor`):
-                The encoder hidden states.
-            controlnet_cond (`torch.Tensor`):
-                The conditional input tensor of shape `(batch_size, sequence_length, hidden_size)`.
-            conditioning_scale (`float`, defaults to `1.0`):
-                The scale factor for ControlNet outputs.
-            class_labels (`torch.Tensor`, *optional*, defaults to `None`):
-                Optional class labels for conditioning. Their embeddings will be summed with the timestep embeddings.
-            timestep_cond (`torch.Tensor`, *optional*, defaults to `None`):
-                Additional conditional embeddings for timestep. If provided, the embeddings will be summed with the
-                timestep_embedding passed through the `self.time_embedding` layer to obtain the final timestep
-                embeddings.
-            attention_mask (`torch.Tensor`, *optional*, defaults to `None`):
-                An attention mask of shape `(batch, key_tokens)` is applied to `encoder_hidden_states`. If `1` the mask
-                is kept, otherwise if `0` it is discarded. Mask will be converted into a bias, which adds large
-                negative values to the attention scores corresponding to "discard" tokens.
-            added_cond_kwargs (`dict`):
-                Additional conditions for the Stable Diffusion XL UNet.
-            cross_attention_kwargs (`dict[str]`, *optional*, defaults to `None`):
-                A kwargs dictionary that if specified is passed along to the `AttnProcessor`.
-            guess_mode (`bool`, defaults to `False`):
-                In this mode, the ControlNet encoder tries its best to recognize the input content of the input even if
-                you remove all prompts. A `guidance_scale` between 3.0 and 5.0 is recommended.
-            return_dict (`bool`, defaults to `True`):
-                Whether or not to return a [`~models.controlnet.ControlNetOutput`] instead of a plain tuple.
-        Returns:
-            [`~models.controlnet.ControlNetOutput`] **or** `tuple`:
-                If `return_dict` is `True`, a [`~models.controlnet.ControlNetOutput`] is returned, otherwise a tuple is
-                returned where the first element is the sample tensor.
-        """
         sample_batch_size, sample_channels, sample_num_frames, sample_height, sample_width = sample.shape
         sample = torch.zeros_like(sample)
 
@@ -716,7 +605,6 @@ class SparseControlNetModel(ModelMixin, AttentionMixin, ConfigMixin, FromOrigina
         return SparseControlNetOutput(
             down_block_res_samples=down_block_res_samples, mid_block_res_sample=mid_block_res_sample
         )
-
 
 # Copied from diffusers.models.controlnets.controlnet.zero_module
 def zero_module(module: nn.Module) -> nn.Module:

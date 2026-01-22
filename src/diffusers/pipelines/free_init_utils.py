@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import math
 from typing import Tuple, Union
 
@@ -20,9 +6,8 @@ import torch.fft as fft
 
 from ..utils.torch_utils import randn_tensor
 
-
 class FreeInitMixin:
-    r"""Mixin class for FreeInit."""
+
 
     def enable_free_init(
         self,
@@ -33,29 +18,7 @@ class FreeInitMixin:
         spatial_stop_frequency: float = 0.25,
         temporal_stop_frequency: float = 0.25,
     ):
-        """Enables the FreeInit mechanism as in https://huggingface.co/papers/2312.07537.
 
-        This implementation has been adapted from the [official repository](https://github.com/TianxingWu/FreeInit).
-
-        Args:
-            num_iters (`int`, *optional*, defaults to `3`):
-                Number of FreeInit noise re-initialization iterations.
-            use_fast_sampling (`bool`, *optional*, defaults to `False`):
-                Whether or not to speedup sampling procedure at the cost of probably lower quality results. Enables the
-                "Coarse-to-Fine Sampling" strategy, as mentioned in the paper, if set to `True`.
-            method (`str`, *optional*, defaults to `butterworth`):
-                Must be one of `butterworth`, `ideal` or `gaussian` to use as the filtering method for the FreeInit low
-                pass filter.
-            order (`int`, *optional*, defaults to `4`):
-                Order of the filter used in `butterworth` method. Larger values lead to `ideal` method behaviour
-                whereas lower values lead to `gaussian` method behaviour.
-            spatial_stop_frequency (`float`, *optional*, defaults to `0.25`):
-                Normalized stop frequency for spatial dimensions. Must be between 0 to 1. Referred to as `d_s` in the
-                original implementation.
-            temporal_stop_frequency (`float`, *optional*, defaults to `0.25`):
-                Normalized stop frequency for temporal dimensions. Must be between 0 to 1. Referred to as `d_t` in the
-                original implementation.
-        """
         self._free_init_num_iters = num_iters
         self._free_init_use_fast_sampling = use_fast_sampling
         self._free_init_method = method
@@ -64,7 +27,7 @@ class FreeInitMixin:
         self._free_init_temporal_stop_frequency = temporal_stop_frequency
 
     def disable_free_init(self):
-        """Disables the FreeInit mechanism if enabled."""
+
         self._free_init_num_iters = None
 
     @property
@@ -80,7 +43,8 @@ class FreeInitMixin:
         spatial_stop_frequency: float,
         temporal_stop_frequency: float,
     ) -> torch.Tensor:
-        r"""Returns the FreeInit filter based on filter type and other input conditions."""
+        
+        """r"""
 
         time, height, width = shape[-3], shape[-2], shape[-1]
         mask = torch.zeros(shape)
@@ -116,7 +80,8 @@ class FreeInitMixin:
         return mask.to(device)
 
     def _apply_freq_filter(self, x: torch.Tensor, noise: torch.Tensor, low_pass_filter: torch.Tensor) -> torch.Tensor:
-        r"""Noise reinitialization."""
+        
+        """r"""
         # FFT
         x_freq = fft.fftn(x, dim=(-3, -2, -1))
         x_freq = fft.fftshift(x_freq, dim=(-3, -2, -1))
