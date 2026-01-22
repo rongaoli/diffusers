@@ -1,17 +1,3 @@
-# Copyright 2025 VisualCloze team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import numpy as np
@@ -37,7 +23,6 @@ from ..flux.pipeline_output import FluxPipelineOutput
 from ..pipeline_utils import DiffusionPipeline
 from .visualcloze_utils import VisualClozeProcessor
 
-
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
@@ -45,75 +30,9 @@ if is_torch_xla_available():
 else:
     XLA_AVAILABLE = False
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 EXAMPLE_DOC_STRING = """
-    Examples:
-        ```python
-        >>> import torch
-        >>> from diffusers import VisualClozeGenerationPipeline, FluxFillPipeline as VisualClozeUpsamplingPipeline
-        >>> from diffusers.utils import load_image
-        >>> from PIL import Image
-
-        >>> image_paths = [
-        ...     # in-context examples
-        ...     [
-        ...         load_image(
-        ...             "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/visualcloze/visualcloze_mask2image_incontext-example-1_mask.jpg"
-        ...         ),
-        ...         load_image(
-        ...             "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/visualcloze/visualcloze_mask2image_incontext-example-1_image.jpg"
-        ...         ),
-        ...     ],
-        ...     # query with the target image
-        ...     [
-        ...         load_image(
-        ...             "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/visualcloze/visualcloze_mask2image_query_mask.jpg"
-        ...         ),
-        ...         None,  # No image needed for the target image
-        ...     ],
-        ... ]
-        >>> task_prompt = "In each row, a logical task is demonstrated to achieve [IMAGE2] an aesthetically pleasing photograph based on [IMAGE1] sam 2-generated masks with rich color coding."
-        >>> content_prompt = "Majestic photo of a golden eagle perched on a rocky outcrop in a mountainous landscape. The eagle is positioned in the right foreground, facing left, with its sharp beak and keen eyes prominently visible. Its plumage is a mix of dark brown and golden hues, with intricate feather details. The background features a soft-focus view of snow-capped mountains under a cloudy sky, creating a serene and grandiose atmosphere. The foreground includes rugged rocks and patches of green moss. Photorealistic, medium depth of field, soft natural lighting, cool color palette, high contrast, sharp focus on the eagle, blurred background, tranquil, majestic, wildlife photography."
-        >>> pipe = VisualClozeGenerationPipeline.from_pretrained(
-        ...     "VisualCloze/VisualClozePipeline-384", resolution=384, torch_dtype=torch.bfloat16
-        ... )
-        >>> pipe.to("cuda")
-
-        >>> image = pipe(
-        ...     task_prompt=task_prompt,
-        ...     content_prompt=content_prompt,
-        ...     image=image_paths,
-        ...     guidance_scale=30,
-        ...     num_inference_steps=30,
-        ...     max_sequence_length=512,
-        ...     generator=torch.Generator("cpu").manual_seed(0),
-        ... ).images[0][0]
-
-        >>> # optional, upsampling the generated image
-        >>> pipe_upsample = VisualClozeUpsamplingPipeline.from_pipe(pipe)
-        >>> pipe_upsample.to("cuda")
-
-        >>> mask_image = Image.new("RGB", image.size, (255, 255, 255))
-
-        >>> image = pipe_upsample(
-        ...     image=image,
-        ...     mask_image=mask_image,
-        ...     prompt=content_prompt,
-        ...     width=1344,
-        ...     height=768,
-        ...     strength=0.4,
-        ...     guidance_scale=30,
-        ...     num_inference_steps=30,
-        ...     max_sequence_length=512,
-        ...     generator=torch.Generator("cpu").manual_seed(0),
-        ... ).images[0]
-
-        >>> image.save("visualcloze.png")
-        ```
-"""
 
 
 class VisualClozeGenerationPipeline(
@@ -122,33 +41,7 @@ class VisualClozeGenerationPipeline(
     FromSingleFileMixin,
     TextualInversionLoaderMixin,
 ):
-    r"""
-    The VisualCloze pipeline for image generation with visual context. Reference:
-    https://github.com/lzyhha/VisualCloze/tree/main This pipeline is designed to generate images based on visual
-    in-context examples.
 
-    Args:
-        transformer ([`FluxTransformer2DModel`]):
-            Conditional Transformer (MMDiT) architecture to denoise the encoded image latents.
-        scheduler ([`FlowMatchEulerDiscreteScheduler`]):
-            A scheduler to be used in combination with `transformer` to denoise the encoded image latents.
-        vae ([`AutoencoderKL`]):
-            Variational Auto-Encoder (VAE) Model to encode and decode images to and from latent representations.
-        text_encoder ([`CLIPTextModel`]):
-            [CLIP](https://huggingface.co/docs/transformers/model_doc/clip#transformers.CLIPTextModel), specifically
-            the [clip-vit-large-patch14](https://huggingface.co/openai/clip-vit-large-patch14) variant.
-        text_encoder_2 ([`T5EncoderModel`]):
-            [T5](https://huggingface.co/docs/transformers/en/model_doc/t5#transformers.T5EncoderModel), specifically
-            the [google/t5-v1_1-xxl](https://huggingface.co/google/t5-v1_1-xxl) variant.
-        tokenizer (`CLIPTokenizer`):
-            Tokenizer of class
-            [CLIPTokenizer](https://huggingface.co/docs/transformers/en/model_doc/clip#transformers.CLIPTokenizer).
-        tokenizer_2 (`T5TokenizerFast`):
-            Second Tokenizer of class
-            [T5TokenizerFast](https://huggingface.co/docs/transformers/en/model_doc/t5#transformers.T5TokenizerFast).
-        resolution (`int`, *optional*, defaults to 384):
-            The resolution of each image when concatenating images from the query and in-context examples.
-    """
 
     model_cpu_offload_seq = "text_encoder->text_encoder_2->transformer->vae"
     _optional_components = []
@@ -178,8 +71,8 @@ class VisualClozeGenerationPipeline(
         )
         self.resolution = resolution
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1) if getattr(self, "vae", None) else 8
-        # Flux latents are turned into 2x2 patches and packed. This means the latent width and height has to be divisible
-        # by the patch size. So the vae scale factor is multiplied by the patch size to account for this
+        # Flux latents are turned into 2x2 patches...
+        # by the patch size. So the vae scale fact...
         self.latent_channels = self.vae.config.latent_channels if getattr(self, "vae", None) else 16
         self.image_processor = VisualClozeProcessor(
             vae_scale_factor=self.vae_scale_factor * 2, vae_latent_channels=self.latent_channels, resolution=resolution
@@ -233,7 +126,7 @@ class VisualClozeGenerationPipeline(
 
         _, seq_len, _ = prompt_embeds.shape
 
-        # duplicate text embeddings and attention mask for each generation per prompt, using mps friendly method
+        # duplicate text embeddings and attention...
         prompt_embeds = prompt_embeds.repeat(1, num_images_per_prompt, 1)
         prompt_embeds = prompt_embeds.view(batch_size * num_images_per_prompt, seq_len, -1)
 
@@ -297,29 +190,8 @@ class VisualClozeGenerationPipeline(
         max_sequence_length: int = 512,
         lora_scale: Optional[float] = None,
     ):
-        r"""
-
-        Args:
-            layout_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to define the number of in-context examples and the number of images involved in
-                the task.
-            task_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to define the task intention.
-            content_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to define the content or caption of the target image to be generated.
-            device: (`torch.device`):
-                torch device
-            num_images_per_prompt (`int`):
-                number of images that should be generated per prompt
-            prompt_embeds (`torch.FloatTensor`, *optional*):
-                Pre-generated text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt weighting. If not
-                provided, text embeddings will be generated from `prompt` input argument.
-            pooled_prompt_embeds (`torch.FloatTensor`, *optional*):
-                Pre-generated pooled text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt weighting.
-                If not provided, pooled text embeddings will be generated from `prompt` input argument.
-            lora_scale (`float`, *optional*):
-                A lora scale that will be applied to all LoRA layers of the text encoder if LoRA layers are loaded.
-        """
+        
+        """r"""
         device = device or self._execution_device
 
         # set lora scale so that monkey patched LoRA
@@ -375,7 +247,7 @@ class VisualClozeGenerationPipeline(
 
         return prompt_embeds, pooled_prompt_embeds, text_ids
 
-    # Copied from diffusers.pipelines.stable_diffusion_3.pipeline_stable_diffusion_3_inpaint.StableDiffusion3InpaintPipeline._encode_vae_image
+    # Copied from diffusers.pipelines.stable_diffu...
     def _encode_vae_image(self, image: torch.Tensor, generator: torch.Generator):
         if isinstance(generator, list):
             image_latents = [
@@ -390,7 +262,7 @@ class VisualClozeGenerationPipeline(
 
         return image_latents
 
-    # Copied from diffusers.pipelines.stable_diffusion_3.pipeline_stable_diffusion_3_img2img.StableDiffusion3Img2ImgPipeline.get_timesteps
+    # Copied from diffusers.pipelines.stable_diffu...
     def get_timesteps(self, num_inference_steps, strength, device):
         # get the original timestep using init_timestep
         init_timestep = min(num_inference_steps * strength, num_inference_steps)
@@ -521,10 +393,8 @@ class VisualClozeGenerationPipeline(
         return unpacked_latents
 
     def enable_vae_slicing(self):
-        r"""
-        Enable sliced VAE decoding. When this option is enabled, the VAE will split the input tensor in slices to
-        compute decoding in several steps. This is useful to save some memory and allow larger batch sizes.
-        """
+        
+        """r"""
         depr_message = f"Calling `enable_vae_slicing()` on a `{self.__class__.__name__}` is deprecated and this method will be removed in a future version. Please use `pipe.vae.enable_slicing()`."
         deprecate(
             "enable_vae_slicing",
@@ -534,10 +404,8 @@ class VisualClozeGenerationPipeline(
         self.vae.enable_slicing()
 
     def disable_vae_slicing(self):
-        r"""
-        Disable sliced VAE decoding. If `enable_vae_slicing` was previously enabled, this method will go back to
-        computing decoding in one step.
-        """
+        
+        """r"""
         depr_message = f"Calling `disable_vae_slicing()` on a `{self.__class__.__name__}` is deprecated and this method will be removed in a future version. Please use `pipe.vae.disable_slicing()`."
         deprecate(
             "disable_vae_slicing",
@@ -547,11 +415,8 @@ class VisualClozeGenerationPipeline(
         self.vae.disable_slicing()
 
     def enable_vae_tiling(self):
-        r"""
-        Enable tiled VAE decoding. When this option is enabled, the VAE will split the input tensor into tiles to
-        compute decoding and encoding in several steps. This is useful for saving a large amount of memory and to allow
-        processing larger images.
-        """
+        
+        """r"""
         depr_message = f"Calling `enable_vae_tiling()` on a `{self.__class__.__name__}` is deprecated and this method will be removed in a future version. Please use `pipe.vae.enable_tiling()`."
         deprecate(
             "enable_vae_tiling",
@@ -561,10 +426,8 @@ class VisualClozeGenerationPipeline(
         self.vae.enable_tiling()
 
     def disable_vae_tiling(self):
-        r"""
-        Disable tiled VAE decoding. If `enable_vae_tiling` was previously enabled, this method will go back to
-        computing decoding in one step.
-        """
+        
+        """r"""
         depr_message = f"Calling `disable_vae_tiling()` on a `{self.__class__.__name__}` is deprecated and this method will be removed in a future version. Please use `pipe.vae.disable_tiling()`."
         deprecate(
             "disable_vae_tiling",
@@ -574,7 +437,7 @@ class VisualClozeGenerationPipeline(
         self.vae.disable_tiling()
 
     def _prepare_latents(self, image, mask, gen, vae_scale_factor, device, dtype):
-        """Helper function to prepare latents for a single batch."""
+
         # Concatenate images and masks along width dimension
         image = [torch.cat(img, dim=3).to(device=device, dtype=dtype) for img in image]
         mask = [torch.cat(m, dim=3).to(device=device, dtype=dtype) for m in mask]
@@ -716,7 +579,7 @@ class VisualClozeGenerationPipeline(
         sigmas: Optional[List[float]] = None,
         guidance_scale: float = 30.0,
         num_images_per_prompt: Optional[int] = 1,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+        generator: Optional[torch.Generator] = None,
         latents: Optional[torch.FloatTensor] = None,
         prompt_embeds: Optional[torch.FloatTensor] = None,
         pooled_prompt_embeds: Optional[torch.FloatTensor] = None,
@@ -727,15 +590,8 @@ class VisualClozeGenerationPipeline(
         callback_on_step_end_tensor_inputs: List[str] = ["latents"],
         max_sequence_length: int = 512,
     ):
-        r"""
-        Function invoked when calling the VisualCloze pipeline for generation.
 
-        Args:
-            task_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to define the task intention.
-            content_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to define the content or caption of the target image to be generated.
-            image (`torch.Tensor`, `PIL.Image.Image`, `np.ndarray`, `List[torch.Tensor]`, `List[PIL.Image.Image]`, or `List[np.ndarray]`):
+        Function invoked when calling the VisualCloze pipeline for generation.
                 `Image`, numpy array or tensor representing an image batch to be used as the starting point. For both
                 numpy array and pytorch tensor, the expected value range is between `[0, 1]` If it's a tensor or a list
                 or tensors, the expected shape should be `(B, C, H, W)` or `(C, H, W)`. If it is a numpy array or a
@@ -789,189 +645,3 @@ class VisualClozeGenerationPipeline(
             max_sequence_length (`int` defaults to 512): Maximum sequence length to use with the `prompt`.
 
         Examples:
-
-        Returns:
-            [`~pipelines.flux.FluxPipelineOutput`] or `tuple`: [`~pipelines.flux.FluxPipelineOutput`] if `return_dict`
-            is True, otherwise a `tuple`. When returning a tuple, the first element is a list with the generated
-            images.
-        """
-
-        # 1. Check inputs. Raise error if not correct
-        self.check_inputs(
-            image,
-            task_prompt,
-            content_prompt,
-            prompt_embeds=prompt_embeds,
-            pooled_prompt_embeds=pooled_prompt_embeds,
-            callback_on_step_end_tensor_inputs=callback_on_step_end_tensor_inputs,
-            max_sequence_length=max_sequence_length,
-        )
-
-        self._guidance_scale = guidance_scale
-        self._joint_attention_kwargs = joint_attention_kwargs
-        self._interrupt = False
-
-        processor_output = self.image_processor.preprocess(
-            task_prompt, content_prompt, image, vae_scale_factor=self.vae_scale_factor
-        )
-
-        # 2. Define call parameters
-        if processor_output["task_prompt"] is not None and isinstance(processor_output["task_prompt"], str):
-            batch_size = 1
-        elif processor_output["task_prompt"] is not None and isinstance(processor_output["task_prompt"], list):
-            batch_size = len(processor_output["task_prompt"])
-
-        device = self._execution_device
-
-        # 3. Prepare prompt embeddings
-        lora_scale = (
-            self.joint_attention_kwargs.get("scale", None) if self.joint_attention_kwargs is not None else None
-        )
-        prompt_embeds, pooled_prompt_embeds, text_ids = self.encode_prompt(
-            layout_prompt=processor_output["layout_prompt"],
-            task_prompt=processor_output["task_prompt"],
-            content_prompt=processor_output["content_prompt"],
-            prompt_embeds=prompt_embeds,
-            pooled_prompt_embeds=pooled_prompt_embeds,
-            device=device,
-            num_images_per_prompt=num_images_per_prompt,
-            max_sequence_length=max_sequence_length,
-            lora_scale=lora_scale,
-        )
-
-        # 4. Prepare timesteps
-        # Calculate sequence length and shift factor
-        image_seq_len = sum(
-            (size[0] // self.vae_scale_factor // 2) * (size[1] // self.vae_scale_factor // 2)
-            for sample in processor_output["image_size"][0]
-            for size in sample
-        )
-
-        # Calculate noise schedule parameters
-        mu = calculate_shift(
-            image_seq_len,
-            self.scheduler.config.get("base_image_seq_len", 256),
-            self.scheduler.config.get("max_image_seq_len", 4096),
-            self.scheduler.config.get("base_shift", 0.5),
-            self.scheduler.config.get("max_shift", 1.15),
-        )
-
-        # Get timesteps
-        sigmas = np.linspace(1.0, 1 / num_inference_steps, num_inference_steps) if sigmas is None else sigmas
-        timesteps, num_inference_steps = retrieve_timesteps(
-            self.scheduler,
-            num_inference_steps,
-            device,
-            sigmas=sigmas,
-            mu=mu,
-        )
-        timesteps, num_inference_steps = self.get_timesteps(num_inference_steps, 1.0, device)
-
-        # 5. Prepare latent variables
-        latent_timestep = timesteps[:1].repeat(batch_size * num_images_per_prompt)
-        latents, masked_image_latents, latent_image_ids = self.prepare_latents(
-            processor_output["init_image"],
-            processor_output["mask"],
-            latent_timestep,
-            batch_size * num_images_per_prompt,
-            prompt_embeds.dtype,
-            device,
-            generator,
-            vae_scale_factor=self.vae_scale_factor,
-        )
-
-        # Calculate warmup steps
-        num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
-        self._num_timesteps = len(timesteps)
-
-        # Prepare guidance
-        if self.transformer.config.guidance_embeds:
-            guidance = torch.full([1], guidance_scale, device=device, dtype=torch.float32)
-            guidance = guidance.expand(latents.shape[0])
-        else:
-            guidance = None
-
-        # 6. Denoising loop
-        with self.progress_bar(total=num_inference_steps) as progress_bar:
-            for i, t in enumerate(timesteps):
-                if self.interrupt:
-                    continue
-
-                # Broadcast to batch dimension in a way that's compatible with ONNX/Core ML
-                timestep = t.expand(latents.shape[0]).to(latents.dtype)
-                latent_model_input = torch.cat((latents, masked_image_latents), dim=2)
-
-                noise_pred = self.transformer(
-                    hidden_states=latent_model_input,
-                    timestep=timestep / 1000,
-                    guidance=guidance,
-                    pooled_projections=pooled_prompt_embeds,
-                    encoder_hidden_states=prompt_embeds,
-                    txt_ids=text_ids,
-                    img_ids=latent_image_ids,
-                    joint_attention_kwargs=self.joint_attention_kwargs,
-                    return_dict=False,
-                )[0]
-
-                # Compute the previous noisy sample x_t -> x_t-1
-                latents_dtype = latents.dtype
-                latents = self.scheduler.step(noise_pred, t, latents, return_dict=False)[0]
-
-                if latents.dtype != latents_dtype:
-                    if torch.backends.mps.is_available():
-                        # Some platforms (eg. apple mps) misbehave due to a pytorch bug: https://github.com/pytorch/pytorch/pull/99272
-                        latents = latents.to(latents_dtype)
-
-                if callback_on_step_end is not None:
-                    callback_kwargs = {}
-                    for k in callback_on_step_end_tensor_inputs:
-                        callback_kwargs[k] = locals()[k]
-                    callback_outputs = callback_on_step_end(self, i, t, callback_kwargs)
-
-                    latents = callback_outputs.pop("latents", latents)
-                    prompt_embeds = callback_outputs.pop("prompt_embeds", prompt_embeds)
-
-                # Call the callback, if provided
-                if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
-                    progress_bar.update()
-
-                # XLA optimization
-                if XLA_AVAILABLE:
-                    xm.mark_step()
-
-        # 7. Post-process the image
-        # Crop the target image
-        # Since the generated image is a concatenation of the conditional and target regions,
-        # we need to extract only the target regions based on their positions
-        image = []
-        if output_type == "latent":
-            image = latents
-        else:
-            for b in range(len(latents)):
-                cur_image_size = processor_output["image_size"][b % batch_size]
-                cur_target_position = processor_output["target_position"][b % batch_size]
-                cur_latent = self._unpack_latents(latents[b].unsqueeze(0), cur_image_size, self.vae_scale_factor)[-1]
-                cur_latent = (cur_latent / self.vae.config.scaling_factor) + self.vae.config.shift_factor
-                cur_image = self.vae.decode(cur_latent, return_dict=False)[0]
-                cur_image = self.image_processor.postprocess(cur_image, output_type=output_type)[0]
-
-                start = 0
-                cropped = []
-                for i, size in enumerate(cur_image_size[-1]):
-                    if cur_target_position[i]:
-                        if output_type == "pil":
-                            cropped.append(cur_image.crop((start, 0, start + size[1], size[0])))
-                        else:
-                            cropped.append(cur_image[0 : size[0], start : start + size[1]])
-                    start += size[1]
-                image.append(cropped)
-            if output_type != "pil":
-                image = np.concatenate([arr[None] for sub_image in image for arr in sub_image], axis=0)
-
-        # Offload all models
-        self.maybe_free_model_hooks()
-
-        if not return_dict:
-            return (image,)
-
-        return FluxPipelineOutput(images=image)

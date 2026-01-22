@@ -18,7 +18,6 @@ from ..utils import (
     is_transformers_version,
 )
 
-
 # These modules contain pipelines from multiple libraries/frameworks
 _dummy_objects = {}
 _import_structure = {

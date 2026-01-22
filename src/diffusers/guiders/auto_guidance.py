@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import math
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
@@ -22,42 +8,13 @@ from ..hooks import HookRegistry, LayerSkipConfig
 from ..hooks.layer_skip import _apply_layer_skip_hook
 from .guider_utils import BaseGuidance, GuiderOutput, rescale_noise_cfg
 
-
 if TYPE_CHECKING:
     from ..modular_pipelines.modular_pipeline import BlockState
 
-
 class AutoGuidance(BaseGuidance):
-    """
-    AutoGuidance: https://huggingface.co/papers/2406.02507
+    
+    class AutoGuidance(BaseGuidance):
 
-    Args:
-        guidance_scale (`float`, defaults to `7.5`):
-            The scale parameter for classifier-free guidance. Higher values result in stronger conditioning on the text
-            prompt, while lower values allow for more freedom in generation. Higher values may lead to saturation and
-            deterioration of image quality.
-        auto_guidance_layers (`int` or `List[int]`, *optional*):
-            The layer indices to apply skip layer guidance to. Can be a single integer or a list of integers. If not
-            provided, `skip_layer_config` must be provided.
-        auto_guidance_config (`LayerSkipConfig` or `List[LayerSkipConfig]`, *optional*):
-            The configuration for the skip layer guidance. Can be a single `LayerSkipConfig` or a list of
-            `LayerSkipConfig`. If not provided, `skip_layer_guidance_layers` must be provided.
-        dropout (`float`, *optional*):
-            The dropout probability for autoguidance on the enabled skip layers (either with `auto_guidance_layers` or
-            `auto_guidance_config`). If not provided, the dropout probability will be set to 1.0.
-        guidance_rescale (`float`, defaults to `0.0`):
-            The rescale factor applied to the noise predictions. This is used to improve image quality and fix
-            overexposure. Based on Section 3.4 from [Common Diffusion Noise Schedules and Sample Steps are
-            Flawed](https://huggingface.co/papers/2305.08891).
-        use_original_formulation (`bool`, defaults to `False`):
-            Whether to use the original formulation of classifier-free guidance as proposed in the paper. By default,
-            we use the diffusers-native implementation that has been in the codebase for a long time. See
-            [~guiders.classifier_free_guidance.ClassifierFreeGuidance] for more details.
-        start (`float`, defaults to `0.0`):
-            The fraction of the total number of denoising steps after which guidance starts.
-        stop (`float`, defaults to `1.0`):
-            The fraction of the total number of denoising steps after which guidance stops.
-    """
 
     _input_predictions = ["pred_cond", "pred_uncond"]
 
@@ -65,7 +22,7 @@ class AutoGuidance(BaseGuidance):
     def __init__(
         self,
         guidance_scale: float = 7.5,
-        auto_guidance_layers: Optional[Union[int, List[int]]] = None,
+        auto_guidance_layers: Optional[int] = None,
         auto_guidance_config: Union[LayerSkipConfig, List[LayerSkipConfig], Dict[str, Any]] = None,
         dropout: Optional[float] = None,
         guidance_rescale: float = 0.0,

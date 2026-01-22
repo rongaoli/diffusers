@@ -1,18 +1,3 @@
-# Copyright 2025 The EasyAnimate team and The HuggingFace Team.
-# All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import math
 from typing import Optional, Tuple, Union
 
@@ -28,9 +13,7 @@ from ..modeling_outputs import AutoencoderKLOutput
 from ..modeling_utils import ModelMixin
 from .vae import AutoencoderMixin, DecoderOutput, DiagonalGaussianDistribution
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 class EasyAnimateCausalConv3d(nn.Conv3d):
     def __init__(
@@ -144,6 +127,393 @@ class EasyAnimateCausalConv3d(nn.Conv3d):
                 outputs.append(out)
             return torch.concat(outputs, 2)
 
+class EasyAnimateResidualBlock3D(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        non_linearity: str = "silu",
+        norm_num_groups: int = 32,
+        norm_eps: float = 1e-6,
+        spatial_group_norm: bool = True,
+        dropout: float = 0.0,
+        output_scale_factor: float = 1.0,
+    ):
+        super().__init__()
+
+        self.output_scale_factor = output_scale_factor
+
+        # Group normalization for input tensor
+        self.norm1 = nn.GroupNorm(
+            num_groups=norm_num_groups,
+            num_channels=in_channels,
+            eps=norm_eps,
+            affine=True,
+        )
+        self.nonlinearity = get_activation(non_linearity)
+        self.conv1 = EasyAnimateCausalConv3d(in_channels, out_channels, kernel_size=3)
+
+        self.norm2 = nn.GroupNorm(num_groups=norm_num_groups, num_channels=out_channels, eps=norm_eps, affine=True)
+        self.dropout = nn.Dropout(dropout)
+        self.conv2 = EasyAnimateCausalConv3d(out_channels, out_channels, kernel_size=3)
+
+        if in_channels != out_channels:
+            self.shortcut = nn.Conv3d(in_channels, out_channels, kernel_size=1)
+        else:
+            self.shortcut = nn.Identity()
+
+        self.spatial_group_norm = spatial_group_norm
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        shortcut = self.shortcut(hidden_states)
+
+        if self.spatial_group_norm:
+            batch_size = hidden_states.size(0)
+            hidden_states = hidden_states.permute(0, 2, 1, 3, 4).flatten(0, 1)  # [B, C, T, H, W] -> [B * T, C, H, W]
+            hidden_states = self.norm1(hidden_states)
+            hidden_states = hidden_states.unflatten(0, (batch_size, -1)).permute(
+                0, 2, 1, 3, 4
+            )  # [B * T, C, H, W] -> [B, C, T, H, W]
+        else:
+            hidden_states = self.norm1(hidden_states)
+
+        hidden_states = self.nonlinearity(hidden_states)
+        hidden_states = self.conv1(hidden_states)
+
+        if self.spatial_group_norm:
+            batch_size = hidden_states.size(0)
+            hidden_states = hidden_states.permute(0, 2, 1, 3, 4).flatten(0, 1)  # [B, C, T, H, W] -> [B * T, C, H, W]
+            hidden_states = self.norm2(hidden_states)
+            hidden_states = hidden_states.unflatten(0, (batch_size, -1)).permute(
+                0, 2, 1, 3, 4
+            )  # [B * T, C, H, W] -> [B, C, T, H, W]
+        else:
+            hidden_states = self.norm2(hidden_states)
+
+        hidden_states = self.nonlinearity(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.conv2(hidden_states)
+
+        return (hidden_states + shortcut) / self.output_scale_factor
+
+class EasyAnimateDownsampler3D(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: tuple = (2, 2, 2)):
+        super().__init__()
+
+        self.conv = EasyAnimateCausalConv3d(
+            in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride, padding=0
+        )
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = F.pad(hidden_states, (0, 1, 0, 1))
+        hidden_states = self.conv(hidden_states)
+        return hidden_states
+
+class EasyAnimateUpsampler3D(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 3,
+        temporal_upsample: bool = False,
+        spatial_group_norm: bool = True,
+    ):
+        super().__init__()
+        out_channels = out_channels or in_channels
+
+        self.temporal_upsample = temporal_upsample
+        self.spatial_group_norm = spatial_group_norm
+
+        self.conv = EasyAnimateCausalConv3d(
+            in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size
+        )
+        self.prev_features = None
+
+    def _clear_conv_cache(self):
+        del self.prev_features
+        self.prev_features = None
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = F.interpolate(hidden_states, scale_factor=(1, 2, 2), mode="nearest")
+        hidden_states = self.conv(hidden_states)
+
+        if self.temporal_upsample:
+            if self.prev_features is None:
+                self.prev_features = hidden_states
+            else:
+                hidden_states = F.interpolate(
+                    hidden_states,
+                    scale_factor=(2, 1, 1),
+                    mode="trilinear" if not self.spatial_group_norm else "nearest",
+                )
+        return hidden_states
+
+class EasyAnimateDownBlock3D(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        num_layers: int = 1,
+        act_fn: str = "silu",
+        norm_num_groups: int = 32,
+        norm_eps: float = 1e-6,
+        spatial_group_norm: bool = True,
+        dropout: float = 0.0,
+        output_scale_factor: float = 1.0,
+        add_downsample: bool = True,
+        add_temporal_downsample: bool = True,
+    ):
+        super().__init__()
+
+        self.convs = nn.ModuleList([])
+        for i in range(num_layers):
+            in_channels = in_channels if i == 0 else out_channels
+            self.convs.append(
+                EasyAnimateResidualBlock3D(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    non_linearity=act_fn,
+                    norm_num_groups=norm_num_groups,
+                    norm_eps=norm_eps,
+                    spatial_group_norm=spatial_group_norm,
+                    dropout=dropout,
+                    output_scale_factor=output_scale_factor,
+                )
+            )
+
+        if add_downsample and add_temporal_downsample:
+            self.downsampler = EasyAnimateDownsampler3D(out_channels, out_channels, kernel_size=3, stride=(2, 2, 2))
+            self.spatial_downsample_factor = 2
+            self.temporal_downsample_factor = 2
+        elif add_downsample and not add_temporal_downsample:
+            self.downsampler = EasyAnimateDownsampler3D(out_channels, out_channels, kernel_size=3, stride=(1, 2, 2))
+            self.spatial_downsample_factor = 2
+            self.temporal_downsample_factor = 1
+        else:
+            self.downsampler = None
+            self.spatial_downsample_factor = 1
+            self.temporal_downsample_factor = 1
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        for conv in self.convs:
+            hidden_states = conv(hidden_states)
+        if self.downsampler is not None:
+            hidden_states = self.downsampler(hidden_states)
+        return hidden_states
+
+class EasyAnimateUpBlock3d(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        num_layers: int = 1,
+        act_fn: str = "silu",
+        norm_num_groups: int = 32,
+        norm_eps: float = 1e-6,
+        spatial_group_norm: bool = False,
+        dropout: float = 0.0,
+        output_scale_factor: float = 1.0,
+        add_upsample: bool = True,
+        add_temporal_upsample: bool = True,
+    ):
+        super().__init__()
+
+        self.convs = nn.ModuleList([])
+        for i in range(num_layers):
+            in_channels = in_channels if i == 0 else out_channels
+            self.convs.append(
+                EasyAnimateResidualBlock3D(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    non_linearity=act_fn,
+                    norm_num_groups=norm_num_groups,
+                    norm_eps=norm_eps,
+                    spatial_group_norm=spatial_group_norm,
+                    dropout=dropout,
+                    output_scale_factor=output_scale_factor,
+                )
+            )
+
+        if add_upsample:
+            self.upsampler = EasyAnimateUpsampler3D(
+                in_channels,
+                in_channels,
+                temporal_upsample=add_temporal_upsample,
+                spatial_group_norm=spatial_group_norm,
+            )
+        else:
+            self.upsampler = None
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        for conv in self.convs:
+            hidden_states = conv(hidden_states)
+        if self.upsampler is not None:
+            hidden_states = self.upsampler(hidden_states)
+        return hidden_states
+
+class EasyAnimateMidBlock3d(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        num_layers: int = 1,
+        act_fn: str = "silu",
+        norm_num_groups: int = 32,
+        norm_eps: float = 1e-6,
+        spatial_group_norm: bool = True,
+        dropout: float = 0.0,
+        output_scale_factor: float = 1.0,
+    ):
+        super().__init__()
+
+        norm_num_groups = norm_num_groups if norm_num_groups is not None else min(in_channels // 4, 32)
+
+        self.convs = nn.ModuleList(
+            [
+                EasyAnimateResidualBlock3D(
+                    in_channels=in_channels,
+                    out_channels=in_channels,
+                    non_linearity=act_fn,
+                    norm_num_groups=norm_num_groups,
+                    norm_eps=norm_eps,
+                    spatial_group_norm=spatial_group_norm,
+                    dropout=dropout,
+                    output_scale_factor=output_scale_factor,
+                )
+            ]
+        )
+
+        for _ in range(num_layers - 1):
+            self.convs.append(
+                EasyAnimateResidualBlock3D(
+                    in_channels=in_channels,
+                    out_channels=in_channels,
+                    non_linearity=act_fn,
+                    norm_num_groups=norm_num_groups,
+                    norm_eps=norm_eps,
+                    spatial_group_norm=spatial_group_norm,
+                    dropout=dropout,
+                    output_scale_factor=output_scale_factor,
+                )
+            )
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.convs[0](hidden_states)
+        for resnet in self.convs[1:]:
+            hidden_states = resnet(hidden_states)
+        return hidden_states
+
+class EasyAnimateEncoder(nn.Module):
+    class EasyAnimateCausalConv3d(nn.Conv3d):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: Union[int, Tuple[int, ...]] = 3,
+        stride: Union[int, Tuple[int, ...]] = 1,
+        padding: Union[int, Tuple[int, ...]] = 1,
+        dilation: Union[int, Tuple[int, ...]] = 1,
+        groups: int = 1,
+        bias: bool = True,
+        padding_mode: str = "zeros",
+    ):
+        # Ensure kernel_size, stride, and dilation are tuples of length 3
+        kernel_size = kernel_size if isinstance(kernel_size, tuple) else (kernel_size,) * 3
+        assert len(kernel_size) == 3, f"Kernel size must be a 3-tuple, got {kernel_size} instead."
+
+        stride = stride if isinstance(stride, tuple) else (stride,) * 3
+        assert len(stride) == 3, f"Stride must be a 3-tuple, got {stride} instead."
+
+        dilation = dilation if isinstance(dilation, tuple) else (dilation,) * 3
+        assert len(dilation) == 3, f"Dilation must be a 3-tuple, got {dilation} instead."
+
+        # Unpack kernel size, stride, and dilation for temporal, height, and width dimensions
+        t_ks, h_ks, w_ks = kernel_size
+        self.t_stride, h_stride, w_stride = stride
+        t_dilation, h_dilation, w_dilation = dilation
+
+        # Calculate padding for temporal dimension to maintain causality
+        t_pad = (t_ks - 1) * t_dilation
+
+        # Calculate padding for height and width dimensions based on the padding parameter
+        if padding is None:
+            h_pad = math.ceil(((h_ks - 1) * h_dilation + (1 - h_stride)) / 2)
+            w_pad = math.ceil(((w_ks - 1) * w_dilation + (1 - w_stride)) / 2)
+        elif isinstance(padding, int):
+            h_pad = w_pad = padding
+        else:
+            assert NotImplementedError
+
+        # Store temporal padding and initialize flags and previous features cache
+        self.temporal_padding = t_pad
+        self.temporal_padding_origin = math.ceil(((t_ks - 1) * w_dilation + (1 - w_stride)) / 2)
+
+        self.prev_features = None
+
+        # Initialize the parent class with modified padding
+        super().__init__(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            dilation=dilation,
+            padding=(0, h_pad, w_pad),
+            groups=groups,
+            bias=bias,
+            padding_mode=padding_mode,
+        )
+
+    def _clear_conv_cache(self):
+        del self.prev_features
+        self.prev_features = None
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # Ensure input tensor is of the correct type
+        dtype = hidden_states.dtype
+        if self.prev_features is None:
+            # Pad the input tensor in the temporal dimension to maintain causality
+            hidden_states = F.pad(
+                hidden_states,
+                pad=(0, 0, 0, 0, self.temporal_padding, 0),
+                mode="replicate",  # TODO: check if this is necessary
+            )
+            hidden_states = hidden_states.to(dtype=dtype)
+
+            # Clear cache before processing and store previous features for causality
+            self._clear_conv_cache()
+            self.prev_features = hidden_states[:, :, -self.temporal_padding :].clone()
+
+            # Process the input tensor in chunks along the temporal dimension
+            num_frames = hidden_states.size(2)
+            outputs = []
+            i = 0
+            while i + self.temporal_padding + 1 <= num_frames:
+                out = super().forward(hidden_states[:, :, i : i + self.temporal_padding + 1])
+                i += self.t_stride
+                outputs.append(out)
+            return torch.concat(outputs, 2)
+        else:
+            # Concatenate previous features with the input tensor for continuous temporal processing
+            if self.t_stride == 2:
+                hidden_states = torch.concat(
+                    [self.prev_features[:, :, -(self.temporal_padding - 1) :], hidden_states], dim=2
+                )
+            else:
+                hidden_states = torch.concat([self.prev_features, hidden_states], dim=2)
+            hidden_states = hidden_states.to(dtype=dtype)
+
+            # Clear cache and update previous features
+            self._clear_conv_cache()
+            self.prev_features = hidden_states[:, :, -self.temporal_padding :].clone()
+
+            # Process the concatenated tensor in chunks along the temporal dimension
+            num_frames = hidden_states.size(2)
+            outputs = []
+            i = 0
+            while i + self.temporal_padding + 1 <= num_frames:
+                out = super().forward(hidden_states[:, :, i : i + self.temporal_padding + 1])
+                i += self.t_stride
+                outputs.append(out)
+            return torch.concat(outputs, 2)
 
 class EasyAnimateResidualBlock3D(nn.Module):
     def __init__(
@@ -214,7 +584,6 @@ class EasyAnimateResidualBlock3D(nn.Module):
 
         return (hidden_states + shortcut) / self.output_scale_factor
 
-
 class EasyAnimateDownsampler3D(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: tuple = (2, 2, 2)):
         super().__init__()
@@ -227,7 +596,6 @@ class EasyAnimateDownsampler3D(nn.Module):
         hidden_states = F.pad(hidden_states, (0, 1, 0, 1))
         hidden_states = self.conv(hidden_states)
         return hidden_states
-
 
 class EasyAnimateUpsampler3D(nn.Module):
     def __init__(
@@ -267,7 +635,6 @@ class EasyAnimateUpsampler3D(nn.Module):
                     mode="trilinear" if not self.spatial_group_norm else "nearest",
                 )
         return hidden_states
-
 
 class EasyAnimateDownBlock3D(nn.Module):
     def __init__(
@@ -322,7 +689,6 @@ class EasyAnimateDownBlock3D(nn.Module):
             hidden_states = self.downsampler(hidden_states)
         return hidden_states
 
-
 class EasyAnimateUpBlock3d(nn.Module):
     def __init__(
         self,
@@ -372,7 +738,6 @@ class EasyAnimateUpBlock3d(nn.Module):
         if self.upsampler is not None:
             hidden_states = self.upsampler(hidden_states)
         return hidden_states
-
 
 class EasyAnimateMidBlock3d(nn.Module):
     def __init__(
@@ -425,11 +790,8 @@ class EasyAnimateMidBlock3d(nn.Module):
             hidden_states = resnet(hidden_states)
         return hidden_states
 
-
 class EasyAnimateEncoder(nn.Module):
-    r"""
-    Causal encoder for 3D video-like data used in [EasyAnimate](https://huggingface.co/papers/2405.18991).
-    """
+
 
     _supports_gradient_checkpointing = True
 
@@ -541,11 +903,8 @@ class EasyAnimateEncoder(nn.Module):
         hidden_states = self.conv_out(hidden_states)
         return hidden_states
 
-
 class EasyAnimateDecoder(nn.Module):
-    r"""
-    Causal decoder for 3D video-like data used in [EasyAnimate](https://huggingface.co/papers/2405.18991).
-    """
+
 
     _supports_gradient_checkpointing = True
 
@@ -662,15 +1021,8 @@ class EasyAnimateDecoder(nn.Module):
         hidden_states = self.conv_out(hidden_states)
         return hidden_states
 
-
 class AutoencoderKLMagvit(ModelMixin, AutoencoderMixin, ConfigMixin):
-    r"""
-    A VAE model with KL loss for encoding images into latents and decoding latent representations into images. This
-    model is used in [EasyAnimate](https://huggingface.co/papers/2405.18991).
 
-    This model inherits from [`ModelMixin`]. Check the superclass documentation for it's generic methods implemented
-    for all models (such as downloading or saving).
-    """
 
     _supports_gradient_checkpointing = True
 
@@ -733,17 +1085,17 @@ class AutoencoderKLMagvit(ModelMixin, AutoencoderMixin, ConfigMixin):
         self.spatial_compression_ratio = 2 ** (len(block_out_channels) - 1)
         self.temporal_compression_ratio = 2 ** (len(block_out_channels) - 2)
 
-        # When decoding a batch of video latents at a time, one can save memory by slicing across the batch dimension
+        # When decoding a batch of video latents a...
         # to perform decoding of a single video latent at a time.
         self.use_slicing = False
 
-        # When decoding spatially large video latents, the memory requirement is very high. By breaking the video latent
-        # frames spatially into smaller tiles and performing multiple forward passes for decoding, and then blending the
+        # When decoding spatially large video late...
+        # frames spatially into smaller tiles and...
         # intermediate tiles together, the memory requirement can be lowered.
         self.use_tiling = False
 
-        # When decoding temporally long video latents, the memory requirement is very high. By decoding latent frames
-        # at a fixed frame batch size (based on `self.num_latent_frames_batch_size`), the memory requirement can be lowered.
+        # When decoding temporally long video late...
+        # at a fixed frame batch size (based on `s...
         self.use_framewise_encoding = False
         self.use_framewise_decoding = False
 
@@ -778,23 +1130,8 @@ class AutoencoderKLMagvit(ModelMixin, AutoencoderMixin, ConfigMixin):
         tile_sample_stride_width: Optional[float] = None,
         tile_sample_stride_num_frames: Optional[float] = None,
     ) -> None:
-        r"""
-        Enable tiled VAE decoding. When this option is enabled, the VAE will split the input tensor into tiles to
-        compute decoding and encoding in several steps. This is useful for saving a large amount of memory and to allow
-        processing larger images.
-
-        Args:
-            tile_sample_min_height (`int`, *optional*):
-                The minimum height required for a sample to be separated into tiles across the height dimension.
-            tile_sample_min_width (`int`, *optional*):
-                The minimum width required for a sample to be separated into tiles across the width dimension.
-            tile_sample_stride_height (`int`, *optional*):
-                The minimum amount of overlap between two consecutive vertical tiles. This is to ensure that there are
-                no tiling artifacts produced across the height dimension.
-            tile_sample_stride_width (`int`, *optional*):
-                The stride between two consecutive horizontal tiles. This is to ensure that there are no tiling
-                artifacts produced across the width dimension.
-        """
+        
+        """r"""
         self.use_tiling = True
         self.use_framewise_decoding = True
         self.use_framewise_encoding = True
@@ -809,18 +1146,7 @@ class AutoencoderKLMagvit(ModelMixin, AutoencoderMixin, ConfigMixin):
     def _encode(
         self, x: torch.Tensor, return_dict: bool = True
     ) -> Union[AutoencoderKLOutput, Tuple[DiagonalGaussianDistribution]]:
-        """
-        Encode a batch of images into latents.
 
-        Args:
-            x (`torch.Tensor`): Input batch of images.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether to return a [`~models.autoencoder_kl.AutoencoderKLOutput`] instead of a plain tuple.
-
-        Returns:
-                The latent representations of the encoded images. If `return_dict` is True, a
-                [`~models.autoencoder_kl.AutoencoderKLOutput`] is returned, otherwise a plain `tuple` is returned.
-        """
         if self.use_tiling and (x.shape[-1] > self.tile_sample_min_height or x.shape[-2] > self.tile_sample_min_width):
             return self.tiled_encode(x, return_dict=return_dict)
 
@@ -839,18 +1165,7 @@ class AutoencoderKLMagvit(ModelMixin, AutoencoderMixin, ConfigMixin):
     def encode(
         self, x: torch.Tensor, return_dict: bool = True
     ) -> Union[AutoencoderKLOutput, Tuple[DiagonalGaussianDistribution]]:
-        """
-        Encode a batch of images into latents.
 
-        Args:
-            x (`torch.Tensor`): Input batch of images.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether to return a [`~models.autoencoder_kl.AutoencoderKLOutput`] instead of a plain tuple.
-
-        Returns:
-                The latent representations of the encoded videos. If `return_dict` is True, a
-                [`~models.autoencoder_kl.AutoencoderKLOutput`] is returned, otherwise a plain `tuple` is returned.
-        """
         if self.use_slicing and x.shape[0] > 1:
             encoded_slices = [self._encode(x_slice) for x_slice in x.split(1)]
             h = torch.cat(encoded_slices)
@@ -877,7 +1192,7 @@ class AutoencoderKLMagvit(ModelMixin, AutoencoderMixin, ConfigMixin):
         first_frames = self.decoder(z[:, :, :1, :, :])
         # Initialize the list to store the processed frames, starting with the first frame
         dec = [first_frames]
-        # Process the remaining frames, with the number of frames processed at a time determined by mini_batch_decoder
+        # Process the remaining frames, with the n...
         for i in range(1, z.shape[2], self.num_latent_frames_batch_size):
             next_frames = self.decoder(z[:, :, i : i + self.num_latent_frames_batch_size, :, :])
             dec.append(next_frames)
@@ -891,19 +1206,7 @@ class AutoencoderKLMagvit(ModelMixin, AutoencoderMixin, ConfigMixin):
 
     @apply_forward_hook
     def decode(self, z: torch.Tensor, return_dict: bool = True) -> Union[DecoderOutput, torch.Tensor]:
-        """
-        Decode a batch of images.
 
-        Args:
-            z (`torch.Tensor`): Input batch of latent vectors.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether to return a [`~models.vae.DecoderOutput`] instead of a plain tuple.
-
-        Returns:
-            [`~models.vae.DecoderOutput`] or `tuple`:
-                If return_dict is True, a [`~models.vae.DecoderOutput`] is returned, otherwise a plain `tuple` is
-                returned.
-        """
         if self.use_slicing and z.shape[0] > 1:
             decoded_slices = [self._decode(z_slice).sample for z_slice in z.split(1)]
             decoded = torch.cat(decoded_slices)
@@ -1015,7 +1318,7 @@ class AutoencoderKLMagvit(ModelMixin, AutoencoderMixin, ConfigMixin):
                 first_frames = self.decoder(tile[:, :, :1, :, :])
                 # Initialize the list to store the processed frames, starting with the first frame
                 tile_dec = [first_frames]
-                # Process the remaining frames, with the number of frames processed at a time determined by mini_batch_decoder
+                # Process the remaining frames, wi...
                 for k in range(1, num_frames, self.num_latent_frames_batch_size):
                     next_frames = self.decoder(tile[:, :, k : k + self.num_latent_frames_batch_size, :, :])
                     tile_dec.append(next_frames)
@@ -1051,14 +1354,8 @@ class AutoencoderKLMagvit(ModelMixin, AutoencoderMixin, ConfigMixin):
         return_dict: bool = True,
         generator: Optional[torch.Generator] = None,
     ) -> Union[DecoderOutput, torch.Tensor]:
-        r"""
-        Args:
-            sample (`torch.Tensor`): Input sample.
-            sample_posterior (`bool`, *optional*, defaults to `False`):
-                Whether to sample from the posterior.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether or not to return a [`DecoderOutput`] instead of a plain tuple.
-        """
+        
+        """r"""
         x = sample
         posterior = self.encode(x).latent_dist
         if sample_posterior:

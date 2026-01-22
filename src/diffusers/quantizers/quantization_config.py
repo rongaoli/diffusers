@@ -1,24 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
 
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-"""
-Adapted from
-https://github.com/huggingface/transformers/blob/52cb4034ada381fe1ffe8d428a1076e5411a8026/src/transformers/utils/quantization_config.py
-"""
 
 import copy
 import dataclasses
@@ -36,12 +18,10 @@ from packaging import version
 
 from ..utils import is_torch_available, is_torchao_available, is_torchao_version, logging
 
-
 if is_torch_available():
     import torch
 
 logger = logging.get_logger(__name__)
-
 
 class QuantizationMethod(str, Enum):
     BITS_AND_BYTES = "bitsandbytes"
@@ -49,7 +29,6 @@ class QuantizationMethod(str, Enum):
     TORCHAO = "torchao"
     QUANTO = "quanto"
     MODELOPT = "modelopt"
-
 
 if is_torchao_available():
     from torchao.quantization.quant_primitives import MappingType
@@ -60,174 +39,71 @@ if is_torchao_available():
                 return obj.name
             return super().default(obj)
 
+@dataclass
+class QuantizationConfigMixin:
+    class QuantizationMethod(str, Enum):
+    BITS_AND_BYTES = "bitsandbytes"
+    GGUF = "gguf"
+    TORCHAO = "torchao"
+    QUANTO = "quanto"
+    MODELOPT = "modelopt"
+
+if is_torchao_available():
+    from torchao.quantization.quant_primitives import MappingType
+
+    class TorchAoJSONEncoder(json.JSONEncoder):
+        def default(self, obj):
+            if isinstance(obj, MappingType):
+                return obj.name
+            return super().default(obj)
 
 @dataclass
 class QuantizationConfigMixin:
-    """
-    Mixin class for quantization config
-    """
+    
+    class QuantizationMethod(str, Enum):
+    BITS_AND_BYTES = "bitsandbytes"
+    GGUF = "gguf"
+    TORCHAO = "torchao"
+    QUANTO = "quanto"
+    MODELOPT = "modelopt"
+
+if is_torchao_available():
+    from torchao.quantization.quant_primitives import MappingType
+
+    class TorchAoJSONEncoder(json.JSONEncoder):
+        def default(self, obj):
+            if isinstance(obj, MappingType):
+                return obj.name
+            return super().default(obj)
+
+@dataclass
+class QuantizationConfigMixin:
+    class QuantizationMethod(str, Enum):
+    BITS_AND_BYTES = "bitsandbytes"
+    GGUF = "gguf"
+    TORCHAO = "torchao"
+    QUANTO = "quanto"
+    MODELOPT = "modelopt"
+
+if is_torchao_available():
+    from torchao.quantization.quant_primitives import MappingType
+
+    class TorchAoJSONEncoder(json.JSONEncoder):
+        def default(self, obj):
+            if isinstance(obj, MappingType):
+                return obj.name
+            return super().default(obj)
+
+@dataclass
+class QuantizationConfigMixin:
+
 
     quant_method: QuantizationMethod
     _exclude_attributes_at_init = []
 
     @classmethod
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
-        """
-        Instantiates a [`QuantizationConfigMixin`] from a Python dictionary of parameters.
 
-        Args:
-            config_dict (`Dict[str, Any]`):
-                Dictionary that will be used to instantiate the configuration object.
-            return_unused_kwargs (`bool`, *optional*, defaults to `False`):
-                Whether or not to return a list of unused keyword arguments. Used for `from_pretrained` method in
-                `PreTrainedModel`.
-            kwargs (`Dict[str, Any]`):
-                Additional parameters from which to initialize the configuration object.
-
-        Returns:
-            [`QuantizationConfigMixin`]: The configuration object instantiated from those parameters.
-        """
-
-        config = cls(**config_dict)
-
-        to_remove = []
-        for key, value in kwargs.items():
-            if hasattr(config, key):
-                setattr(config, key, value)
-                to_remove.append(key)
-        for key in to_remove:
-            kwargs.pop(key, None)
-
-        if return_unused_kwargs:
-            return config, kwargs
-        else:
-            return config
-
-    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
-        """
-        Save this instance to a JSON file.
-
-        Args:
-            json_file_path (`str` or `os.PathLike`):
-                Path to the JSON file in which this configuration instance's parameters will be saved.
-            use_diff (`bool`, *optional*, defaults to `True`):
-                If set to `True`, only the difference between the config instance and the default
-                `QuantizationConfig()` is serialized to JSON file.
-        """
-        with open(json_file_path, "w", encoding="utf-8") as writer:
-            config_dict = self.to_dict()
-            json_string = json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
-
-            writer.write(json_string)
-
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        Serializes this instance to a Python dictionary. Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
-        """
-        return copy.deepcopy(self.__dict__)
-
-    def __iter__(self):
-        """allows `dict(obj)` for situations where obj may be a dict or QuantizationConfigMixin"""
-        for attr, value in copy.deepcopy(self.__dict__).items():
-            yield attr, value
-
-    def __repr__(self):
-        return f"{self.__class__.__name__} {self.to_json_string()}"
-
-    def to_json_string(self, use_diff: bool = True) -> str:
-        """
-        Serializes this instance to a JSON string.
-
-        Args:
-            use_diff (`bool`, *optional*, defaults to `True`):
-                If set to `True`, only the difference between the config instance and the default `PretrainedConfig()`
-                is serialized to JSON string.
-
-        Returns:
-            `str`: String containing all the attributes that make up this configuration instance in JSON format.
-        """
-        if use_diff is True:
-            config_dict = self.to_diff_dict()
-        else:
-            config_dict = self.to_dict()
-        return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
-
-    def update(self, **kwargs):
-        """
-        Updates attributes of this class instance with attributes from `kwargs` if they match existing attributes,
-        returning all the unused kwargs.
-
-        Args:
-            kwargs (`Dict[str, Any]`):
-                Dictionary of attributes to tentatively update this class.
-
-        Returns:
-            `Dict[str, Any]`: Dictionary containing all the key-value pairs that were not used to update the instance.
-        """
-        to_remove = []
-        for key, value in kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-                to_remove.append(key)
-
-        # Remove all the attributes that were updated, without modifying the input dict
-        unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
-        return unused_kwargs
-
-
-@dataclass
-class BitsAndBytesConfig(QuantizationConfigMixin):
-    """
-    This is a wrapper class about all possible attributes and features that you can play with a model that has been
-    loaded using `bitsandbytes`.
-
-    This replaces `load_in_8bit` or `load_in_4bit` therefore both options are mutually exclusive.
-
-    Currently only supports `LLM.int8()`, `FP4`, and `NF4` quantization. If more methods are added to `bitsandbytes`,
-    then more arguments will be added to this class.
-
-    Args:
-        load_in_8bit (`bool`, *optional*, defaults to `False`):
-            This flag is used to enable 8-bit quantization with LLM.int8().
-        load_in_4bit (`bool`, *optional*, defaults to `False`):
-            This flag is used to enable 4-bit quantization by replacing the Linear layers with FP4/NF4 layers from
-            `bitsandbytes`.
-        llm_int8_threshold (`float`, *optional*, defaults to 6.0):
-            This corresponds to the outlier threshold for outlier detection as described in `LLM.int8() : 8-bit Matrix
-            Multiplication for Transformers at Scale` paper: https://huggingface.co/papers/2208.07339 Any hidden states
-            value that is above this threshold will be considered an outlier and the operation on those values will be
-            done in fp16. Values are usually normally distributed, that is, most values are in the range [-3.5, 3.5],
-            but there are some exceptional systematic outliers that are very differently distributed for large models.
-            These outliers are often in the interval [-60, -6] or [6, 60]. Int8 quantization works well for values of
-            magnitude ~5, but beyond that, there is a significant performance penalty. A good default threshold is 6,
-            but a lower threshold might be needed for more unstable models (small models, fine-tuning).
-        llm_int8_skip_modules (`List[str]`, *optional*):
-            An explicit list of the modules that we do not want to convert in 8-bit. This is useful for models such as
-            Jukebox that has several heads in different places and not necessarily at the last position. For example
-            for `CausalLM` models, the last `lm_head` is typically kept in its original `dtype`.
-        llm_int8_enable_fp32_cpu_offload (`bool`, *optional*, defaults to `False`):
-            This flag is used for advanced use cases and users that are aware of this feature. If you want to split
-            your model in different parts and run some parts in int8 on GPU and some parts in fp32 on CPU, you can use
-            this flag. This is useful for offloading large models such as `google/flan-t5-xxl`. Note that the int8
-            operations will not be run on CPU.
-        llm_int8_has_fp16_weight (`bool`, *optional*, defaults to `False`):
-            This flag runs LLM.int8() with 16-bit main weights. This is useful for fine-tuning as the weights do not
-            have to be converted back and forth for the backward pass.
-        bnb_4bit_compute_dtype (`torch.dtype` or str, *optional*, defaults to `torch.float32`):
-            This sets the computational type which might be different than the input type. For example, inputs might be
-            fp32, but computation can be set to bf16 for speedups.
-        bnb_4bit_quant_type (`str`,  *optional*, defaults to `"fp4"`):
-            This sets the quantization data type in the bnb.nn.Linear4Bit layers. Options are FP4 and NF4 data types
-            which are specified by `fp4` or `nf4`.
-        bnb_4bit_use_double_quant (`bool`, *optional*, defaults to `False`):
-            This flag is used for nested quantization where the quantization constants from the first quantization are
-            quantized again.
-        bnb_4bit_quant_storage (`torch.dtype` or str, *optional*, defaults to `torch.uint8`):
-            This sets the storage type to pack the quanitzed 4-bit prarams.
-        kwargs (`Dict[str, Any]`, *optional*):
-            Additional parameters from which to initialize the configuration object.
-    """
 
     _exclude_attributes_at_init = ["_load_in_4bit", "_load_in_8bit", "quant_method"]
 
@@ -320,9 +196,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         self._load_in_8bit = value
 
     def post_init(self):
-        r"""
-        Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
-        """
+
         if not isinstance(self.load_in_4bit, bool):
             raise TypeError("load_in_4bit must be a boolean")
 
@@ -357,16 +231,11 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             )
 
     def is_quantizable(self):
-        r"""
-        Returns `True` if the model is quantizable, `False` otherwise.
-        """
+
         return self.load_in_8bit or self.load_in_4bit
 
     def quantization_method(self):
-        r"""
-        This method returns the quantization method used for the model. If the model is not quantizable, it returns
-        `None`.
-        """
+
         if self.load_in_8bit:
             return "llm_int8"
         elif self.load_in_4bit and self.bnb_4bit_quant_type == "fp4":
@@ -377,10 +246,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             return None
 
     def to_dict(self) -> Dict[str, Any]:
-        """
-        Serializes this instance to a Python dictionary. Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
-        """
+
         output = copy.deepcopy(self.__dict__)
         output["bnb_4bit_compute_dtype"] = str(output["bnb_4bit_compute_dtype"]).split(".")[1]
         output["bnb_4bit_quant_storage"] = str(output["bnb_4bit_quant_storage"]).split(".")[1]
@@ -394,38 +260,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         return f"{self.__class__.__name__} {json.dumps(config_dict, indent=2, sort_keys=True)}\n"
 
     def to_diff_dict(self) -> Dict[str, Any]:
-        """
-        Removes all attributes from config which correspond to the default config attributes for better readability and
-        serializes to a Python dictionary.
 
-        Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        config_dict = self.to_dict()
-
-        # get the default config dict
-        default_config_dict = BitsAndBytesConfig().to_dict()
-
-        serializable_config_dict = {}
-
-        # only serialize values that differ from the default config
-        for key, value in config_dict.items():
-            if value != default_config_dict[key]:
-                serializable_config_dict[key] = value
-
-        return serializable_config_dict
-
-
-@dataclass
-class GGUFQuantizationConfig(QuantizationConfigMixin):
-    """This is a config class for GGUF Quantization techniques.
-
-    Args:
-        compute_dtype: (`torch.dtype`, defaults to `torch.float32`):
-            This sets the computational type which might be different than the input type. For example, inputs might be
-            fp32, but computation can be set to bf16 for speedups.
-
-    """
 
     def __init__(self, compute_dtype: Optional["torch.dtype"] = None):
         self.quant_method = QuantizationMethod.GGUF
@@ -438,63 +273,11 @@ class GGUFQuantizationConfig(QuantizationConfigMixin):
         if self.compute_dtype is None:
             self.compute_dtype = torch.float32
 
-
 @dataclass
 class TorchAoConfig(QuantizationConfigMixin):
-    """This is a config class for torchao quantization/sparsity techniques.
+    
+    class TorchAoConfig(QuantizationConfigMixin):
 
-    Args:
-        quant_type (Union[`str`, AOBaseConfig]):
-            The type of quantization we want to use, currently supporting:
-                - **Integer quantization:**
-                    - Full function names: `int4_weight_only`, `int8_dynamic_activation_int4_weight`,
-                      `int8_weight_only`, `int8_dynamic_activation_int8_weight`
-                    - Shorthands: `int4wo`, `int4dq`, `int8wo`, `int8dq`
-
-                - **Floating point 8-bit quantization:**
-                    - Full function names: `float8_weight_only`, `float8_dynamic_activation_float8_weight`,
-                      `float8_static_activation_float8_weight`
-                    - Shorthands: `float8wo`, `float8wo_e5m2`, `float8wo_e4m3`, `float8dq`, `float8dq_e4m3`,
-                      `float8_e4m3_tensor`, `float8_e4m3_row`,
-
-                - **Floating point X-bit quantization:** (in torchao <= 0.14.1, not supported in torchao >= 0.15.0)
-                    - Full function names: `fpx_weight_only`
-                    - Shorthands: `fpX_eAwB`, where `X` is the number of bits (between `1` to `7`), `A` is the number
-                      of exponent bits and `B` is the number of mantissa bits. The constraint of `X == A + B + 1` must
-                      be satisfied for a given shorthand notation.
-
-                - **Unsigned Integer quantization:**
-                    - Full function names: `uintx_weight_only`
-                    - Shorthands: `uint1wo`, `uint2wo`, `uint3wo`, `uint4wo`, `uint5wo`, `uint6wo`, `uint7wo`
-                - An AOBaseConfig instance: for more advanced configuration options.
-        modules_to_not_convert (`List[str]`, *optional*, default to `None`):
-            The list of modules to not quantize, useful for quantizing models that explicitly require to have some
-            modules left in their original precision.
-        kwargs (`Dict[str, Any]`, *optional*):
-            The keyword arguments for the chosen type of quantization, for example, int4_weight_only quantization
-            supports two keyword arguments `group_size` and `inner_k_tiles` currently. More API examples and
-            documentation of arguments can be found in
-            https://github.com/pytorch/ao/tree/main/torchao/quantization#other-available-quantization-techniques
-
-    Example:
-        ```python
-        from diffusers import FluxTransformer2DModel, TorchAoConfig
-
-        # AOBaseConfig-based configuration
-        from torchao.quantization import Int8WeightOnlyConfig
-
-        quantization_config = TorchAoConfig(Int8WeightOnlyConfig())
-
-        # String-based config
-        quantization_config = TorchAoConfig("int8wo")
-        transformer = FluxTransformer2DModel.from_pretrained(
-            "black-forest-labs/Flux.1-Dev",
-            subfolder="transformer",
-            quantization_config=quantization_config,
-            torch_dtype=torch.bfloat16,
-        )
-        ```
-    """
 
     def __init__(
         self,
@@ -565,7 +348,7 @@ class TorchAoConfig(QuantizationConfigMixin):
                 )
 
     def to_dict(self):
-        """Convert configuration to a dictionary."""
+
         d = super().to_dict()
 
         if isinstance(self.quant_type, str):
@@ -594,7 +377,7 @@ class TorchAoConfig(QuantizationConfigMixin):
 
     @classmethod
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
-        """Create configuration from a dictionary."""
+
         if not is_torchao_version(">", "0.9.0"):
             raise NotImplementedError("TorchAoConfig requires torchao > 0.9.0 for construction from dict")
         config_dict = config_dict.copy()
@@ -618,9 +401,7 @@ class TorchAoConfig(QuantizationConfigMixin):
 
     @classmethod
     def _get_torchao_quant_type_to_method(cls):
-        r"""
-        Returns supported torchao quantization types with all commonly used notations.
-        """
+
 
         if is_torchao_available():
             # TODO(aryan): Support autoquant and sparsify
@@ -702,7 +483,7 @@ class TorchAoConfig(QuantizationConfigMixin):
                 # float8_e5m2 weight + float8 activation (dynamic)
                 "float8dq": float8_dynamic_activation_float8_weight,
                 "float8_dynamic_activation_float8_weight": float8_dynamic_activation_float8_weight,
-                # ===== Matrix multiplication is not supported in float8_e5m2 so the following errors out.
+                # ===== Matrix multiplication is n...
                 # However, changing activation_dtype=torch.float8_e4m3 might work here =====
                 # "float8dq_e5m2": partial(
                 #     float8_dynamic_activation_float8_weight,
@@ -738,7 +519,7 @@ class TorchAoConfig(QuantizationConfigMixin):
                 "uint5wo": partial(uintx_weight_only, dtype=torch.uint5),
                 "uint6wo": partial(uintx_weight_only, dtype=torch.uint6),
                 "uint7wo": partial(uintx_weight_only, dtype=torch.uint7),
-                # "uint8wo": partial(uintx_weight_only, dtype=torch.uint8),  # uint8 quantization is not supported
+                # "uint8wo": partial(uintx_weight_...
             }
 
             QUANTIZATION_TYPES = {}
@@ -768,7 +549,7 @@ class TorchAoConfig(QuantizationConfigMixin):
             raise RuntimeError("TorchAO requires a CUDA compatible GPU or Intel XPU and installation of PyTorch.")
 
     def get_apply_tensor_subclass(self):
-        """Create the appropriate quantization method based on configuration."""
+
         if not isinstance(self.quant_type, str):
             return self.quant_type
         else:
@@ -802,39 +583,17 @@ class TorchAoConfig(QuantizationConfigMixin):
             return methods[self.quant_type](**quant_type_kwargs)
 
     def __repr__(self):
-        r"""
-        Example of how this looks for `TorchAoConfig("uint4wo", group_size=32)`:
 
-        ```
-        TorchAoConfig {
-            "modules_to_not_convert": null,
-            "quant_method": "torchao",
-            "quant_type": "uint4wo",
-            "quant_type_kwargs": {
-                "group_size": 32
-            }
-        }
-        ```
-        """
         config_dict = self.to_dict()
         return (
             f"{self.__class__.__name__} {json.dumps(config_dict, indent=2, sort_keys=True, cls=TorchAoJSONEncoder)}\n"
         )
 
-
 @dataclass
 class QuantoConfig(QuantizationConfigMixin):
-    """
-    This is a wrapper class about all possible attributes and features that you can play with a model that has been
-    loaded using `quanto`.
+    
+    class QuantoConfig(QuantizationConfigMixin):
 
-    Args:
-        weights_dtype (`str`, *optional*, defaults to `"int8"`):
-            The target dtype for the weights after quantization. Supported values are ("float8","int8","int4","int2")
-       modules_to_not_convert (`list`, *optional*, default to `None`):
-            The list of modules to not quantize, useful for quantizing models that explicitly require to have some
-            modules left in their original precision (e.g. Whisper encoder, Llava encoder, Mixtral gate layers).
-    """
 
     def __init__(
         self,
@@ -849,51 +608,16 @@ class QuantoConfig(QuantizationConfigMixin):
         self.post_init()
 
     def post_init(self):
-        r"""
-        Safety checker that arguments are correct
-        """
+
         accepted_weights = ["float8", "int8", "int4", "int2"]
         if self.weights_dtype not in accepted_weights:
             raise ValueError(f"Only support weights in {accepted_weights} but found {self.weights_dtype}")
 
-
 @dataclass
 class NVIDIAModelOptConfig(QuantizationConfigMixin):
-    """This is a config class to use nvidia modelopt for quantization.
+    
+    class NVIDIAModelOptConfig(QuantizationConfigMixin):
 
-    Args:
-        quant_type (`str`):
-            The type of quantization we want to use, following is how to use:
-                **weightquant_activationquant ==> FP8_FP8** In the above example we have use FP8 for both weight and
-                activation quantization. Following are the all the options:
-                    - FP8
-                    - INT8
-                    - INT4
-                    - NF4
-                    - NVFP4
-        modules_to_not_convert (`List[str]`, *optional*, default to `None`):
-            The list of modules to not quantize, useful for quantizing models that explicitly require to have some
-        weight_only (`bool`, *optional*, default to `False`):
-            If set to `True`, the quantization will be applied only to the weights of the model.
-        channel_quantize (`int`, *optional*, default to `None`):
-            The channel quantization axis, useful for quantizing models across different axes.
-        block_quantize (`int`, *optional*, default to `None`):
-            The block size, useful to further quantize each channel/axes into blocks.
-        scale_channel_quantize (`int`, *optional*, default to `None`):
-            The scale channel quantization axis, useful for quantizing calculated scale across different axes.
-        scale_block_quantize (`int`, *optional*, default to `None`):
-            The scale block size, useful for quantizing each scale channel/axes into blocks.
-        algorithm (`str`, *optional*, default to `"max"`):
-            The algorithm to use for quantization, currently only supports `"max"`.
-        forward_loop (`Callable`, *optional*, default to `None`):
-            The forward loop function to use for calibration during quantization.
-        modelopt_config (`dict`, *optional*, default to `None`):
-            The modelopt config, useful for passing custom configs to modelopt.
-        disable_conv_quantization (`bool`, *optional*, default to `False`):
-            If set to `True`, the quantization will be disabled for convolutional layers.
-        kwargs (`Dict[str, Any]`, *optional*):
-            Additional parameters which are to be used for calibration.
-    """
 
     quanttype_to_numbits = {
         "FP8": (4, 3),
@@ -952,18 +676,7 @@ class NVIDIAModelOptConfig(QuantizationConfigMixin):
             warnings.warn(warning_msg)
 
     def _normalize_quant_type(self, quant_type: str) -> str:
-        """
-        Validates and normalizes the quantization type string.
 
-        Splits the quant_type into weight and activation components, verifies them against supported types, and
-        replaces unsupported values with safe defaults.
-
-        Args:
-            quant_type (str): The input quantization type string (e.g., 'FP8_INT8').
-
-        Returns:
-            str: A valid quantization type string (e.g., 'FP8_INT8' or 'FP8').
-        """
         parts = quant_type.split("_")
         w_type = parts[0]
         act_type = parts[1] if len(parts) > 1 else None
@@ -981,9 +694,7 @@ class NVIDIAModelOptConfig(QuantizationConfigMixin):
         self.quant_type = w_type + ("_" + act_type if act_type is not None else "")
 
     def get_config_from_quant_type(self) -> Dict[str, Any]:
-        """
-        Get the config from the quantization type.
-        """
+
         import modelopt.torch.quantization as mtq
 
         BASE_CONFIG = {

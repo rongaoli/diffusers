@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING
 from ..utils import DIFFUSERS_SLOW_IMPORT, _LazyModule, deprecate
 from ..utils.import_utils import is_peft_available, is_torch_available, is_transformers_available
 
-
 def text_encoder_lora_state_dict(text_encoder):
     deprecate(
         "text_encoder_load_state_dict in `models`",
@@ -27,7 +26,6 @@ def text_encoder_lora_state_dict(text_encoder):
 
     return state_dict
 
-
 if is_transformers_available():
 
     def text_encoder_attn_modules(text_encoder):
@@ -49,7 +47,6 @@ if is_transformers_available():
             raise ValueError(f"do not know how to get attention modules for: {text_encoder.__class__.__name__}")
 
         return attn_modules
-
 
 _import_structure = {}
 
@@ -94,7 +91,6 @@ if is_torch_available():
         ]
 
 _import_structure["peft"] = ["PeftAdapterMixin"]
-
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     if is_torch_available():

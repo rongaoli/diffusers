@@ -1,17 +1,3 @@
-# Copyright 2025 The Hunyuan Team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -29,19 +15,10 @@ from ..modeling_outputs import AutoencoderKLOutput
 from ..modeling_utils import ModelMixin
 from .vae import AutoencoderMixin, DecoderOutput, DiagonalGaussianDistribution
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 class HunyuanImageResnetBlock(nn.Module):
-    r"""
-    Residual block with two convolutions and optional channel change.
 
-    Args:
-        in_channels (int): Number of input channels.
-        out_channels (int): Number of output channels.
-        non_linearity (str, optional): Type of non-linearity to use. Default is "silu".
-    """
 
     def __init__(self, in_channels: int, out_channels: int, non_linearity: str = "silu") -> None:
         super().__init__()
@@ -77,14 +54,8 @@ class HunyuanImageResnetBlock(nn.Module):
         # Add residual connection
         return x + residual
 
-
 class HunyuanImageAttentionBlock(nn.Module):
-    r"""
-    Self-attention with a single head.
 
-    Args:
-        in_channels (int): The number of channels in the input tensor.
-    """
 
     def __init__(self, in_channels: int):
         super().__init__()
@@ -119,15 +90,8 @@ class HunyuanImageAttentionBlock(nn.Module):
 
         return x + identity
 
-
 class HunyuanImageDownsample(nn.Module):
-    """
-    Downsampling block for spatial reduction.
 
-    Args:
-        in_channels (int): Number of input channels.
-        out_channels (int): Number of output channels.
-    """
 
     def __init__(self, in_channels: int, out_channels: int):
         super().__init__()
@@ -155,15 +119,8 @@ class HunyuanImageDownsample(nn.Module):
         shortcut = shortcut.view(B, h.shape[1], self.group_size, H, W).mean(dim=2)
         return h + shortcut
 
-
 class HunyuanImageUpsample(nn.Module):
-    """
-    Upsampling block for spatial expansion.
 
-    Args:
-        in_channels (int): Number of input channels.
-        out_channels (int): Number of output channels.
-    """
 
     def __init__(self, in_channels: int, out_channels: int):
         super().__init__()
@@ -187,15 +144,8 @@ class HunyuanImageUpsample(nn.Module):
         shortcut = shortcut.reshape(B, C // 4, H * 2, W * 2)
         return h + shortcut
 
-
 class HunyuanImageMidBlock(nn.Module):
-    """
-    Middle block for HunyuanImageVAE encoder and decoder.
 
-    Args:
-        in_channels (int): Number of input channels.
-        num_layers (int): Number of layers.
-    """
 
     def __init__(self, in_channels: int, num_layers: int = 1):
         super().__init__()
@@ -219,20 +169,8 @@ class HunyuanImageMidBlock(nn.Module):
 
         return x
 
-
 class HunyuanImageEncoder2D(nn.Module):
-    r"""
-    Encoder network that compresses input to latent representation.
 
-    Args:
-        in_channels (int): Number of input channels.
-        z_channels (int): Number of latent channels.
-        block_out_channels (list of int): Output channels for each block.
-        num_res_blocks (int): Number of residual blocks per block.
-        spatial_compression_ratio (int): Spatial downsampling factor.
-        non_linearity (str): Type of non-linearity to use. Default is "silu".
-        downsample_match_channel (bool): Whether to match channels during downsampling.
-    """
 
     def __init__(
         self,
@@ -319,26 +257,8 @@ class HunyuanImageEncoder2D(nn.Module):
         x = self.conv_out(x)
         return x + residual
 
-
 class HunyuanImageDecoder2D(nn.Module):
-    r"""
-    Decoder network that reconstructs output from latent representation.
 
-    Args:
-    z_channels : int
-        Number of latent channels.
-    out_channels : int
-        Number of output channels.
-    block_out_channels : Tuple[int, ...]
-        Output channels for each block.
-    num_res_blocks : int
-        Number of residual blocks per block.
-    spatial_compression_ratio : int
-        Spatial upsampling factor.
-    upsample_match_channel : bool
-        Whether to match channels during upsampling.
-    non_linearity (str): Type of non-linearity to use. Default is "silu".
-    """
 
     def __init__(
         self,
@@ -409,14 +329,8 @@ class HunyuanImageDecoder2D(nn.Module):
         h = self.conv_out(h)
         return h
 
-
 class AutoencoderKLHunyuanImage(ModelMixin, AutoencoderMixin, ConfigMixin, FromOriginalModelMixin):
-    r"""
-    A VAE model for 2D images with spatial tiling support.
 
-    This model inherits from [`ModelMixin`]. Check the superclass documentation for it's generic methods implemented
-    for all models (such as downloading or saving).
-    """
 
     _supports_gradient_checkpointing = False
 
@@ -470,17 +384,8 @@ class AutoencoderKLHunyuanImage(ModelMixin, AutoencoderMixin, ConfigMixin, FromO
         tile_sample_min_size: Optional[int] = None,
         tile_overlap_factor: Optional[float] = None,
     ) -> None:
-        r"""
-        Enable spatial tiled VAE decoding. When this option is enabled, the VAE will split the input tensor into tiles
-        to compute decoding and encoding in several steps. This is useful for saving a large amount of memory and to
-        allow processing larger images.
-
-        Args:
-            tile_sample_min_size (`int`, *optional*):
-                The minimum size required for a sample to be separated into tiles across the spatial dimension.
-            tile_overlap_factor (`float`, *optional*):
-                The overlap factor required for a latent to be separated into tiles across the spatial dimension.
-        """
+        
+        """r"""
         self.use_tiling = True
         self.tile_sample_min_size = tile_sample_min_size or self.tile_sample_min_size
         self.tile_overlap_factor = tile_overlap_factor or self.tile_overlap_factor
@@ -501,18 +406,8 @@ class AutoencoderKLHunyuanImage(ModelMixin, AutoencoderMixin, ConfigMixin, FromO
     def encode(
         self, x: torch.Tensor, return_dict: bool = True
     ) -> Union[AutoencoderKLOutput, Tuple[DiagonalGaussianDistribution]]:
-        r"""
-        Encode a batch of images into latents.
-
-        Args:
-            x (`torch.Tensor`): Input batch of images.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether to return a [`~models.autoencoder_kl.AutoencoderKLOutput`] instead of a plain tuple.
-
-        Returns:
-                The latent representations of the encoded videos. If `return_dict` is True, a
-                [`~models.autoencoder_kl.AutoencoderKLOutput`] is returned, otherwise a plain `tuple` is returned.
-        """
+        
+        """r"""
         if self.use_slicing and x.shape[0] > 1:
             encoded_slices = [self._encode(x_slice) for x_slice in x.split(1)]
             h = torch.cat(encoded_slices)
@@ -540,19 +435,8 @@ class AutoencoderKLHunyuanImage(ModelMixin, AutoencoderMixin, ConfigMixin, FromO
 
     @apply_forward_hook
     def decode(self, z: torch.Tensor, return_dict: bool = True) -> Union[DecoderOutput, torch.Tensor]:
-        r"""
-        Decode a batch of images.
-
-        Args:
-            z (`torch.Tensor`): Input batch of latent vectors.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether to return a [`~models.vae.DecoderOutput`] instead of a plain tuple.
-
-        Returns:
-            [`~models.vae.DecoderOutput`] or `tuple`:
-                If return_dict is True, a [`~models.vae.DecoderOutput`] is returned, otherwise a plain `tuple` is
-                returned.
-        """
+        
+        """r"""
         if self.use_slicing and z.shape[0] > 1:
             decoded_slices = [self._decode(z_slice).sample for z_slice in z.split(1)]
             decoded = torch.cat(decoded_slices)
@@ -562,7 +446,6 @@ class AutoencoderKLHunyuanImage(ModelMixin, AutoencoderMixin, ConfigMixin, FromO
         if not return_dict:
             return (decoded,)
         return DecoderOutput(sample=decoded)
-
 
     def blend_v(self, a: torch.Tensor, b: torch.Tensor, blend_extent: int) -> torch.Tensor:
         blend_extent = min(a.shape[-2], b.shape[-2], blend_extent)
@@ -581,16 +464,7 @@ class AutoencoderKLHunyuanImage(ModelMixin, AutoencoderMixin, ConfigMixin, FromO
         return b
 
     def tiled_encode(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Encode input using spatial tiling strategy.
 
-        Args:
-            x (`torch.Tensor`): Input tensor of shape (B, C, T, H, W).
-
-        Returns:
-            `torch.Tensor`:
-                The latent representation of the encoded images.
-        """
         _, _, _, height, width = x.shape
         overlap_size = int(self.tile_sample_min_size * (1 - self.tile_overlap_factor))
         blend_extent = int(self.tile_latent_min_size * self.tile_overlap_factor)
@@ -621,19 +495,7 @@ class AutoencoderKLHunyuanImage(ModelMixin, AutoencoderMixin, ConfigMixin, FromO
         return moments
 
     def tiled_decode(self, z: torch.Tensor, return_dict: bool = True) -> Union[DecoderOutput, torch.Tensor]:
-        """
-        Decode latent using spatial tiling strategy.
 
-        Args:
-            z (`torch.Tensor`): Latent tensor of shape (B, C, H, W).
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether or not to return a [`~models.vae.DecoderOutput`] instead of a plain tuple.
-
-        Returns:
-            [`~models.vae.DecoderOutput`] or `tuple`:
-                If return_dict is True, a [`~models.vae.DecoderOutput`] is returned, otherwise a plain `tuple` is
-                returned.
-        """
         _, _, height, width = z.shape
         overlap_size = int(self.tile_latent_min_size * (1 - self.tile_overlap_factor))
         blend_extent = int(self.tile_sample_min_size * self.tile_overlap_factor)
@@ -664,7 +526,6 @@ class AutoencoderKLHunyuanImage(ModelMixin, AutoencoderMixin, ConfigMixin, FromO
             return (dec,)
         return DecoderOutput(sample=dec)
 
-
     def forward(
         self,
         sample: torch.Tensor,
@@ -672,12 +533,7 @@ class AutoencoderKLHunyuanImage(ModelMixin, AutoencoderMixin, ConfigMixin, FromO
         return_dict: bool = True,
         generator: Optional[torch.Generator] = None,
     ) -> Union[DecoderOutput, torch.Tensor]:
-        """
-        Args:
-            sample (`torch.Tensor`): Input sample.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether or not to return a [`DecoderOutput`] instead of a plain tuple.
-        """
+
         posterior = self.encode(sample).latent_dist
         if sample_posterior:
             z = posterior.sample(generator=generator)

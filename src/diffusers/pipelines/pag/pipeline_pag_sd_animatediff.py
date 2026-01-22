@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import inspect
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -40,7 +26,6 @@ from ..free_noise_utils import AnimateDiffFreeNoiseMixin
 from ..pipeline_utils import DiffusionPipeline, StableDiffusionMixin
 from .pag_utils import PAGMixin
 
-
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
@@ -50,40 +35,7 @@ else:
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 EXAMPLE_DOC_STRING = """
-    Examples:
-        ```py
-        >>> import torch
-        >>> from diffusers import AnimateDiffPAGPipeline, MotionAdapter, DDIMScheduler
-        >>> from diffusers.utils import export_to_gif
-
-        >>> model_id = "SG161222/Realistic_Vision_V5.1_noVAE"
-        >>> motion_adapter_id = "guoyww/animatediff-motion-adapter-v1-5-2"
-        >>> motion_adapter = MotionAdapter.from_pretrained(motion_adapter_id)
-        >>> scheduler = DDIMScheduler.from_pretrained(
-        ...     model_id, subfolder="scheduler", beta_schedule="linear", steps_offset=1, clip_sample=False
-        ... )
-        >>> pipe = AnimateDiffPAGPipeline.from_pretrained(
-        ...     model_id,
-        ...     motion_adapter=motion_adapter,
-        ...     scheduler=scheduler,
-        ...     pag_applied_layers=["mid"],
-        ...     torch_dtype=torch.float16,
-        ... ).to("cuda")
-
-        >>> video = pipe(
-        ...     prompt="car, futuristic cityscape with neon lights, street, no human",
-        ...     negative_prompt="low quality, bad quality",
-        ...     num_inference_steps=25,
-        ...     guidance_scale=6.0,
-        ...     pag_scale=3.0,
-        ...     generator=torch.Generator().manual_seed(42),
-        ... ).frames[0]
-
-        >>> export_to_gif(video, "animatediff_pag.gif")
-        ```
-"""
 
 
 class AnimateDiffPAGPipeline(
@@ -96,35 +48,7 @@ class AnimateDiffPAGPipeline(
     AnimateDiffFreeNoiseMixin,
     PAGMixin,
 ):
-    r"""
-    Pipeline for text-to-video generation using
-    [AnimateDiff](https://huggingface.co/docs/diffusers/en/api/pipelines/animatediff) and [Perturbed Attention
-    Guidance](https://huggingface.co/docs/diffusers/en/using-diffusers/pag).
 
-    This model inherits from [`DiffusionPipeline`]. Check the superclass documentation for the generic methods
-    implemented for all pipelines (downloading, saving, running on a particular device, etc.).
-
-    The pipeline also inherits the following loading methods:
-        - [`~loaders.TextualInversionLoaderMixin.load_textual_inversion`] for loading textual inversion embeddings
-        - [`~loaders.StableDiffusionLoraLoaderMixin.load_lora_weights`] for loading LoRA weights
-        - [`~loaders.StableDiffusionLoraLoaderMixin.save_lora_weights`] for saving LoRA weights
-        - [`~loaders.IPAdapterMixin.load_ip_adapter`] for loading IP Adapters
-
-    Args:
-        vae ([`AutoencoderKL`]):
-            Variational Auto-Encoder (VAE) Model to encode and decode images to and from latent representations.
-        text_encoder ([`CLIPTextModel`]):
-            Frozen text-encoder ([clip-vit-large-patch14](https://huggingface.co/openai/clip-vit-large-patch14)).
-        tokenizer (`CLIPTokenizer`):
-            A [`~transformers.CLIPTokenizer`] to tokenize text.
-        unet ([`UNet2DConditionModel`]):
-            A [`UNet2DConditionModel`] used to create a UNetMotionModel to denoise the encoded video latents.
-        motion_adapter ([`MotionAdapter`]):
-            A [`MotionAdapter`] to be used in combination with `unet` to denoise the encoded video latents.
-        scheduler ([`SchedulerMixin`]):
-            A scheduler to be used in combination with `unet` to denoise the encoded image latents. Can be one of
-            [`DDIMScheduler`], [`LMSDiscreteScheduler`], or [`PNDMScheduler`].
-    """
 
     model_cpu_offload_seq = "text_encoder->image_encoder->unet->vae"
     _optional_components = ["feature_extractor", "image_encoder", "motion_adapter"]
@@ -161,7 +85,7 @@ class AnimateDiffPAGPipeline(
 
         self.set_pag_applied_layers(pag_applied_layers)
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.encode_prompt with num_images_per_prompt -> num_videos_per_prompt
+    # Copied from diffusers.pipelines.stable_diffu...
     def encode_prompt(
         self,
         prompt,
@@ -174,35 +98,8 @@ class AnimateDiffPAGPipeline(
         lora_scale: Optional[float] = None,
         clip_skip: Optional[int] = None,
     ):
-        r"""
-        Encodes the prompt into text encoder hidden states.
-
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                prompt to be encoded
-            device: (`torch.device`):
-                torch device
-            num_images_per_prompt (`int`):
-                number of images that should be generated per prompt
-            do_classifier_free_guidance (`bool`):
-                whether to use classifier free guidance or not
-            negative_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts not to guide the image generation. If not defined, one has to pass
-                `negative_prompt_embeds` instead. Ignored when not using guidance (i.e., ignored if `guidance_scale` is
-                less than `1`).
-            prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt weighting. If not
-                provided, text embeddings will be generated from `prompt` input argument.
-            negative_prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated negative text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt
-                weighting. If not provided, negative_prompt_embeds will be generated from `negative_prompt` input
-                argument.
-            lora_scale (`float`, *optional*):
-                A LoRA scale that will be applied to all LoRA layers of the text encoder if LoRA layers are loaded.
-            clip_skip (`int`, *optional*):
-                Number of layers to be skipped from CLIP while computing the prompt embeddings. A value of 1 means that
-                the output of the pre-final layer will be used for computing the prompt embeddings.
-        """
+        
+        """r"""
         # set lora scale so that monkey patched LoRA
         # function of text encoder can correctly access it
         if lora_scale is not None and isinstance(self, StableDiffusionLoraLoaderMixin):
@@ -329,7 +226,7 @@ class AnimateDiffPAGPipeline(
             negative_prompt_embeds = negative_prompt_embeds[0]
 
         if do_classifier_free_guidance:
-            # duplicate unconditional embeddings for each generation per prompt, using mps friendly method
+            # duplicate unconditional embeddings f...
             seq_len = negative_prompt_embeds.shape[1]
 
             negative_prompt_embeds = negative_prompt_embeds.to(dtype=prompt_embeds_dtype, device=device)
@@ -344,7 +241,7 @@ class AnimateDiffPAGPipeline(
 
         return prompt_embeds, negative_prompt_embeds
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.encode_image
+    # Copied from diffusers.pipelines.stable_diffu...
     def encode_image(self, image, device, num_images_per_prompt, output_hidden_states=None):
         dtype = next(self.image_encoder.parameters()).dtype
 
@@ -369,7 +266,7 @@ class AnimateDiffPAGPipeline(
 
             return image_embeds, uncond_image_embeds
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_ip_adapter_image_embeds
+    # Copied from diffusers.pipelines.stable_diffu...
     def prepare_ip_adapter_image_embeds(
         self, ip_adapter_image, ip_adapter_image_embeds, device, num_images_per_prompt, do_classifier_free_guidance
     ):
@@ -415,7 +312,7 @@ class AnimateDiffPAGPipeline(
 
         return ip_adapter_image_embeds
 
-    # Copied from diffusers.pipelines.animatediff.pipeline_animatediff.AnimateDiffPipeline.decode_latents
+    # Copied from diffusers.pipelines.animatediff....
     def decode_latents(self, latents, decode_chunk_size: int = 16):
         latents = 1 / self.vae.config.scaling_factor * latents
 
@@ -430,13 +327,13 @@ class AnimateDiffPAGPipeline(
 
         video = torch.cat(video)
         video = video[None, :].reshape((batch_size, num_frames, -1) + video.shape[2:]).permute(0, 2, 1, 3, 4)
-        # we always cast to float32 as this does not cause significant overhead and is compatible with bfloat16
+        # we always cast to float32 as this does n...
         video = video.float()
         return video
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_extra_step_kwargs
+    # Copied from diffusers.pipelines.stable_diffu...
     def prepare_extra_step_kwargs(self, generator, eta):
-        # prepare extra kwargs for the scheduler step, since not all schedulers have the same signature
+        # prepare extra kwargs for the scheduler s...
         # eta (η) is only used with the DDIMScheduler, it will be ignored for other schedulers.
         # eta corresponds to η in DDIM paper: https://huggingface.co/papers/2010.02502
         # and should be between [0, 1]
@@ -516,11 +413,11 @@ class AnimateDiffPAGPipeline(
                     f"`ip_adapter_image_embeds` has to be a list of 3D or 4D tensors but is {ip_adapter_image_embeds[0].ndim}D"
                 )
 
-    # Copied from diffusers.pipelines.animatediff.pipeline_animatediff.AnimateDiffPipeline.prepare_latents
+    # Copied from diffusers.pipelines.animatediff....
     def prepare_latents(
         self, batch_size, num_channels_latents, num_frames, height, width, dtype, device, generator, latents=None
     ):
-        # If FreeNoise is enabled, generate latents as described in Equation (7) of [FreeNoise](https://huggingface.co/papers/2310.15169)
+        # If FreeNoise is enabled, generate latent...
         if self.free_noise_enabled:
             latents = self._prepare_latents_free_noise(
                 batch_size, num_channels_latents, num_frames, height, width, dtype, device, generator, latents
@@ -576,16 +473,16 @@ class AnimateDiffPAGPipeline(
     @replace_example_docstring(EXAMPLE_DOC_STRING)
     def __call__(
         self,
-        prompt: Optional[Union[str, List[str]]] = None,
+        prompt: Optional[str] = None,
         num_frames: Optional[int] = 16,
         height: Optional[int] = None,
         width: Optional[int] = None,
         num_inference_steps: int = 50,
         guidance_scale: float = 7.5,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        negative_prompt: Optional[str] = None,
         num_videos_per_prompt: Optional[int] = 1,
         eta: float = 0.0,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+        generator: Optional[torch.Generator] = None,
         latents: Optional[torch.Tensor] = None,
         prompt_embeds: Optional[torch.Tensor] = None,
         negative_prompt_embeds: Optional[torch.Tensor] = None,
@@ -601,24 +498,8 @@ class AnimateDiffPAGPipeline(
         pag_scale: float = 3.0,
         pag_adaptive_scale: float = 0.0,
     ):
-        r"""
-        The call function to the pipeline for generation.
 
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to guide image generation. If not defined, you need to pass `prompt_embeds`.
-            height (`int`, *optional*, defaults to `self.unet.config.sample_size * self.vae_scale_factor`):
-                The height in pixels of the generated video.
-            width (`int`, *optional*, defaults to `self.unet.config.sample_size * self.vae_scale_factor`):
-                The width in pixels of the generated video.
-            num_frames (`int`, *optional*, defaults to 16):
-                The number of video frames that are generated. Defaults to 16 frames which at 8 frames per seconds
-                amounts to 2 seconds of video.
-            num_inference_steps (`int`, *optional*, defaults to 50):
-                The number of denoising steps. More denoising steps usually lead to a higher quality videos at the
-                expense of slower inference.
-            guidance_scale (`float`, *optional*, defaults to 7.5):
-                A higher guidance scale value encourages the model to generate images closely linked to the text
+        The call function to the pipeline for generation.
                 `prompt` at the expense of lower image quality. Guidance scale is enabled when `guidance_scale > 1`.
             negative_prompt (`str` or `List[str]`, *optional*):
                 The prompt or prompts to guide what to not include in image generation. If not defined, you need to
@@ -675,204 +556,3 @@ class AnimateDiffPAGPipeline(
                 used.
 
         Examples:
-
-        Returns:
-            [`~pipelines.animatediff.pipeline_output.AnimateDiffPipelineOutput`] or `tuple`:
-                If `return_dict` is `True`, [`~pipelines.animatediff.pipeline_output.AnimateDiffPipelineOutput`] is
-                returned, otherwise a `tuple` is returned where the first element is a list with the generated frames.
-        """
-
-        # 0. Default height and width to unet
-        height = height or self.unet.config.sample_size * self.vae_scale_factor
-        width = width or self.unet.config.sample_size * self.vae_scale_factor
-
-        num_videos_per_prompt = 1
-
-        # 1. Check inputs. Raise error if not correct
-        self.check_inputs(
-            prompt,
-            height,
-            width,
-            negative_prompt,
-            prompt_embeds,
-            negative_prompt_embeds,
-            ip_adapter_image,
-            ip_adapter_image_embeds,
-            callback_on_step_end_tensor_inputs,
-        )
-
-        self._guidance_scale = guidance_scale
-        self._clip_skip = clip_skip
-        self._cross_attention_kwargs = cross_attention_kwargs
-        self._pag_scale = pag_scale
-        self._pag_adaptive_scale = pag_adaptive_scale
-
-        # 2. Define call parameters
-        if prompt is not None and isinstance(prompt, str):
-            batch_size = 1
-        elif prompt is not None and isinstance(prompt, list):
-            batch_size = len(prompt)
-        else:
-            batch_size = prompt_embeds.shape[0]
-
-        device = self._execution_device
-
-        # 3. Encode input prompt
-        text_encoder_lora_scale = (
-            self.cross_attention_kwargs.get("scale", None) if self.cross_attention_kwargs is not None else None
-        )
-        prompt_embeds, negative_prompt_embeds = self.encode_prompt(
-            prompt,
-            device,
-            num_videos_per_prompt,
-            self.do_classifier_free_guidance,
-            negative_prompt,
-            prompt_embeds=prompt_embeds,
-            negative_prompt_embeds=negative_prompt_embeds,
-            lora_scale=text_encoder_lora_scale,
-            clip_skip=self.clip_skip,
-        )
-
-        # For classifier free guidance, we need to do two forward passes.
-        # Here we concatenate the unconditional and text embeddings into a single batch
-        # to avoid doing two forward passes
-        if self.do_perturbed_attention_guidance:
-            prompt_embeds = self._prepare_perturbed_attention_guidance(
-                prompt_embeds, negative_prompt_embeds, self.do_classifier_free_guidance
-            )
-        elif self.do_classifier_free_guidance:
-            prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
-
-        prompt_embeds = prompt_embeds.repeat_interleave(repeats=num_frames, dim=0)
-
-        if ip_adapter_image is not None or ip_adapter_image_embeds is not None:
-            ip_adapter_image_embeds = self.prepare_ip_adapter_image_embeds(
-                ip_adapter_image,
-                ip_adapter_image_embeds,
-                device,
-                batch_size * num_videos_per_prompt,
-                self.do_classifier_free_guidance,
-            )
-
-            for i, image_embeds in enumerate(ip_adapter_image_embeds):
-                negative_image_embeds = None
-                if self.do_classifier_free_guidance:
-                    negative_image_embeds, image_embeds = image_embeds.chunk(2)
-                if self.do_perturbed_attention_guidance:
-                    image_embeds = self._prepare_perturbed_attention_guidance(
-                        image_embeds, negative_image_embeds, self.do_classifier_free_guidance
-                    )
-                elif self.do_classifier_free_guidance:
-                    image_embeds = torch.cat([negative_image_embeds, image_embeds], dim=0)
-                image_embeds = image_embeds.to(device)
-                ip_adapter_image_embeds[i] = image_embeds
-
-        # 4. Prepare timesteps
-        self.scheduler.set_timesteps(num_inference_steps, device=device)
-        timesteps = self.scheduler.timesteps
-
-        # 5. Prepare latent variables
-        num_channels_latents = self.unet.config.in_channels
-        latents = self.prepare_latents(
-            batch_size * num_videos_per_prompt,
-            num_channels_latents,
-            num_frames,
-            height,
-            width,
-            prompt_embeds.dtype,
-            device,
-            generator,
-            latents,
-        )
-
-        # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
-        extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
-
-        # 7. Add image embeds for IP-Adapter
-        added_cond_kwargs = (
-            {"image_embeds": ip_adapter_image_embeds}
-            if ip_adapter_image is not None or ip_adapter_image_embeds is not None
-            else None
-        )
-
-        if self.do_perturbed_attention_guidance:
-            original_attn_proc = self.unet.attn_processors
-            self._set_pag_attn_processor(
-                pag_applied_layers=self.pag_applied_layers,
-                do_classifier_free_guidance=self.do_classifier_free_guidance,
-            )
-
-        num_free_init_iters = self._free_init_num_iters if self.free_init_enabled else 1
-        for free_init_iter in range(num_free_init_iters):
-            if self.free_init_enabled:
-                latents, timesteps = self._apply_free_init(
-                    latents, free_init_iter, num_inference_steps, device, latents.dtype, generator
-                )
-
-            self._num_timesteps = len(timesteps)
-            num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
-
-            # 8. Denoising loop
-            with self.progress_bar(total=self._num_timesteps) as progress_bar:
-                for i, t in enumerate(timesteps):
-                    # expand the latents if we are doing classifier free guidance
-                    latent_model_input = torch.cat(
-                        [latents] * (prompt_embeds.shape[0] // num_frames // latents.shape[0])
-                    )
-                    latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
-
-                    # predict the noise residual
-                    noise_pred = self.unet(
-                        latent_model_input,
-                        t,
-                        encoder_hidden_states=prompt_embeds,
-                        cross_attention_kwargs=cross_attention_kwargs,
-                        added_cond_kwargs=added_cond_kwargs,
-                    ).sample
-
-                    # perform guidance
-                    if self.do_perturbed_attention_guidance:
-                        noise_pred = self._apply_perturbed_attention_guidance(
-                            noise_pred, self.do_classifier_free_guidance, self.guidance_scale, t
-                        )
-                    elif self.do_classifier_free_guidance:
-                        noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                        noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
-
-                    # compute the previous noisy sample x_t -> x_t-1
-                    latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
-
-                    if callback_on_step_end is not None:
-                        callback_kwargs = {}
-                        for k in callback_on_step_end_tensor_inputs:
-                            callback_kwargs[k] = locals()[k]
-                        callback_outputs = callback_on_step_end(self, i, t, callback_kwargs)
-
-                        latents = callback_outputs.pop("latents", latents)
-                        prompt_embeds = callback_outputs.pop("prompt_embeds", prompt_embeds)
-                        negative_prompt_embeds = callback_outputs.pop("negative_prompt_embeds", negative_prompt_embeds)
-
-                    # call the callback, if provided
-                    if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
-                        progress_bar.update()
-
-                    if XLA_AVAILABLE:
-                        xm.mark_step()
-
-        # 9. Post processing
-        if output_type == "latent":
-            video = latents
-        else:
-            video_tensor = self.decode_latents(latents, decode_chunk_size)
-            video = self.video_processor.postprocess_video(video=video_tensor, output_type=output_type)
-
-        # 10. Offload all models
-        self.maybe_free_model_hooks()
-
-        if self.do_perturbed_attention_guidance:
-            self.unet.set_attn_processor(original_attn_proc)
-
-        if not return_dict:
-            return (video,)
-
-        return AnimateDiffPipelineOutput(frames=video)

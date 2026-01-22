@@ -1,26 +1,10 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import inspect
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Type
 
-
 @dataclass
 class AttentionProcessorMetadata:
     skip_processor_output_fn: Callable[[Any], Any]
-
 
 @dataclass
 class TransformerBlockMetadata:
@@ -48,11 +32,10 @@ class TransformerBlockMetadata:
             raise ValueError(f"Expected {index} arguments but got {len(args)}.")
         return args[index]
 
-
 class AttentionProcessorRegistry:
     _registry = {}
     # TODO(aryan): this is only required for the time being because we need to do the registrations
-    # for classes. If we do it eagerly, i.e. call the functions in global scope, we will get circular
+    # for classes. If we do it eagerly, i.e. call...
     # import errors because of the models imported in this file.
     _is_registered = False
 
@@ -75,11 +58,10 @@ class AttentionProcessorRegistry:
         cls._is_registered = True
         _register_attention_processors_metadata()
 
-
 class TransformerBlockRegistry:
     _registry = {}
     # TODO(aryan): this is only required for the time being because we need to do the registrations
-    # for classes. If we do it eagerly, i.e. call the functions in global scope, we will get circular
+    # for classes. If we do it eagerly, i.e. call...
     # import errors because of the models imported in this file.
     _is_registered = False
 
@@ -102,7 +84,6 @@ class TransformerBlockRegistry:
             return
         cls._is_registered = True
         _register_transformer_blocks_metadata()
-
 
 def _register_attention_processors_metadata():
     from ..models.attention_processor import AttnProcessor2_0
@@ -166,7 +147,6 @@ def _register_attention_processors_metadata():
             skip_processor_output_fn=_skip_proc_output_fn_Attention_ZSingleStreamAttnProcessor,
         ),
     )
-
 
 def _register_transformer_blocks_metadata():
     from ..models.attention import BasicTransformerBlock
@@ -331,14 +311,12 @@ def _register_transformer_blocks_metadata():
         ),
     )
 
-
 # fmt: off
 def _skip_attention___ret___hidden_states(self, *args, **kwargs):
     hidden_states = kwargs.get("hidden_states", None)
     if hidden_states is None and len(args) > 0:
         hidden_states = args[0]
     return hidden_states
-
 
 def _skip_attention___ret___hidden_states___encoder_hidden_states(self, *args, **kwargs):
     hidden_states = kwargs.get("hidden_states", None)
@@ -348,7 +326,6 @@ def _skip_attention___ret___hidden_states___encoder_hidden_states(self, *args, *
     if encoder_hidden_states is None and len(args) > 1:
         encoder_hidden_states = args[1]
     return hidden_states, encoder_hidden_states
-
 
 _skip_proc_output_fn_Attention_AttnProcessor2_0 = _skip_attention___ret___hidden_states
 _skip_proc_output_fn_Attention_CogView4AttnProcessor = _skip_attention___ret___hidden_states___encoder_hidden_states

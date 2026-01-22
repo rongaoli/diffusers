@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import warnings
 from typing import List, Optional, Tuple, Union
 
@@ -22,35 +8,13 @@ import torch.nn.functional as F
 
 from .image_processor import VaeImageProcessor, is_valid_image, is_valid_image_imagelist
 
-
 class VideoProcessor(VaeImageProcessor):
-    r"""Simple video processor."""
+    
+    class VideoProcessor(VaeImageProcessor):
+
 
     def preprocess_video(self, video, height: Optional[int] = None, width: Optional[int] = None) -> torch.Tensor:
-        r"""
-        Preprocesses input video(s).
 
-        Args:
-            video (`List[PIL.Image]`, `List[List[PIL.Image]]`, `torch.Tensor`, `np.array`, `List[torch.Tensor]`, `List[np.array]`):
-                The input video. It can be one of the following:
-                * List of the PIL images.
-                * List of list of PIL images.
-                * 4D Torch tensors (expected shape for each tensor `(num_frames, num_channels, height, width)`).
-                * 4D NumPy arrays (expected shape for each array `(num_frames, height, width, num_channels)`).
-                * List of 4D Torch tensors (expected shape for each tensor `(num_frames, num_channels, height,
-                  width)`).
-                * List of 4D NumPy arrays (expected shape for each array `(num_frames, height, width, num_channels)`).
-                * 5D NumPy arrays: expected shape for each array `(batch_size, num_frames, height, width,
-                  num_channels)`.
-                * 5D Torch tensors: expected shape for each array `(batch_size, num_frames, num_channels, height,
-                  width)`.
-            height (`int`, *optional*, defaults to `None`):
-                The height in preprocessed frames of the video. If `None`, will use the `get_default_height_width()` to
-                get default height.
-            width (`int`, *optional*`, defaults to `None`):
-                The width in preprocessed frames of the video. If `None`, will use get_default_height_width()` to get
-                the default width.
-        """
         if isinstance(video, list) and isinstance(video[0], np.ndarray) and video[0].ndim == 5:
             warnings.warn(
                 "Passing `video` as a list of 5d np.ndarray is deprecated."
@@ -67,7 +31,7 @@ class VideoProcessor(VaeImageProcessor):
             video = torch.cat(video, axis=0)
 
         # ensure the input is a list of videos:
-        # - if it is a batch of videos (5d torch.Tensor or np.ndarray), it is converted to a list of videos (a list of 4d torch.Tensor or np.ndarray)
+        # - if it is a batch of videos (5d torch.T...
         # - if it is a single video, it is converted to a list of one video.
         if isinstance(video, (np.ndarray, torch.Tensor)) and video.ndim == 5:
             video = list(video)
@@ -90,13 +54,7 @@ class VideoProcessor(VaeImageProcessor):
     def postprocess_video(
         self, video: torch.Tensor, output_type: str = "np"
     ) -> Union[np.ndarray, torch.Tensor, List[PIL.Image.Image]]:
-        r"""
-        Converts a video tensor to a list of frames for export.
 
-        Args:
-            video (`torch.Tensor`): The video as a tensor.
-            output_type (`str`, defaults to `"np"`): Output type of the postprocessed `video` tensor.
-        """
         batch_size = video.shape[0]
         outputs = []
         for batch_idx in range(batch_size):
@@ -115,17 +73,7 @@ class VideoProcessor(VaeImageProcessor):
 
     @staticmethod
     def classify_height_width_bin(height: int, width: int, ratios: dict) -> Tuple[int, int]:
-        r"""
-        Returns the binned height and width based on the aspect ratio.
 
-        Args:
-            height (`int`): The height of the image.
-            width (`int`): The width of the image.
-            ratios (`dict`): A dictionary where keys are aspect ratios and values are tuples of (height, width).
-
-        Returns:
-            `Tuple[int, int]`: The closest binned height and width.
-        """
         ar = float(height / width)
         closest_ratio = min(ratios.keys(), key=lambda ratio: abs(float(ratio) - ar))
         default_hw = ratios[closest_ratio]
@@ -133,19 +81,7 @@ class VideoProcessor(VaeImageProcessor):
 
     @staticmethod
     def resize_and_crop_tensor(samples: torch.Tensor, new_width: int, new_height: int) -> torch.Tensor:
-        r"""
-        Resizes and crops a tensor of videos to the specified dimensions.
 
-        Args:
-            samples (`torch.Tensor`):
-                A tensor of shape (N, C, T, H, W) where N is the batch size, C is the number of channels, T is the
-                number of frames, H is the height, and W is the width.
-            new_width (`int`): The desired width of the output videos.
-            new_height (`int`): The desired height of the output videos.
-
-        Returns:
-            `torch.Tensor`: A tensor containing the resized and cropped videos.
-        """
         orig_height, orig_width = samples.shape[3], samples.shape[4]
 
         # Check if resizing is needed

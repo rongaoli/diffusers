@@ -1,17 +1,3 @@
-# Copyright 2025 Qwen-Image Team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import List, Union
 
 import numpy as np
@@ -26,9 +12,7 @@ from ..modular_pipeline import ModularPipelineBlocks, PipelineState
 from ..modular_pipeline_utils import ComponentSpec, InputParam, OutputParam
 from .modular_pipeline import QwenImageLayeredPachifier, QwenImageModularPipeline, QwenImagePachifier
 
-
 logger = logging.get_logger(__name__)
-
 
 # after denoising loop (unpack latents)
 class QwenImageAfterDenoiseStep(ModularPipelineBlocks):
@@ -71,7 +55,6 @@ class QwenImageAfterDenoiseStep(ModularPipelineBlocks):
         self.set_block_state(state, block_state)
         return components, state
 
-
 class QwenImageLayeredAfterDenoiseStep(ModularPipelineBlocks):
     model_name = "qwenimage-layered"
 
@@ -109,7 +92,6 @@ class QwenImageLayeredAfterDenoiseStep(ModularPipelineBlocks):
 
         self.set_block_state(state, block_state)
         return components, state
-
 
 # decode step
 class QwenImageDecoderStep(ModularPipelineBlocks):
@@ -152,7 +134,7 @@ class QwenImageDecoderStep(ModularPipelineBlocks):
     def __call__(self, components: QwenImageModularPipeline, state: PipelineState) -> PipelineState:
         block_state = self.get_block_state(state)
 
-        # YiYi Notes: remove support for output_type = "latents', we can just skip decode/encode step in modular
+        # YiYi Notes: remove support for output_ty...
         if block_state.latents.ndim == 4:
             block_state.latents = block_state.latents.unsqueeze(dim=1)
         elif block_state.latents.ndim != 5:
@@ -174,7 +156,6 @@ class QwenImageDecoderStep(ModularPipelineBlocks):
 
         self.set_block_state(state, block_state)
         return components, state
-
 
 class QwenImageLayeredDecoderStep(ModularPipelineBlocks):
     model_name = "qwenimage-layered"
@@ -249,7 +230,6 @@ class QwenImageLayeredDecoderStep(ModularPipelineBlocks):
         self.set_block_state(state, block_state)
         return components, state
 
-
 # postprocess the decoded images
 class QwenImageProcessImagesOutputStep(ModularPipelineBlocks):
     model_name = "qwenimage"
@@ -299,7 +279,6 @@ class QwenImageProcessImagesOutputStep(ModularPipelineBlocks):
 
         self.set_block_state(state, block_state)
         return components, state
-
 
 class QwenImageInpaintProcessImagesOutputStep(ModularPipelineBlocks):
     model_name = "qwenimage"

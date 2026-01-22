@@ -5,7 +5,6 @@ from ...utils import (
     _LazyModule,
 )
 
-
 _import_structure = {"pipeline_ddpm": ["DDPMPipeline"]}
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:

@@ -1,18 +1,3 @@
-# Copyright 2025 The EasyAnimate team and The HuggingFace Team.
-# All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -28,9 +13,7 @@ from ..modeling_outputs import Transformer2DModelOutput
 from ..modeling_utils import ModelMixin
 from ..normalization import AdaLayerNorm, FP32LayerNorm, RMSNorm
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 class EasyAnimateLayerNormZero(nn.Module):
     def __init__(
@@ -65,7 +48,6 @@ class EasyAnimateLayerNormZero(nn.Module):
             1
         )
         return hidden_states, encoder_hidden_states, gate, enc_gate
-
 
 class EasyAnimateRotaryPosEmbed(nn.Module):
     def __init__(self, patch_size: int, rope_dim: List[int]) -> None:
@@ -110,12 +92,86 @@ class EasyAnimateRotaryPosEmbed(nn.Module):
         )
         return image_rotary_emb
 
+class EasyAnimateAttnProcessor2_0:
+    class EasyAnimateLayerNormZero(nn.Module):
+    def __init__(
+        self,
+        conditioning_dim: int,
+        embedding_dim: int,
+        elementwise_affine: bool = True,
+        eps: float = 1e-5,
+        bias: bool = True,
+        norm_type: str = "fp32_layer_norm",
+    ) -> None:
+        super().__init__()
+
+        self.silu = nn.SiLU()
+        self.linear = nn.Linear(conditioning_dim, 6 * embedding_dim, bias=bias)
+
+        if norm_type == "layer_norm":
+            self.norm = nn.LayerNorm(embedding_dim, elementwise_affine=elementwise_affine, eps=eps)
+        elif norm_type == "fp32_layer_norm":
+            self.norm = FP32LayerNorm(embedding_dim, elementwise_affine=elementwise_affine, eps=eps)
+        else:
+            raise ValueError(
+                f"Unsupported `norm_type` ({norm_type}) provided. Supported ones are: 'layer_norm', 'fp32_layer_norm'."
+            )
+
+    def forward(
+        self, hidden_states: torch.Tensor, encoder_hidden_states: torch.Tensor, temb: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        shift, scale, gate, enc_shift, enc_scale, enc_gate = self.linear(self.silu(temb)).chunk(6, dim=1)
+        hidden_states = self.norm(hidden_states) * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
+        encoder_hidden_states = self.norm(encoder_hidden_states) * (1 + enc_scale.unsqueeze(1)) + enc_shift.unsqueeze(
+            1
+        )
+        return hidden_states, encoder_hidden_states, gate, enc_gate
+
+class EasyAnimateRotaryPosEmbed(nn.Module):
+    def __init__(self, patch_size: int, rope_dim: List[int]) -> None:
+        super().__init__()
+
+        self.patch_size = patch_size
+        self.rope_dim = rope_dim
+
+    def get_resize_crop_region_for_grid(self, src, tgt_width, tgt_height):
+        tw = tgt_width
+        th = tgt_height
+        h, w = src
+        r = h / w
+        if r > (th / tw):
+            resize_height = th
+            resize_width = int(round(th / h * w))
+        else:
+            resize_width = tw
+            resize_height = int(round(tw / w * h))
+
+        crop_top = int(round((th - resize_height) / 2.0))
+        crop_left = int(round((tw - resize_width) / 2.0))
+
+        return (crop_top, crop_left), (crop_top + resize_height, crop_left + resize_width)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        bs, c, num_frames, grid_height, grid_width = hidden_states.size()
+        grid_height = grid_height // self.patch_size
+        grid_width = grid_width // self.patch_size
+        base_size_width = 90 // self.patch_size
+        base_size_height = 60 // self.patch_size
+
+        grid_crops_coords = self.get_resize_crop_region_for_grid(
+            (grid_height, grid_width), base_size_width, base_size_height
+        )
+        image_rotary_emb = get_3d_rotary_pos_embed(
+            self.rope_dim,
+            grid_crops_coords,
+            grid_size=(grid_height, grid_width),
+            temporal_size=hidden_states.size(2),
+            use_real=True,
+        )
+        return image_rotary_emb
 
 class EasyAnimateAttnProcessor2_0:
-    r"""
-    Processor for implementing scaled dot-product attention (enabled by default if you're using PyTorch 2.0). This is
-    used in the EasyAnimateTransformer3DModel model.
-    """
+
 
     def __init__(self):
         if not hasattr(F, "scaled_dot_product_attention"):
@@ -205,7 +261,6 @@ class EasyAnimateAttnProcessor2_0:
                 hidden_states = attn.to_out[1](hidden_states)
 
         return hidden_states, encoder_hidden_states
-
 
 @maybe_allow_in_graph
 class EasyAnimateTransformerBlock(nn.Module):
@@ -314,57 +369,115 @@ class EasyAnimateTransformerBlock(nn.Module):
         encoder_hidden_states = encoder_hidden_states + enc_gate_ff.unsqueeze(1) * norm_encoder_hidden_states
         return hidden_states, encoder_hidden_states
 
+class EasyAnimateTransformer3DModel(ModelMixin, ConfigMixin):
+    class EasyAnimateTransformerBlock(nn.Module):
+    def __init__(
+        self,
+        dim: int,
+        num_attention_heads: int,
+        attention_head_dim: int,
+        time_embed_dim: int,
+        dropout: float = 0.0,
+        activation_fn: str = "gelu-approximate",
+        norm_elementwise_affine: bool = True,
+        norm_eps: float = 1e-6,
+        final_dropout: bool = True,
+        ff_inner_dim: Optional[int] = None,
+        ff_bias: bool = True,
+        qk_norm: bool = True,
+        after_norm: bool = False,
+        norm_type: str = "fp32_layer_norm",
+        is_mmdit_block: bool = True,
+    ):
+        super().__init__()
+
+        # Attention Part
+        self.norm1 = EasyAnimateLayerNormZero(
+            time_embed_dim, dim, norm_elementwise_affine, norm_eps, norm_type=norm_type, bias=True
+        )
+
+        self.attn1 = Attention(
+            query_dim=dim,
+            dim_head=attention_head_dim,
+            heads=num_attention_heads,
+            qk_norm="layer_norm" if qk_norm else None,
+            eps=1e-6,
+            bias=True,
+            added_proj_bias=True,
+            added_kv_proj_dim=dim if is_mmdit_block else None,
+            context_pre_only=False if is_mmdit_block else None,
+            processor=EasyAnimateAttnProcessor2_0(),
+        )
+
+        # FFN Part
+        self.norm2 = EasyAnimateLayerNormZero(
+            time_embed_dim, dim, norm_elementwise_affine, norm_eps, norm_type=norm_type, bias=True
+        )
+        self.ff = FeedForward(
+            dim,
+            dropout=dropout,
+            activation_fn=activation_fn,
+            final_dropout=final_dropout,
+            inner_dim=ff_inner_dim,
+            bias=ff_bias,
+        )
+
+        self.txt_ff = None
+        if is_mmdit_block:
+            self.txt_ff = FeedForward(
+                dim,
+                dropout=dropout,
+                activation_fn=activation_fn,
+                final_dropout=final_dropout,
+                inner_dim=ff_inner_dim,
+                bias=ff_bias,
+            )
+
+        self.norm3 = None
+        if after_norm:
+            self.norm3 = FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        temb: torch.Tensor,
+        image_rotary_emb: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        # 1. Attention
+        norm_hidden_states, norm_encoder_hidden_states, gate_msa, enc_gate_msa = self.norm1(
+            hidden_states, encoder_hidden_states, temb
+        )
+        attn_hidden_states, attn_encoder_hidden_states = self.attn1(
+            hidden_states=norm_hidden_states,
+            encoder_hidden_states=norm_encoder_hidden_states,
+            image_rotary_emb=image_rotary_emb,
+        )
+        hidden_states = hidden_states + gate_msa.unsqueeze(1) * attn_hidden_states
+        encoder_hidden_states = encoder_hidden_states + enc_gate_msa.unsqueeze(1) * attn_encoder_hidden_states
+
+        # 2. Feed-forward
+        norm_hidden_states, norm_encoder_hidden_states, gate_ff, enc_gate_ff = self.norm2(
+            hidden_states, encoder_hidden_states, temb
+        )
+        if self.norm3 is not None:
+            norm_hidden_states = self.norm3(self.ff(norm_hidden_states))
+            if self.txt_ff is not None:
+                norm_encoder_hidden_states = self.norm3(self.txt_ff(norm_encoder_hidden_states))
+            else:
+                norm_encoder_hidden_states = self.norm3(self.ff(norm_encoder_hidden_states))
+        else:
+            norm_hidden_states = self.ff(norm_hidden_states)
+            if self.txt_ff is not None:
+                norm_encoder_hidden_states = self.txt_ff(norm_encoder_hidden_states)
+            else:
+                norm_encoder_hidden_states = self.ff(norm_encoder_hidden_states)
+        hidden_states = hidden_states + gate_ff.unsqueeze(1) * norm_hidden_states
+        encoder_hidden_states = encoder_hidden_states + enc_gate_ff.unsqueeze(1) * norm_encoder_hidden_states
+        return hidden_states, encoder_hidden_states
 
 class EasyAnimateTransformer3DModel(ModelMixin, ConfigMixin):
-    """
-    A Transformer model for video-like data in [EasyAnimate](https://github.com/aigc-apps/EasyAnimate).
 
-    Parameters:
-        num_attention_heads (`int`, defaults to `48`):
-            The number of heads to use for multi-head attention.
-        attention_head_dim (`int`, defaults to `64`):
-            The number of channels in each head.
-        in_channels (`int`, defaults to `16`):
-            The number of channels in the input.
-        out_channels (`int`, *optional*, defaults to `16`):
-            The number of channels in the output.
-        patch_size (`int`, defaults to `2`):
-            The size of the patches to use in the patch embedding layer.
-        sample_width (`int`, defaults to `90`):
-            The width of the input latents.
-        sample_height (`int`, defaults to `60`):
-            The height of the input latents.
-        activation_fn (`str`, defaults to `"gelu-approximate"`):
-            Activation function to use in feed-forward.
-        timestep_activation_fn (`str`, defaults to `"silu"`):
-            Activation function to use when generating the timestep embeddings.
-        num_layers (`int`, defaults to `30`):
-            The number of layers of Transformer blocks to use.
-        mmdit_layers (`int`, defaults to `1000`):
-            The number of layers of Multi Modal Transformer blocks to use.
-        dropout (`float`, defaults to `0.0`):
-            The dropout probability to use.
-        time_embed_dim (`int`, defaults to `512`):
-            Output dimension of timestep embeddings.
-        text_embed_dim (`int`, defaults to `4096`):
-            Input dimension of text embeddings from the text encoder.
-        norm_eps (`float`, defaults to `1e-5`):
-            The epsilon value to use in normalization layers.
-        norm_elementwise_affine (`bool`, defaults to `True`):
-            Whether to use elementwise affine in normalization layers.
-        flip_sin_to_cos (`bool`, defaults to `True`):
-            Whether to flip the sin to cos in the time embedding.
-        time_position_encoding_type (`str`, defaults to `3d_rope`):
-            Type of time position encoding.
-        after_norm (`bool`, defaults to `False`):
-            Flag to apply normalization after.
-        resize_inpaint_mask_directly (`bool`, defaults to `True`):
-            Flag to resize inpaint mask directly.
-        enable_text_attention_mask (`bool`, defaults to `True`):
-            Flag to enable text attention mask.
-        add_noise_in_inpaint_model (`bool`, defaults to `False`):
-            Flag to add noise in inpaint model.
-    """
 
     _supports_gradient_checkpointing = True
     _no_split_modules = ["EasyAnimateTransformerBlock"]

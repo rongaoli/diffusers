@@ -9,7 +9,6 @@ from ....utils import (
     is_transformers_version,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
 
@@ -38,7 +37,6 @@ else:
     _import_structure["pipeline_versatile_diffusion_dual_guided"] = ["VersatileDiffusionDualGuidedPipeline"]
     _import_structure["pipeline_versatile_diffusion_image_variation"] = ["VersatileDiffusionImageVariationPipeline"]
     _import_structure["pipeline_versatile_diffusion_text_to_image"] = ["VersatileDiffusionTextToImagePipeline"]
-
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:

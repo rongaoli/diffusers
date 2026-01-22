@@ -1,34 +1,11 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from contextlib import contextmanager
 
 from ..utils.logging import get_logger
 
-
 logger = get_logger(__name__)  # pylint: disable=invalid-name
 
-
 class CacheMixin:
-    r"""
-    A class for enable/disabling caching techniques on diffusion models.
 
-    Supported caching techniques:
-        - [Pyramid Attention Broadcast](https://huggingface.co/papers/2408.12588)
-        - [FasterCache](https://huggingface.co/papers/2410.19355)
-        - [FirstBlockCache](https://github.com/chengzeyi/ParaAttention/blob/7a266123671b55e7e5a2fe9af3121f07a36afc78/README.md#first-block-cache-our-dynamic-caching)
-    """
 
     _cache_config = None
 
@@ -37,33 +14,8 @@ class CacheMixin:
         return self._cache_config is not None
 
     def enable_cache(self, config) -> None:
-        r"""
-        Enable caching techniques on the model.
-
-        Args:
-            config (`Union[PyramidAttentionBroadcastConfig, FasterCacheConfig, FirstBlockCacheConfig]`):
-                The configuration for applying the caching technique. Currently supported caching techniques are:
-                    - [`~hooks.PyramidAttentionBroadcastConfig`]
-                    - [`~hooks.FasterCacheConfig`]
-                    - [`~hooks.FirstBlockCacheConfig`]
-
-        Example:
-
-        ```python
-        >>> import torch
-        >>> from diffusers import CogVideoXPipeline, PyramidAttentionBroadcastConfig
-
-        >>> pipe = CogVideoXPipeline.from_pretrained("THUDM/CogVideoX-5b", torch_dtype=torch.bfloat16)
-        >>> pipe.to("cuda")
-
-        >>> config = PyramidAttentionBroadcastConfig(
-        ...     spatial_attention_block_skip_range=2,
-        ...     spatial_attention_timestep_skip_range=(100, 800),
-        ...     current_timestep_callback=lambda: pipe.current_timestep,
-        ... )
-        >>> pipe.transformer.enable_cache(config)
-        ```
-        """
+        
+        """r"""
 
         from ..hooks import (
             FasterCacheConfig,
@@ -134,7 +86,8 @@ class CacheMixin:
 
     @contextmanager
     def cache_context(self, name: str):
-        r"""Context manager that provides additional methods for cache management."""
+        
+        """r"""
         from ..hooks import HookRegistry
 
         registry = HookRegistry.check_if_exists_or_initialize(self)

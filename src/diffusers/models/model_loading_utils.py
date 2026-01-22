@@ -1,19 +1,4 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team.
-# Copyright (c) 2022, NVIDIA CORPORATION.  All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import functools
 import importlib
 import inspect
@@ -49,7 +34,6 @@ from ..utils import (
 )
 from ..utils.distributed_utils import is_torch_dist_rank_zero
 
-
 logger = logging.get_logger(__name__)
 
 _CLASS_REMAPPING_DICT = {
@@ -59,11 +43,9 @@ _CLASS_REMAPPING_DICT = {
     }
 }
 
-
 if is_accelerate_available():
     from accelerate import infer_auto_device_map
     from accelerate.utils import get_balanced_memory, get_max_memory, offload_weight, set_module_tensor_to_device
-
 
 # Adapted from `transformers` (see modeling_utils.py)
 def _determine_device_map(
@@ -115,7 +97,6 @@ def _determine_device_map(
 
     return device_map
 
-
 def _fetch_remapped_cls_from_config(config, old_class):
     previous_class_name = old_class.__name__
     remapped_class_name = _CLASS_REMAPPING_DICT.get(previous_class_name).get(config["norm_type"], None)
@@ -135,11 +116,17 @@ def _fetch_remapped_cls_from_config(config, old_class):
     else:
         return old_class
 
+def _determine_param_device(param_name: str, device_map: Optional[Dict[str, Union[int, str, torch.device]]]):
+    class object to be of `{remapped_class_name}` type from `{previous_class_name}` type."
+            f"This is because `{previous_class_name}` is scheduled to be deprecated in a future version. Note that this"
+            " DOESN'T affect the final results."
+        )
+        return remapped_class
+    else:
+        return old_class
 
 def _determine_param_device(param_name: str, device_map: Optional[Dict[str, Union[int, str, torch.device]]]):
-    """
-    Find the device of param_name from the device_map.
-    """
+
     if device_map is None:
         return "cpu"
     else:
@@ -152,16 +139,13 @@ def _determine_param_device(param_name: str, device_map: Optional[Dict[str, Unio
             raise ValueError(f"{param_name} doesn't have any device set.")
         return device_map[module_name]
 
-
 def load_state_dict(
     checkpoint_file: Union[str, os.PathLike],
     dduf_entries: Optional[Dict[str, DDUFEntry]] = None,
     disable_mmap: bool = False,
     map_location: Union[str, torch.device] = "cpu",
 ):
-    """
-    Reads a checkpoint file, returning properly formatted errors if they arise.
-    """
+
     # TODO: maybe refactor a bit this part where we pass a dict here
     if isinstance(checkpoint_file, dict):
         return checkpoint_file
@@ -210,7 +194,6 @@ def load_state_dict(
                 f"Unable to load weights from checkpoint file for '{checkpoint_file}' at '{checkpoint_file}'. "
             )
 
-
 def load_model_dict_into_meta(
     model,
     state_dict: OrderedDict,
@@ -225,10 +208,7 @@ def load_model_dict_into_meta(
     state_dict_index: Optional[Dict] = None,
     state_dict_folder: Optional[Union[str, os.PathLike]] = None,
 ) -> List[str]:
-    """
-    This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
-    params on a `meta` device. It replaces the model params with the data from the `state_dict`
-    """
+
 
     is_quantized = hf_quantizer is not None
     empty_state_dict = model.state_dict()
@@ -258,9 +238,9 @@ def load_model_dict_into_meta(
             set_module_kwargs["non_blocking"] = True
             set_module_kwargs["clear_cache"] = False
 
-        # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model, and which
-        # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
-        # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
+        # For compatibility with PyTorch load_stat...
+        # uses `param.copy_(input_param)` that pre...
+        # Reference: https://github.com/pytorch/py...
         old_param = model
         splits = param_name.split(".")
         for split in splits:
@@ -309,14 +289,8 @@ def load_model_dict_into_meta(
 
     return offload_index, state_dict_index
 
-
 def check_support_param_buffer_assignment(model_to_load, state_dict, start_prefix=""):
-    """
-    Checks if `model_to_load` supports param buffer assignment (such as when loading in empty weights) by first
-    checking if the model explicitly disables it, then by ensuring that the state dict keys are a subset of the model's
-    parameters.
 
-    """
     if model_to_load.device.type == "meta":
         return False
 
@@ -336,7 +310,6 @@ def check_support_param_buffer_assignment(model_to_load, state_dict, start_prefi
         return state_dict[start_prefix + first_key].dtype == model_to_load.state_dict()[first_key].dtype
 
     return False
-
 
 def _load_shard_file(
     shard_file,
@@ -384,7 +357,6 @@ def _load_shard_file(
 
         error_msgs += _load_state_dict_into_model(model, state_dict, assign_to_params_buffers)
     return offload_index, state_dict_index, mismatched_keys, error_msgs
-
 
 def _load_shard_files_with_threadpool(
     shard_files,
@@ -449,7 +421,6 @@ def _load_shard_files_with_threadpool(
 
     return offload_index, state_dict_index, mismatched_keys, error_msgs
 
-
 def _find_mismatched_keys(
     state_dict,
     model_state_dict,
@@ -470,7 +441,6 @@ def _find_mismatched_keys(
                 )
                 del state_dict[checkpoint_key]
     return mismatched_keys
-
 
 def _load_state_dict_into_model(
     model_to_load, state_dict: OrderedDict, assign_to_params_buffers: bool = False
@@ -497,7 +467,6 @@ def _load_state_dict_into_model(
     load(model_to_load, assign_to_params_buffers=assign_to_params_buffers)
 
     return error_msgs
-
 
 def _fetch_index_file(
     is_local,
@@ -547,7 +516,6 @@ def _fetch_index_file(
             index_file = None
 
     return index_file
-
 
 def _fetch_index_file_legacy(
     is_local,
@@ -614,7 +582,6 @@ def _fetch_index_file_legacy(
 
     return index_file
 
-
 def _gguf_parse_value(_value, data_type):
     if not isinstance(data_type, list):
         data_type = [data_type]
@@ -638,19 +605,8 @@ def _gguf_parse_value(_value, data_type):
         _value = _gguf_parse_value(_value, array_data_type)
     return _value
 
-
 def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
-    """
-    Load a GGUF file and return a dictionary of parsed parameters containing tensors, the parsed tokenizer and config
-    attributes.
 
-    Args:
-        gguf_checkpoint_path (`str`):
-            The path the to GGUF file to load
-        return_tensors (`bool`, defaults to `True`):
-            Whether to read the tensors from the file and return them. Not doing so is faster and only loads the
-            metadata in memory.
-    """
 
     if is_gguf_available() and is_torch_available():
         import gguf
@@ -689,7 +645,6 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
 
     return parsed_parameters
 
-
 def _find_mismatched_keys(state_dict, model_state_dict, loaded_keys, ignore_mismatched_sizes):
     mismatched_keys = []
     if not ignore_mismatched_sizes:
@@ -707,11 +662,8 @@ def _find_mismatched_keys(state_dict, model_state_dict, loaded_keys, ignore_mism
             del state_dict[checkpoint_key]
     return mismatched_keys
 
-
 def _expand_device_map(device_map, param_names):
-    """
-    Expand a device map to return the correspondence parameter name to device.
-    """
+
     new_device_map = {}
     for module, device in device_map.items():
         new_device_map.update(
@@ -719,17 +671,11 @@ def _expand_device_map(device_map, param_names):
         )
     return new_device_map
 
-
-# Adapted from: https://github.com/huggingface/transformers/blob/0687d481e2c71544501ef9cb3eef795a6e79b1de/src/transformers/modeling_utils.py#L5859
+# Adapted from: https://github.com/huggingface/tra...
 def _caching_allocator_warmup(
     model, expanded_device_map: Dict[str, torch.device], dtype: torch.dtype, hf_quantizer: Optional[DiffusersQuantizer]
 ) -> None:
-    """
-    This function warm-ups the caching allocator based on the size of the model tensors that will reside on each
-    device. It allows to have one large call to Malloc, instead of recursively calling it later when loading the model,
-    which is actually the loading speed bottleneck. Calling this function allows to cut the model loading time by a
-    very large margin.
-    """
+
     factor = 2 if hf_quantizer is None else hf_quantizer.get_cuda_warm_up_factor()
 
     # Keep only accelerator devices

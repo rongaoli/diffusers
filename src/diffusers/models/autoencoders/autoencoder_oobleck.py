@@ -1,16 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 import math
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
@@ -27,11 +14,8 @@ from ...utils.torch_utils import randn_tensor
 from ..modeling_utils import ModelMixin
 from .vae import AutoencoderMixin
 
-
 class Snake1d(nn.Module):
-    """
-    A 1-dimensional Snake activation function module.
-    """
+
 
     def __init__(self, hidden_dim, logscale=True):
         super().__init__()
@@ -53,11 +37,8 @@ class Snake1d(nn.Module):
         hidden_states = hidden_states.reshape(shape)
         return hidden_states
 
-
 class OobleckResidualUnit(nn.Module):
-    """
-    A residual unit composed of Snake1d and weight-normalized Conv1d layers with dilations.
-    """
+
 
     def __init__(self, dimension: int = 16, dilation: int = 1):
         super().__init__()
@@ -69,17 +50,7 @@ class OobleckResidualUnit(nn.Module):
         self.conv2 = weight_norm(nn.Conv1d(dimension, dimension, kernel_size=1))
 
     def forward(self, hidden_state):
-        """
-        Forward pass through the residual unit.
 
-        Args:
-            hidden_state (`torch.Tensor` of shape `(batch_size, channels, time_steps)`):
-                Input tensor .
-
-        Returns:
-            output_tensor (`torch.Tensor` of shape `(batch_size, channels, time_steps)`)
-                Input tensor after passing through the residual unit.
-        """
         output_tensor = hidden_state
         output_tensor = self.conv1(self.snake1(output_tensor))
         output_tensor = self.conv2(self.snake2(output_tensor))
@@ -90,9 +61,8 @@ class OobleckResidualUnit(nn.Module):
         output_tensor = hidden_state + output_tensor
         return output_tensor
 
-
 class OobleckEncoderBlock(nn.Module):
-    """Encoder block used in Oobleck encoder."""
+
 
     def __init__(self, input_dim, output_dim, stride: int = 1):
         super().__init__()
@@ -113,9 +83,8 @@ class OobleckEncoderBlock(nn.Module):
 
         return hidden_state
 
-
 class OobleckDecoderBlock(nn.Module):
-    """Decoder block used in Oobleck decoder."""
+
 
     def __init__(self, input_dim, output_dim, stride: int = 1):
         super().__init__()
@@ -142,7 +111,6 @@ class OobleckDecoderBlock(nn.Module):
         hidden_state = self.res_unit3(hidden_state)
 
         return hidden_state
-
 
 class OobleckDiagonalGaussianDistribution(object):
     def __init__(self, parameters: torch.Tensor, deterministic: bool = False):
@@ -183,37 +151,61 @@ class OobleckDiagonalGaussianDistribution(object):
     def mode(self) -> torch.Tensor:
         return self.mean
 
+@dataclass
+class AutoencoderOobleckOutput(BaseOutput):
+    class OobleckDiagonalGaussianDistribution(object):
+    def __init__(self, parameters: torch.Tensor, deterministic: bool = False):
+        self.parameters = parameters
+        self.mean, self.scale = parameters.chunk(2, dim=1)
+        self.std = nn.functional.softplus(self.scale) + 1e-4
+        self.var = self.std * self.std
+        self.logvar = torch.log(self.var)
+        self.deterministic = deterministic
+
+    def sample(self, generator: Optional[torch.Generator] = None) -> torch.Tensor:
+        # make sure sample is on the same device as the parameters and has same dtype
+        sample = randn_tensor(
+            self.mean.shape,
+            generator=generator,
+            device=self.parameters.device,
+            dtype=self.parameters.dtype,
+        )
+        x = self.mean + self.std * sample
+        return x
+
+    def kl(self, other: "OobleckDiagonalGaussianDistribution" = None) -> torch.Tensor:
+        if self.deterministic:
+            return torch.Tensor([0.0])
+        else:
+            if other is None:
+                return (self.mean * self.mean + self.var - self.logvar - 1.0).sum(1).mean()
+            else:
+                normalized_diff = torch.pow(self.mean - other.mean, 2) / other.var
+                var_ratio = self.var / other.var
+                logvar_diff = self.logvar - other.logvar
+
+                kl = normalized_diff + var_ratio + logvar_diff - 1
+
+                kl = kl.sum(1).mean()
+                return kl
+
+    def mode(self) -> torch.Tensor:
+        return self.mean
 
 @dataclass
 class AutoencoderOobleckOutput(BaseOutput):
-    """
-    Output of AutoencoderOobleck encoding method.
 
-    Args:
-        latent_dist (`OobleckDiagonalGaussianDistribution`):
-            Encoded outputs of `Encoder` represented as the mean and standard deviation of
-            `OobleckDiagonalGaussianDistribution`. `OobleckDiagonalGaussianDistribution` allows for sampling latents
-            from the distribution.
-    """
 
     latent_dist: "OobleckDiagonalGaussianDistribution"  # noqa: F821
 
-
 @dataclass
 class OobleckDecoderOutput(BaseOutput):
-    r"""
-    Output of decoding method.
 
-    Args:
-        sample (`torch.Tensor` of shape `(batch_size, audio_channels, sequence_length)`):
-            The decoded output sample from the last layer of the model.
-    """
 
     sample: torch.Tensor
 
-
 class OobleckEncoder(nn.Module):
-    """Oobleck Encoder"""
+
 
     def __init__(self, encoder_hidden_size, audio_channels, downsampling_ratios, channel_multiples):
         super().__init__()
@@ -251,9 +243,8 @@ class OobleckEncoder(nn.Module):
 
         return hidden_state
 
-
 class OobleckDecoder(nn.Module):
-    """Oobleck Decoder"""
+
 
     def __init__(self, channels, input_channels, audio_channels, upsampling_ratios, channel_multiples):
         super().__init__()
@@ -291,31 +282,8 @@ class OobleckDecoder(nn.Module):
 
         return hidden_state
 
-
 class AutoencoderOobleck(ModelMixin, AutoencoderMixin, ConfigMixin):
-    r"""
-    An autoencoder for encoding waveforms into latents and decoding latent representations into waveforms. First
-    introduced in Stable Audio.
 
-    This model inherits from [`ModelMixin`]. Check the superclass documentation for it's generic methods implemented
-    for all models (such as downloading or saving).
-
-    Parameters:
-        encoder_hidden_size (`int`, *optional*, defaults to 128):
-            Intermediate representation dimension for the encoder.
-        downsampling_ratios (`List[int]`, *optional*, defaults to `[2, 4, 4, 8, 8]`):
-            Ratios for downsampling in the encoder. These are used in reverse order for upsampling in the decoder.
-        channel_multiples (`List[int]`, *optional*, defaults to `[1, 2, 4, 8, 16]`):
-            Multiples used to determine the hidden sizes of the hidden layers.
-        decoder_channels (`int`, *optional*, defaults to 128):
-            Intermediate representation dimension for the decoder.
-        decoder_input_channels (`int`, *optional*, defaults to 64):
-            Input dimension for the decoder. Corresponds to the latent dimension.
-        audio_channels (`int`, *optional*, defaults to 2):
-            Number of channels in the audio data. Either 1 for mono or 2 for stereo.
-        sampling_rate (`int`, *optional*, defaults to 44100):
-            The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
-    """
 
     _supports_gradient_checkpointing = False
     _supports_group_offloading = False
@@ -361,18 +329,7 @@ class AutoencoderOobleck(ModelMixin, AutoencoderMixin, ConfigMixin):
     def encode(
         self, x: torch.Tensor, return_dict: bool = True
     ) -> Union[AutoencoderOobleckOutput, Tuple[OobleckDiagonalGaussianDistribution]]:
-        """
-        Encode a batch of images into latents.
 
-        Args:
-            x (`torch.Tensor`): Input batch of images.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether to return a [`~models.autoencoder_kl.AutoencoderKLOutput`] instead of a plain tuple.
-
-        Returns:
-                The latent representations of the encoded images. If `return_dict` is True, a
-                [`~models.autoencoder_kl.AutoencoderKLOutput`] is returned, otherwise a plain `tuple` is returned.
-        """
         if self.use_slicing and x.shape[0] > 1:
             encoded_slices = [self.encoder(x_slice) for x_slice in x.split(1)]
             h = torch.cat(encoded_slices)
@@ -398,20 +355,7 @@ class AutoencoderOobleck(ModelMixin, AutoencoderMixin, ConfigMixin):
     def decode(
         self, z: torch.FloatTensor, return_dict: bool = True, generator=None
     ) -> Union[OobleckDecoderOutput, torch.FloatTensor]:
-        """
-        Decode a batch of images.
 
-        Args:
-            z (`torch.Tensor`): Input batch of latent vectors.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether to return a [`~models.vae.OobleckDecoderOutput`] instead of a plain tuple.
-
-        Returns:
-            [`~models.vae.OobleckDecoderOutput`] or `tuple`:
-                If return_dict is True, a [`~models.vae.OobleckDecoderOutput`] is returned, otherwise a plain `tuple`
-                is returned.
-
-        """
         if self.use_slicing and z.shape[0] > 1:
             decoded_slices = [self._decode(z_slice).sample for z_slice in z.split(1)]
             decoded = torch.cat(decoded_slices)
@@ -430,14 +374,8 @@ class AutoencoderOobleck(ModelMixin, AutoencoderMixin, ConfigMixin):
         return_dict: bool = True,
         generator: Optional[torch.Generator] = None,
     ) -> Union[OobleckDecoderOutput, torch.Tensor]:
-        r"""
-        Args:
-            sample (`torch.Tensor`): Input sample.
-            sample_posterior (`bool`, *optional*, defaults to `False`):
-                Whether to sample from the posterior.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether or not to return a [`OobleckDecoderOutput`] instead of a plain tuple.
-        """
+        
+        """r"""
         x = sample
         posterior = self.encode(x).latent_dist
         if sample_posterior:

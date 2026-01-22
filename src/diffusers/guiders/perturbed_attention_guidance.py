@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import math
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
@@ -23,64 +9,19 @@ from ..hooks.layer_skip import _apply_layer_skip_hook
 from ..utils import get_logger
 from .guider_utils import BaseGuidance, GuiderOutput, rescale_noise_cfg
 
-
 if TYPE_CHECKING:
     from ..modular_pipelines.modular_pipeline import BlockState
 
-
 logger = get_logger(__name__)  # pylint: disable=invalid-name
 
-
 class PerturbedAttentionGuidance(BaseGuidance):
-    """
-    Perturbed Attention Guidance (PAG): https://huggingface.co/papers/2403.17377
+    
+    class PerturbedAttentionGuidance(BaseGuidance):
 
-    The intution behind PAG can be thought of as moving the CFG predicted distribution estimates further away from
-    worse versions of the conditional distribution estimates. PAG was one of the first techniques to introduce the idea
-    of using a worse version of the trained model for better guiding itself in the denoising process. It perturbs the
-    attention scores of the latent stream by replacing the score matrix with an identity matrix for selectively chosen
-    layers.
-
-    Additional reading:
-    - [Guiding a Diffusion Model with a Bad Version of Itself](https://huggingface.co/papers/2406.02507)
-
-    PAG is implemented with similar implementation to SkipLayerGuidance due to overlap in the configuration parameters
-    and implementation details.
-
-    Args:
-        guidance_scale (`float`, defaults to `7.5`):
-            The scale parameter for classifier-free guidance. Higher values result in stronger conditioning on the text
-            prompt, while lower values allow for more freedom in generation. Higher values may lead to saturation and
-            deterioration of image quality.
-        perturbed_guidance_scale (`float`, defaults to `2.8`):
-            The scale parameter for perturbed attention guidance.
-        perturbed_guidance_start (`float`, defaults to `0.01`):
-            The fraction of the total number of denoising steps after which perturbed attention guidance starts.
-        perturbed_guidance_stop (`float`, defaults to `0.2`):
-            The fraction of the total number of denoising steps after which perturbed attention guidance stops.
-        perturbed_guidance_layers (`int` or `List[int]`, *optional*):
-            The layer indices to apply perturbed attention guidance to. Can be a single integer or a list of integers.
-            If not provided, `perturbed_guidance_config` must be provided.
-        perturbed_guidance_config (`LayerSkipConfig` or `List[LayerSkipConfig]`, *optional*):
-            The configuration for the perturbed attention guidance. Can be a single `LayerSkipConfig` or a list of
-            `LayerSkipConfig`. If not provided, `perturbed_guidance_layers` must be provided.
-        guidance_rescale (`float`, defaults to `0.0`):
-            The rescale factor applied to the noise predictions. This is used to improve image quality and fix
-            overexposure. Based on Section 3.4 from [Common Diffusion Noise Schedules and Sample Steps are
-            Flawed](https://huggingface.co/papers/2305.08891).
-        use_original_formulation (`bool`, defaults to `False`):
-            Whether to use the original formulation of classifier-free guidance as proposed in the paper. By default,
-            we use the diffusers-native implementation that has been in the codebase for a long time. See
-            [~guiders.classifier_free_guidance.ClassifierFreeGuidance] for more details.
-        start (`float`, defaults to `0.01`):
-            The fraction of the total number of denoising steps after which guidance starts.
-        stop (`float`, defaults to `0.2`):
-            The fraction of the total number of denoising steps after which guidance stops.
-    """
 
     # NOTE: The current implementation does not account for joint latent conditioning (text + image/video tokens in
-    # the same latent stream). It assumes the entire latent is a single stream of visual tokens. It would be very
-    # complex to support joint latent conditioning in a model-agnostic manner without specializing the implementation
+    # the same latent stream). It assumes the enti...
+    # complex to support joint latent conditioning...
     # for each model architecture.
 
     _input_predictions = ["pred_cond", "pred_uncond", "pred_cond_skip"]
@@ -92,7 +33,7 @@ class PerturbedAttentionGuidance(BaseGuidance):
         perturbed_guidance_scale: float = 2.8,
         perturbed_guidance_start: float = 0.01,
         perturbed_guidance_stop: float = 0.2,
-        perturbed_guidance_layers: Optional[Union[int, List[int]]] = None,
+        perturbed_guidance_layers: Optional[int] = None,
         perturbed_guidance_config: Union[LayerSkipConfig, List[LayerSkipConfig], Dict[str, Any]] = None,
         guidance_rescale: float = 0.0,
         use_original_formulation: bool = False,

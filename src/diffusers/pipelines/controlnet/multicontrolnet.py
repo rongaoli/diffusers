@@ -1,9 +1,7 @@
 from ...models.controlnets.multicontrolnet import MultiControlNetModel
 from ...utils import deprecate, logging
 
-
 logger = logging.get_logger(__name__)
-
 
 class MultiControlNetModel(MultiControlNetModel):
     def __init__(self, *args, **kwargs):

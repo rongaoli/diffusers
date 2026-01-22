@@ -1,16 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 import math
 from typing import Optional, Tuple, Union
 
@@ -20,7 +7,6 @@ from torch import nn
 
 from ..activations import get_activation
 from ..resnet import Downsample1D, ResidualTemporalBlock1D, Upsample1D, rearrange_dims
-
 
 class DownResnetBlock1D(nn.Module):
     def __init__(
@@ -82,7 +68,6 @@ class DownResnetBlock1D(nn.Module):
             hidden_states = self.downsample(hidden_states)
 
         return hidden_states, output_states
-
 
 class UpResnetBlock1D(nn.Module):
     def __init__(
@@ -148,7 +133,6 @@ class UpResnetBlock1D(nn.Module):
 
         return hidden_states
 
-
 class ValueFunctionMidBlock1D(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, embed_dim: int):
         super().__init__()
@@ -167,7 +151,6 @@ class ValueFunctionMidBlock1D(nn.Module):
         x = self.res2(x, temb)
         x = self.down2(x)
         return x
-
 
 class MidResTemporalBlock1D(nn.Module):
     def __init__(
@@ -221,7 +204,6 @@ class MidResTemporalBlock1D(nn.Module):
 
         return hidden_states
 
-
 class OutConv1DBlock(nn.Module):
     def __init__(self, num_groups_out: int, out_channels: int, embed_dim: int, act_fn: str):
         super().__init__()
@@ -238,7 +220,6 @@ class OutConv1DBlock(nn.Module):
         hidden_states = self.final_conv1d_act(hidden_states)
         hidden_states = self.final_conv1d_2(hidden_states)
         return hidden_states
-
 
 class OutValueFunctionBlock(nn.Module):
     def __init__(self, fc_dim: int, embed_dim: int, act_fn: str = "mish"):
@@ -259,7 +240,6 @@ class OutValueFunctionBlock(nn.Module):
 
         return hidden_states
 
-
 _kernels = {
     "linear": [1 / 8, 3 / 8, 3 / 8, 1 / 8],
     "cubic": [-0.01171875, -0.03515625, 0.11328125, 0.43359375, 0.43359375, 0.11328125, -0.03515625, -0.01171875],
@@ -279,7 +259,6 @@ _kernels = {
     ],
 }
 
-
 class Downsample1d(nn.Module):
     def __init__(self, kernel: str = "linear", pad_mode: str = "reflect"):
         super().__init__()
@@ -296,7 +275,6 @@ class Downsample1d(nn.Module):
         weight[indices, indices] = kernel
         return F.conv1d(hidden_states, weight, stride=2)
 
-
 class Upsample1d(nn.Module):
     def __init__(self, kernel: str = "linear", pad_mode: str = "reflect"):
         super().__init__()
@@ -312,7 +290,6 @@ class Upsample1d(nn.Module):
         kernel = self.kernel.to(weight)[None, :].expand(hidden_states.shape[1], -1)
         weight[indices, indices] = kernel
         return F.conv_transpose1d(hidden_states, weight, stride=2, padding=self.pad * 2 + 1)
-
 
 class SelfAttention1d(nn.Module):
     def __init__(self, in_channels: int, n_head: int = 1, dropout_rate: float = 0.0):
@@ -371,7 +348,6 @@ class SelfAttention1d(nn.Module):
 
         return output
 
-
 class ResConvBlock(nn.Module):
     def __init__(self, in_channels: int, mid_channels: int, out_channels: int, is_last: bool = False):
         super().__init__()
@@ -404,7 +380,6 @@ class ResConvBlock(nn.Module):
 
         output = hidden_states + residual
         return output
-
 
 class UNetMidBlock1D(nn.Module):
     def __init__(self, mid_channels: int, in_channels: int, out_channels: Optional[int] = None):
@@ -445,7 +420,6 @@ class UNetMidBlock1D(nn.Module):
 
         return hidden_states
 
-
 class AttnDownBlock1D(nn.Module):
     def __init__(self, out_channels: int, in_channels: int, mid_channels: Optional[int] = None):
         super().__init__()
@@ -475,7 +449,6 @@ class AttnDownBlock1D(nn.Module):
 
         return hidden_states, (hidden_states,)
 
-
 class DownBlock1D(nn.Module):
     def __init__(self, out_channels: int, in_channels: int, mid_channels: Optional[int] = None):
         super().__init__()
@@ -498,7 +471,6 @@ class DownBlock1D(nn.Module):
 
         return hidden_states, (hidden_states,)
 
-
 class DownBlock1DNoSkip(nn.Module):
     def __init__(self, out_channels: int, in_channels: int, mid_channels: Optional[int] = None):
         super().__init__()
@@ -518,7 +490,6 @@ class DownBlock1DNoSkip(nn.Module):
             hidden_states = resnet(hidden_states)
 
         return hidden_states, (hidden_states,)
-
 
 class AttnUpBlock1D(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, mid_channels: Optional[int] = None):
@@ -557,7 +528,6 @@ class AttnUpBlock1D(nn.Module):
 
         return hidden_states
 
-
 class UpBlock1D(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, mid_channels: Optional[int] = None):
         super().__init__()
@@ -588,7 +558,6 @@ class UpBlock1D(nn.Module):
 
         return hidden_states
 
-
 class UpBlock1DNoSkip(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, mid_channels: Optional[int] = None):
         super().__init__()
@@ -616,12 +585,10 @@ class UpBlock1DNoSkip(nn.Module):
 
         return hidden_states
 
-
 DownBlockType = Union[DownResnetBlock1D, DownBlock1D, AttnDownBlock1D, DownBlock1DNoSkip]
 MidBlockType = Union[MidResTemporalBlock1D, ValueFunctionMidBlock1D, UNetMidBlock1D]
 OutBlockType = Union[OutConv1DBlock, OutValueFunctionBlock]
 UpBlockType = Union[UpResnetBlock1D, UpBlock1D, AttnUpBlock1D, UpBlock1DNoSkip]
-
 
 def get_down_block(
     down_block_type: str,
@@ -647,7 +614,6 @@ def get_down_block(
         return DownBlock1DNoSkip(out_channels=out_channels, in_channels=in_channels)
     raise ValueError(f"{down_block_type} does not exist.")
 
-
 def get_up_block(
     up_block_type: str, num_layers: int, in_channels: int, out_channels: int, temb_channels: int, add_upsample: bool
 ) -> UpBlockType:
@@ -666,7 +632,6 @@ def get_up_block(
     elif up_block_type == "UpBlock1DNoSkip":
         return UpBlock1DNoSkip(in_channels=in_channels, out_channels=out_channels)
     raise ValueError(f"{up_block_type} does not exist.")
-
 
 def get_mid_block(
     mid_block_type: str,
@@ -690,7 +655,6 @@ def get_mid_block(
     elif mid_block_type == "UNetMidBlock1D":
         return UNetMidBlock1D(in_channels=in_channels, mid_channels=mid_channels, out_channels=out_channels)
     raise ValueError(f"{mid_block_type} does not exist.")
-
 
 def get_out_block(
     *, out_block_type: str, num_groups_out: int, embed_dim: int, out_channels: int, act_fn: str, fc_dim: int

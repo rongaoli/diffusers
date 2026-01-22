@@ -14,7 +14,6 @@ from ...utils import (
     is_transformers_version,
 )
 
-
 _dummy_objects = {}
 _additional_imports = {}
 _import_structure = {"pipeline_output": ["StableDiffusionPipelineOutput"]}

@@ -1,8 +1,6 @@
 # docstyle-ignore
-"""
 These system prompts come from:
 https://github.com/black-forest-labs/flux2/blob/5a5d316b1b42f6b59a8c9194b77c8256be848432/src/flux2/system_messages.py#L54
-"""
 
 # docstyle-ignore
 SYSTEM_MESSAGE = """You are an AI that reasons about image descriptions. You give structured responses focusing on object relationships, object

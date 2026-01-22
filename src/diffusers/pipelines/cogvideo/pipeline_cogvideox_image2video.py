@@ -1,18 +1,3 @@
-# Copyright 2025 The CogVideoX team, Tsinghua University & ZhipuAI and The HuggingFace Team.
-# All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import inspect
 import math
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -33,7 +18,6 @@ from ...utils.torch_utils import randn_tensor
 from ...video_processor import VideoProcessor
 from .pipeline_output import CogVideoXPipelineOutput
 
-
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
@@ -43,107 +27,15 @@ else:
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 EXAMPLE_DOC_STRING = """
-    Examples:
-        ```py
-        >>> import torch
-        >>> from diffusers import CogVideoXImageToVideoPipeline
-        >>> from diffusers.utils import export_to_video, load_image
+        使用示例见文档
 
-        >>> pipe = CogVideoXImageToVideoPipeline.from_pretrained("THUDM/CogVideoX-5b-I2V", torch_dtype=torch.bfloat16)
-        >>> pipe.to("cuda")
-
-        >>> prompt = "An astronaut hatching from an egg, on the surface of the moon, the darkness and depth of space realised in the background. High quality, ultrarealistic detail and breath-taking movie-like camera shot."
-        >>> image = load_image(
-        ...     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg"
-        ... )
-        >>> video = pipe(image, prompt, use_dynamic_cfg=True)
-        >>> export_to_video(video.frames[0], "output.mp4", fps=8)
-        ```
-"""
-
-
-# Similar to diffusers.pipelines.hunyuandit.pipeline_hunyuandit.get_resize_crop_region_for_grid
-def get_resize_crop_region_for_grid(src, tgt_width, tgt_height):
-    tw = tgt_width
-    th = tgt_height
-    h, w = src
-    r = h / w
-    if r > (th / tw):
-        resize_height = th
-        resize_width = int(round(th / h * w))
-    else:
-        resize_width = tw
-        resize_height = int(round(tw / w * h))
-
-    crop_top = int(round((th - resize_height) / 2.0))
-    crop_left = int(round((tw - resize_width) / 2.0))
-
-    return (crop_top, crop_left), (crop_top + resize_height, crop_left + resize_width)
-
-
-# Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.retrieve_timesteps
-def retrieve_timesteps(
-    scheduler,
-    num_inference_steps: Optional[int] = None,
-    device: Optional[Union[str, torch.device]] = None,
-    timesteps: Optional[List[int]] = None,
-    sigmas: Optional[List[float]] = None,
-    **kwargs,
-):
-    r"""
     Calls the scheduler's `set_timesteps` method and retrieves timesteps from the scheduler after the call. Handles
     custom timesteps. Any kwargs will be supplied to `scheduler.set_timesteps`.
-
-    Args:
-        scheduler (`SchedulerMixin`):
-            The scheduler to get timesteps from.
-        num_inference_steps (`int`):
-            The number of diffusion steps used when generating samples with a pre-trained model. If used, `timesteps`
-            must be `None`.
-        device (`str` or `torch.device`, *optional*):
-            The device to which the timesteps should be moved to. If `None`, the timesteps are not moved.
-        timesteps (`List[int]`, *optional*):
-            Custom timesteps used to override the timestep spacing strategy of the scheduler. If `timesteps` is passed,
             `num_inference_steps` and `sigmas` must be `None`.
         sigmas (`List[float]`, *optional*):
             Custom sigmas used to override the timestep spacing strategy of the scheduler. If `sigmas` is passed,
             `num_inference_steps` and `timesteps` must be `None`.
-
-    Returns:
-        `Tuple[torch.Tensor, int]`: A tuple where the first element is the timestep schedule from the scheduler and the
-        second element is the number of inference steps.
-    """
-    if timesteps is not None and sigmas is not None:
-        raise ValueError("Only one of `timesteps` or `sigmas` can be passed. Please choose one to set custom values")
-    if timesteps is not None:
-        accepts_timesteps = "timesteps" in set(inspect.signature(scheduler.set_timesteps).parameters.keys())
-        if not accepts_timesteps:
-            raise ValueError(
-                f"The current scheduler class {scheduler.__class__}'s `set_timesteps` does not support custom"
-                f" timestep schedules. Please check whether you are using the correct scheduler."
-            )
-        scheduler.set_timesteps(timesteps=timesteps, device=device, **kwargs)
-        timesteps = scheduler.timesteps
-        num_inference_steps = len(timesteps)
-    elif sigmas is not None:
-        accept_sigmas = "sigmas" in set(inspect.signature(scheduler.set_timesteps).parameters.keys())
-        if not accept_sigmas:
-            raise ValueError(
-                f"The current scheduler class {scheduler.__class__}'s `set_timesteps` does not support custom"
-                f" sigmas schedules. Please check whether you are using the correct scheduler."
-            )
-        scheduler.set_timesteps(sigmas=sigmas, device=device, **kwargs)
-        timesteps = scheduler.timesteps
-        num_inference_steps = len(timesteps)
-    else:
-        scheduler.set_timesteps(num_inference_steps, device=device, **kwargs)
-        timesteps = scheduler.timesteps
-    return timesteps, num_inference_steps
-
-
-# Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img.retrieve_latents
 def retrieve_latents(
     encoder_output: torch.Tensor, generator: Optional[torch.Generator] = None, sample_mode: str = "sample"
 ):
@@ -156,29 +48,8 @@ def retrieve_latents(
     else:
         raise AttributeError("Could not access latents of provided encoder_output")
 
-
 class CogVideoXImageToVideoPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin):
-    r"""
-    Pipeline for image-to-video generation using CogVideoX.
 
-    This model inherits from [`DiffusionPipeline`]. Check the superclass documentation for the generic methods the
-    library implements for all the pipelines (such as downloading or saving, running on a particular device, etc.)
-
-    Args:
-        vae ([`AutoencoderKL`]):
-            Variational Auto-Encoder (VAE) Model to encode and decode videos to and from latent representations.
-        text_encoder ([`T5EncoderModel`]):
-            Frozen text-encoder. CogVideoX uses
-            [T5](https://huggingface.co/docs/transformers/model_doc/t5#transformers.T5EncoderModel); specifically the
-            [t5-v1_1-xxl](https://huggingface.co/PixArt-alpha/PixArt-alpha/tree/main/t5-v1_1-xxl) variant.
-        tokenizer (`T5Tokenizer`):
-            Tokenizer of class
-            [T5Tokenizer](https://huggingface.co/docs/transformers/model_doc/t5#transformers.T5Tokenizer).
-        transformer ([`CogVideoXTransformer3DModel`]):
-            A text conditioned `CogVideoXTransformer3DModel` to denoise the encoded video latents.
-        scheduler ([`SchedulerMixin`]):
-            A scheduler to be used in combination with `transformer` to denoise the encoded video latents.
-    """
 
     _optional_components = []
     model_cpu_offload_seq = "text_encoder->transformer->vae"
@@ -216,7 +87,7 @@ class CogVideoXImageToVideoPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin)
 
         self.video_processor = VideoProcessor(vae_scale_factor=self.vae_scale_factor_spatial)
 
-    # Copied from diffusers.pipelines.cogvideo.pipeline_cogvideox.CogVideoXPipeline._get_t5_prompt_embeds
+    # Copied from diffusers.pipelines.cogvideo.pip...
     def _get_t5_prompt_embeds(
         self,
         prompt: Union[str, List[str]] = None,
@@ -263,7 +134,7 @@ class CogVideoXImageToVideoPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin)
     def encode_prompt(
         self,
         prompt: Union[str, List[str]],
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        negative_prompt: Optional[str] = None,
         do_classifier_free_guidance: bool = True,
         num_videos_per_prompt: int = 1,
         prompt_embeds: Optional[torch.Tensor] = None,
@@ -272,32 +143,8 @@ class CogVideoXImageToVideoPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin)
         device: Optional[torch.device] = None,
         dtype: Optional[torch.dtype] = None,
     ):
-        r"""
-        Encodes the prompt into text encoder hidden states.
-
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                prompt to be encoded
-            negative_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts not to guide the image generation. If not defined, one has to pass
-                `negative_prompt_embeds` instead. Ignored when not using guidance (i.e., ignored if `guidance_scale` is
-                less than `1`).
-            do_classifier_free_guidance (`bool`, *optional*, defaults to `True`):
-                Whether to use classifier free guidance or not.
-            num_videos_per_prompt (`int`, *optional*, defaults to 1):
-                Number of videos that should be generated per prompt. torch device to place the resulting embeddings on
-            prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt weighting. If not
-                provided, text embeddings will be generated from `prompt` input argument.
-            negative_prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated negative text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt
-                weighting. If not provided, negative_prompt_embeds will be generated from `negative_prompt` input
-                argument.
-            device: (`torch.device`, *optional*):
-                torch device
-            dtype: (`torch.dtype`, *optional*):
-                torch dtype
-        """
+        
+        """r"""
         device = device or self._execution_device
 
         prompt = [prompt] if isinstance(prompt, str) else prompt
@@ -424,7 +271,7 @@ class CogVideoXImageToVideoPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin)
         frames = self.vae.decode(latents).sample
         return frames
 
-    # Copied from diffusers.pipelines.animatediff.pipeline_animatediff_video2video.AnimateDiffVideoToVideoPipeline.get_timesteps
+    # Copied from diffusers.pipelines.animatediff....
     def get_timesteps(self, num_inference_steps, timesteps, strength, device):
         # get the original timestep using init_timestep
         init_timestep = min(int(num_inference_steps * strength), num_inference_steps)
@@ -434,9 +281,9 @@ class CogVideoXImageToVideoPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin)
 
         return timesteps, num_inference_steps - t_start
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_extra_step_kwargs
+    # Copied from diffusers.pipelines.stable_diffu...
     def prepare_extra_step_kwargs(self, generator, eta):
-        # prepare extra kwargs for the scheduler step, since not all schedulers have the same signature
+        # prepare extra kwargs for the scheduler s...
         # eta (η) is only used with the DDIMScheduler, it will be ignored for other schedulers.
         # eta corresponds to η in DDIM paper: https://huggingface.co/papers/2010.02502
         # and should be between [0, 1]
@@ -515,22 +362,24 @@ class CogVideoXImageToVideoPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin)
                     f" {negative_prompt_embeds.shape}."
                 )
 
-    # Copied from diffusers.pipelines.cogvideo.pipeline_cogvideox.CogVideoXPipeline.fuse_qkv_projections
+    # Copied from diffusers.pipelines.cogvideo.pip...
     def fuse_qkv_projections(self) -> None:
-        r"""Enables fused QKV projections."""
+        
+        """r"""
         self.fusing_transformer = True
         self.transformer.fuse_qkv_projections()
 
-    # Copied from diffusers.pipelines.cogvideo.pipeline_cogvideox.CogVideoXPipeline.unfuse_qkv_projections
+    # Copied from diffusers.pipelines.cogvideo.pip...
     def unfuse_qkv_projections(self) -> None:
-        r"""Disable QKV projection fusion if enabled."""
+        
+        """r"""
         if not self.fusing_transformer:
             logger.warning("The Transformer was not initially fused for QKV projections. Doing nothing.")
         else:
             self.transformer.unfuse_qkv_projections()
             self.fusing_transformer = False
 
-    # Copied from diffusers.pipelines.cogvideo.pipeline_cogvideox.CogVideoXPipeline._prepare_rotary_positional_embeddings
+    # Copied from diffusers.pipelines.cogvideo.pip...
     def _prepare_rotary_positional_embeddings(
         self,
         height: int,
@@ -600,8 +449,8 @@ class CogVideoXImageToVideoPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin)
     def __call__(
         self,
         image: PipelineImageInput,
-        prompt: Optional[Union[str, List[str]]] = None,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        prompt: Optional[str] = None,
+        negative_prompt: Optional[str] = None,
         height: Optional[int] = None,
         width: Optional[int] = None,
         num_frames: int = 49,
@@ -611,7 +460,7 @@ class CogVideoXImageToVideoPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin)
         use_dynamic_cfg: bool = False,
         num_videos_per_prompt: int = 1,
         eta: float = 0.0,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+        generator: Optional[torch.Generator] = None,
         latents: Optional[torch.FloatTensor] = None,
         prompt_embeds: Optional[torch.FloatTensor] = None,
         negative_prompt_embeds: Optional[torch.FloatTensor] = None,
@@ -624,17 +473,7 @@ class CogVideoXImageToVideoPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin)
         callback_on_step_end_tensor_inputs: List[str] = ["latents"],
         max_sequence_length: int = 226,
     ) -> Union[CogVideoXPipelineOutput, Tuple]:
-        """
         Function invoked when calling the pipeline for generation.
-
-        Args:
-            image (`PipelineImageInput`):
-                The input image to condition the generation on. Must be an image, a list of images or a `torch.Tensor`.
-            prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to guide the image generation. If not defined, one has to pass `prompt_embeds`.
-                instead.
-            negative_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts not to guide the image generation. If not defined, one has to pass
                 `negative_prompt_embeds` instead. Ignored when not using guidance (i.e., ignored if `guidance_scale` is
                 less than `1`).
             height (`int`, *optional*, defaults to self.transformer.config.sample_height * self.vae_scale_factor_spatial):
@@ -699,207 +538,3 @@ class CogVideoXImageToVideoPipeline(DiffusionPipeline, CogVideoXLoraLoaderMixin)
                 `self.transformer.config.max_text_seq_length` otherwise may lead to poor results.
 
         Examples:
-
-        Returns:
-            [`~pipelines.cogvideo.pipeline_output.CogVideoXPipelineOutput`] or `tuple`:
-            [`~pipelines.cogvideo.pipeline_output.CogVideoXPipelineOutput`] if `return_dict` is True, otherwise a
-            `tuple`. When returning a tuple, the first element is a list with the generated images.
-        """
-
-        if isinstance(callback_on_step_end, (PipelineCallback, MultiPipelineCallbacks)):
-            callback_on_step_end_tensor_inputs = callback_on_step_end.tensor_inputs
-
-        height = height or self.transformer.config.sample_height * self.vae_scale_factor_spatial
-        width = width or self.transformer.config.sample_width * self.vae_scale_factor_spatial
-        num_frames = num_frames or self.transformer.config.sample_frames
-
-        num_videos_per_prompt = 1
-
-        # 1. Check inputs. Raise error if not correct
-        self.check_inputs(
-            image=image,
-            prompt=prompt,
-            height=height,
-            width=width,
-            negative_prompt=negative_prompt,
-            callback_on_step_end_tensor_inputs=callback_on_step_end_tensor_inputs,
-            latents=latents,
-            prompt_embeds=prompt_embeds,
-            negative_prompt_embeds=negative_prompt_embeds,
-        )
-        self._guidance_scale = guidance_scale
-        self._current_timestep = None
-        self._attention_kwargs = attention_kwargs
-        self._interrupt = False
-
-        # 2. Default call parameters
-        if prompt is not None and isinstance(prompt, str):
-            batch_size = 1
-        elif prompt is not None and isinstance(prompt, list):
-            batch_size = len(prompt)
-        else:
-            batch_size = prompt_embeds.shape[0]
-
-        device = self._execution_device
-
-        # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
-        # of the Imagen paper: https://huggingface.co/papers/2205.11487 . `guidance_scale = 1`
-        # corresponds to doing no classifier free guidance.
-        do_classifier_free_guidance = guidance_scale > 1.0
-
-        # 3. Encode input prompt
-        prompt_embeds, negative_prompt_embeds = self.encode_prompt(
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            do_classifier_free_guidance=do_classifier_free_guidance,
-            num_videos_per_prompt=num_videos_per_prompt,
-            prompt_embeds=prompt_embeds,
-            negative_prompt_embeds=negative_prompt_embeds,
-            max_sequence_length=max_sequence_length,
-            device=device,
-        )
-        if do_classifier_free_guidance:
-            prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds], dim=0)
-
-        # 4. Prepare timesteps
-        if XLA_AVAILABLE:
-            timestep_device = "cpu"
-        else:
-            timestep_device = device
-        timesteps, num_inference_steps = retrieve_timesteps(
-            self.scheduler, num_inference_steps, timestep_device, timesteps
-        )
-        self._num_timesteps = len(timesteps)
-
-        # 5. Prepare latents
-        latent_frames = (num_frames - 1) // self.vae_scale_factor_temporal + 1
-
-        # For CogVideoX 1.5, the latent frames should be padded to make it divisible by patch_size_t
-        patch_size_t = self.transformer.config.patch_size_t
-        additional_frames = 0
-        if patch_size_t is not None and latent_frames % patch_size_t != 0:
-            additional_frames = patch_size_t - latent_frames % patch_size_t
-            num_frames += additional_frames * self.vae_scale_factor_temporal
-
-        image = self.video_processor.preprocess(image, height=height, width=width).to(
-            device, dtype=prompt_embeds.dtype
-        )
-
-        latent_channels = self.transformer.config.in_channels // 2
-        latents, image_latents = self.prepare_latents(
-            image,
-            batch_size * num_videos_per_prompt,
-            latent_channels,
-            num_frames,
-            height,
-            width,
-            prompt_embeds.dtype,
-            device,
-            generator,
-            latents,
-        )
-
-        # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
-        extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
-
-        # 7. Create rotary embeds if required
-        image_rotary_emb = (
-            self._prepare_rotary_positional_embeddings(height, width, latents.size(1), device)
-            if self.transformer.config.use_rotary_positional_embeddings
-            else None
-        )
-
-        # 8. Create ofs embeds if required
-        ofs_emb = None if self.transformer.config.ofs_embed_dim is None else latents.new_full((1,), fill_value=2.0)
-
-        # 8. Denoising loop
-        num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
-
-        with self.progress_bar(total=num_inference_steps) as progress_bar:
-            # for DPM-solver++
-            old_pred_original_sample = None
-            for i, t in enumerate(timesteps):
-                if self.interrupt:
-                    continue
-
-                self._current_timestep = t
-                latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
-                latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
-
-                latent_image_input = torch.cat([image_latents] * 2) if do_classifier_free_guidance else image_latents
-                latent_model_input = torch.cat([latent_model_input, latent_image_input], dim=2)
-
-                # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
-                timestep = t.expand(latent_model_input.shape[0])
-
-                # predict noise model_output
-                with self.transformer.cache_context("cond_uncond"):
-                    noise_pred = self.transformer(
-                        hidden_states=latent_model_input,
-                        encoder_hidden_states=prompt_embeds,
-                        timestep=timestep,
-                        ofs=ofs_emb,
-                        image_rotary_emb=image_rotary_emb,
-                        attention_kwargs=attention_kwargs,
-                        return_dict=False,
-                    )[0]
-                noise_pred = noise_pred.float()
-
-                # perform guidance
-                if use_dynamic_cfg:
-                    self._guidance_scale = 1 + guidance_scale * (
-                        (1 - math.cos(math.pi * ((num_inference_steps - t.item()) / num_inference_steps) ** 5.0)) / 2
-                    )
-                if do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                    noise_pred = noise_pred_uncond + self.guidance_scale * (noise_pred_text - noise_pred_uncond)
-
-                # compute the previous noisy sample x_t -> x_t-1
-                if not isinstance(self.scheduler, CogVideoXDPMScheduler):
-                    latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
-                else:
-                    latents, old_pred_original_sample = self.scheduler.step(
-                        noise_pred,
-                        old_pred_original_sample,
-                        t,
-                        timesteps[i - 1] if i > 0 else None,
-                        latents,
-                        **extra_step_kwargs,
-                        return_dict=False,
-                    )
-                latents = latents.to(prompt_embeds.dtype)
-
-                # call the callback, if provided
-                if callback_on_step_end is not None:
-                    callback_kwargs = {}
-                    for k in callback_on_step_end_tensor_inputs:
-                        callback_kwargs[k] = locals()[k]
-                    callback_outputs = callback_on_step_end(self, i, t, callback_kwargs)
-
-                    latents = callback_outputs.pop("latents", latents)
-                    prompt_embeds = callback_outputs.pop("prompt_embeds", prompt_embeds)
-                    negative_prompt_embeds = callback_outputs.pop("negative_prompt_embeds", negative_prompt_embeds)
-
-                if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
-                    progress_bar.update()
-
-                if XLA_AVAILABLE:
-                    xm.mark_step()
-
-        self._current_timestep = None
-
-        if not output_type == "latent":
-            # Discard any padding frames that were added for CogVideoX 1.5
-            latents = latents[:, additional_frames:]
-            video = self.decode_latents(latents)
-            video = self.video_processor.postprocess_video(video=video, output_type=output_type)
-        else:
-            video = latents
-
-        # Offload all models
-        self.maybe_free_model_hooks()
-
-        if not return_dict:
-            return (video,)
-
-        return CogVideoXPipelineOutput(frames=video)

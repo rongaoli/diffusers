@@ -1,31 +1,11 @@
-# Copyright 2025 Kakao Brain and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import torch
 from torch import nn
 
 from ...configuration_utils import ConfigMixin, register_to_config
 from ...models import ModelMixin
 
-
 class UnCLIPTextProjModel(ModelMixin, ConfigMixin):
-    """
-    Utility class for CLIP embeddings. Used to combine the image and text embeddings into a format usable by the
-    decoder.
 
-    For more details, see the original paper: https://huggingface.co/papers/2204.06125 section 2.1
-    """
 
     @register_to_config
     def __init__(
@@ -67,14 +47,14 @@ class UnCLIPTextProjModel(ModelMixin, ConfigMixin):
 
         batch_size = prompt_embeds.shape[0]
 
-        # "Specifically, we modify the architecture described in Nichol et al. (2021) by projecting and
+        # "Specifically, we modify the architectur...
         # adding CLIP embeddings to the existing timestep embedding, ...
         time_projected_prompt_embeds = self.embedding_proj(prompt_embeds)
         time_projected_image_embeddings = self.clip_image_embeddings_project_to_time_embeddings(image_embeddings)
         additive_clip_time_embeddings = time_projected_image_embeddings + time_projected_prompt_embeds
 
         # ... and by projecting CLIP embeddings into four
-        # extra tokens of context that are concatenated to the sequence of outputs from the GLIDE text encoder"
+        # extra tokens of context that are concate...
         clip_extra_context_tokens = self.clip_extra_context_tokens_proj(image_embeddings)
         clip_extra_context_tokens = clip_extra_context_tokens.reshape(batch_size, -1, self.clip_extra_context_tokens)
         clip_extra_context_tokens = clip_extra_context_tokens.permute(0, 2, 1)

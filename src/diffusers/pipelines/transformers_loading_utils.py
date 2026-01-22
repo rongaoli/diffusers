@@ -1,17 +1,4 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 import contextlib
 import os
 import tempfile
@@ -22,7 +9,6 @@ from tqdm import tqdm
 
 from ..utils import is_safetensors_available, is_transformers_available, is_transformers_version
 
-
 if TYPE_CHECKING:
     from transformers import PreTrainedModel, PreTrainedTokenizer
 
@@ -32,18 +18,10 @@ if is_transformers_available():
 if is_safetensors_available():
     import safetensors.torch
 
-
 def _load_tokenizer_from_dduf(
     cls: "PreTrainedTokenizer", name: str, dduf_entries: Dict[str, DDUFEntry], **kwargs
 ) -> "PreTrainedTokenizer":
-    """
-    Load a tokenizer from a DDUF archive.
 
-    In practice, `transformers` do not provide a way to load a tokenizer from a DDUF archive. This function is a
-    workaround by extracting the tokenizer files from the DDUF archive and loading the tokenizer from the extracted
-    files. There is an extra cost of extracting the files, but of limited impact as the tokenizer files are usually
-    small-ish.
-    """
     with tempfile.TemporaryDirectory() as tmp_dir:
         for entry_name, entry in dduf_entries.items():
             if entry_name.startswith(name + "/"):
@@ -55,16 +33,10 @@ def _load_tokenizer_from_dduf(
                         f.write(mm)
         return cls.from_pretrained(os.path.dirname(tmp_entry_path), **kwargs)
 
-
 def _load_transformers_model_from_dduf(
     cls: "PreTrainedModel", name: str, dduf_entries: Dict[str, DDUFEntry], **kwargs
 ) -> "PreTrainedModel":
-    """
-    Load a transformers model from a DDUF archive.
 
-    In practice, `transformers` do not provide a way to load a model from a DDUF archive. This function is a workaround
-    by instantiating a model from the config file and loading the weights from the DDUF archive directly.
-    """
     config_file = dduf_entries.get(f"{name}/config.json")
     if config_file is None:
         raise EnvironmentError(

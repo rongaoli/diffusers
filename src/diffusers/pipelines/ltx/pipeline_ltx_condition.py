@@ -1,17 +1,3 @@
-# Copyright 2025 Lightricks and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import inspect
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -32,7 +18,6 @@ from ...video_processor import VideoProcessor
 from ..pipeline_utils import DiffusionPipeline
 from .pipeline_output import LTXPipelineOutput
 
-
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
@@ -43,76 +28,16 @@ else:
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 EXAMPLE_DOC_STRING = """
-    Examples:
-        ```py
-        >>> import torch
-        >>> from diffusers.pipelines.ltx.pipeline_ltx_condition import LTXConditionPipeline, LTXVideoCondition
-        >>> from diffusers.utils import export_to_video, load_video, load_image
-
-        >>> pipe = LTXConditionPipeline.from_pretrained("Lightricks/LTX-Video-0.9.5", torch_dtype=torch.bfloat16)
-        >>> pipe.to("cuda")
-
-        >>> # Load input image and video
-        >>> video = load_video(
-        ...     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/cosmos/cosmos-video2world-input-vid.mp4"
-        ... )
-        >>> image = load_image(
-        ...     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/cosmos/cosmos-video2world-input.jpg"
-        ... )
-
-        >>> # Create conditioning objects
-        >>> condition1 = LTXVideoCondition(
-        ...     image=image,
-        ...     frame_index=0,
-        ... )
-        >>> condition2 = LTXVideoCondition(
-        ...     video=video,
-        ...     frame_index=80,
-        ... )
-
-        >>> prompt = "The video depicts a long, straight highway stretching into the distance, flanked by metal guardrails. The road is divided into multiple lanes, with a few vehicles visible in the far distance. The surrounding landscape features dry, grassy fields on one side and rolling hills on the other. The sky is mostly clear with a few scattered clouds, suggesting a bright, sunny day. And then the camera switch to a winding mountain road covered in snow, with a single vehicle traveling along it. The road is flanked by steep, rocky cliffs and sparse vegetation. The landscape is characterized by rugged terrain and a river visible in the distance. The scene captures the solitude and beauty of a winter drive through a mountainous region."
-        >>> negative_prompt = "worst quality, inconsistent motion, blurry, jittery, distorted"
-
-        >>> # Generate video
-        >>> generator = torch.Generator("cuda").manual_seed(0)
-        >>> # Text-only conditioning is also supported without the need to pass `conditions`
-        >>> video = pipe(
-        ...     conditions=[condition1, condition2],
-        ...     prompt=prompt,
-        ...     negative_prompt=negative_prompt,
-        ...     width=768,
-        ...     height=512,
-        ...     num_frames=161,
-        ...     num_inference_steps=40,
-        ...     generator=generator,
-        ... ).frames[0]
-
-        >>> export_to_video(video, "output.mp4", fps=24)
-        ```
-"""
 
 
 @dataclass
 class LTXVideoCondition:
-    """
-    Defines a single frame-conditioning item for LTX Video - a single frame or a sequence of frames.
 
-    Attributes:
-        image (`PIL.Image.Image`):
-            The image to condition the video on.
-        video (`List[PIL.Image.Image]`):
-            The video to condition the video on.
-        frame_index (`int`):
-            The frame index at which the image or video will conditionally effect the video generation.
-        strength (`float`, defaults to `1.0`):
-            The strength of the conditioning effect. A value of `1.0` means the conditioning effect is fully applied.
-    """
 
     image: Optional[PIL.Image.Image] = None
     video: Optional[List[PIL.Image.Image]] = None
     frame_index: int = 0
     strength: float = 1.0
-
 
 # from LTX-Video/ltx_video/schedulers/rf.py
 def linear_quadratic_schedule(num_steps, threshold_noise=0.025, linear_steps=None):
@@ -133,7 +58,6 @@ def linear_quadratic_schedule(num_steps, threshold_noise=0.025, linear_steps=Non
     sigma_schedule = [1.0 - x for x in sigma_schedule]
     return torch.tensor(sigma_schedule[:-1])
 
-
 # Copied from diffusers.pipelines.flux.pipeline_flux.calculate_shift
 def calculate_shift(
     image_seq_len,
@@ -147,7 +71,6 @@ def calculate_shift(
     mu = image_seq_len * m + b
     return mu
 
-
 # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.retrieve_timesteps
 def retrieve_timesteps(
     scheduler,
@@ -157,121 +80,11 @@ def retrieve_timesteps(
     sigmas: Optional[List[float]] = None,
     **kwargs,
 ):
-    r"""
-    Calls the scheduler's `set_timesteps` method and retrieves timesteps from the scheduler after the call. Handles
-    custom timesteps. Any kwargs will be supplied to `scheduler.set_timesteps`.
-
-    Args:
-        scheduler (`SchedulerMixin`):
-            The scheduler to get timesteps from.
-        num_inference_steps (`int`):
-            The number of diffusion steps used when generating samples with a pre-trained model. If used, `timesteps`
-            must be `None`.
-        device (`str` or `torch.device`, *optional*):
-            The device to which the timesteps should be moved to. If `None`, the timesteps are not moved.
-        timesteps (`List[int]`, *optional*):
-            Custom timesteps used to override the timestep spacing strategy of the scheduler. If `timesteps` is passed,
-            `num_inference_steps` and `sigmas` must be `None`.
-        sigmas (`List[float]`, *optional*):
-            Custom sigmas used to override the timestep spacing strategy of the scheduler. If `sigmas` is passed,
-            `num_inference_steps` and `timesteps` must be `None`.
-
-    Returns:
-        `Tuple[torch.Tensor, int]`: A tuple where the first element is the timestep schedule from the scheduler and the
-        second element is the number of inference steps.
-    """
-    if timesteps is not None and sigmas is not None:
-        raise ValueError("Only one of `timesteps` or `sigmas` can be passed. Please choose one to set custom values")
-    if timesteps is not None:
-        accepts_timesteps = "timesteps" in set(inspect.signature(scheduler.set_timesteps).parameters.keys())
-        if not accepts_timesteps:
-            raise ValueError(
-                f"The current scheduler class {scheduler.__class__}'s `set_timesteps` does not support custom"
-                f" timestep schedules. Please check whether you are using the correct scheduler."
-            )
-        scheduler.set_timesteps(timesteps=timesteps, device=device, **kwargs)
-        timesteps = scheduler.timesteps
-        num_inference_steps = len(timesteps)
-    elif sigmas is not None:
-        accept_sigmas = "sigmas" in set(inspect.signature(scheduler.set_timesteps).parameters.keys())
-        if not accept_sigmas:
-            raise ValueError(
-                f"The current scheduler class {scheduler.__class__}'s `set_timesteps` does not support custom"
-                f" sigmas schedules. Please check whether you are using the correct scheduler."
-            )
-        scheduler.set_timesteps(sigmas=sigmas, device=device, **kwargs)
-        timesteps = scheduler.timesteps
-        num_inference_steps = len(timesteps)
-    else:
-        scheduler.set_timesteps(num_inference_steps, device=device, **kwargs)
-        timesteps = scheduler.timesteps
-    return timesteps, num_inference_steps
-
-
-# Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img.retrieve_latents
-def retrieve_latents(
-    encoder_output: torch.Tensor, generator: Optional[torch.Generator] = None, sample_mode: str = "sample"
-):
-    if hasattr(encoder_output, "latent_dist") and sample_mode == "sample":
-        return encoder_output.latent_dist.sample(generator)
-    elif hasattr(encoder_output, "latent_dist") and sample_mode == "argmax":
-        return encoder_output.latent_dist.mode()
-    elif hasattr(encoder_output, "latents"):
-        return encoder_output.latents
-    else:
-        raise AttributeError("Could not access latents of provided encoder_output")
-
-
-# Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.rescale_noise_cfg
-def rescale_noise_cfg(noise_cfg, noise_pred_text, guidance_rescale=0.0):
-    r"""
+    
+    """r"""
     Rescales `noise_cfg` tensor based on `guidance_rescale` to improve image quality and fix overexposure. Based on
     Section 3.4 from [Common Diffusion Noise Schedules and Sample Steps are
     Flawed](https://huggingface.co/papers/2305.08891).
-
-    Args:
-        noise_cfg (`torch.Tensor`):
-            The predicted noise tensor for the guided diffusion process.
-        noise_pred_text (`torch.Tensor`):
-            The predicted noise tensor for the text-guided diffusion process.
-        guidance_rescale (`float`, *optional*, defaults to 0.0):
-            A rescale factor applied to the noise predictions.
-
-    Returns:
-        noise_cfg (`torch.Tensor`): The rescaled noise prediction tensor.
-    """
-    std_text = noise_pred_text.std(dim=list(range(1, noise_pred_text.ndim)), keepdim=True)
-    std_cfg = noise_cfg.std(dim=list(range(1, noise_cfg.ndim)), keepdim=True)
-    # rescale the results from guidance (fixes overexposure)
-    noise_pred_rescaled = noise_cfg * (std_text / std_cfg)
-    # mix with the original results from guidance by factor guidance_rescale to avoid "plain looking" images
-    noise_cfg = guidance_rescale * noise_pred_rescaled + (1 - guidance_rescale) * noise_cfg
-    return noise_cfg
-
-
-class LTXConditionPipeline(DiffusionPipeline, FromSingleFileMixin, LTXVideoLoraLoaderMixin):
-    r"""
-    Pipeline for text/image/video-to-video generation.
-
-    Reference: https://github.com/Lightricks/LTX-Video
-
-    Args:
-        transformer ([`LTXVideoTransformer3DModel`]):
-            Conditional Transformer architecture to denoise the encoded video latents.
-        scheduler ([`FlowMatchEulerDiscreteScheduler`]):
-            A scheduler to be used in combination with `transformer` to denoise the encoded image latents.
-        vae ([`AutoencoderKLLTXVideo`]):
-            Variational Auto-Encoder (VAE) Model to encode and decode images to and from latent representations.
-        text_encoder ([`T5EncoderModel`]):
-            [T5](https://huggingface.co/docs/transformers/en/model_doc/t5#transformers.T5EncoderModel), specifically
-            the [google/t5-v1_1-xxl](https://huggingface.co/google/t5-v1_1-xxl) variant.
-        tokenizer (`CLIPTokenizer`):
-            Tokenizer of class
-            [CLIPTokenizer](https://huggingface.co/docs/transformers/en/model_doc/clip#transformers.CLIPTokenizer).
-        tokenizer (`T5TokenizerFast`):
-            Second Tokenizer of class
-            [T5TokenizerFast](https://huggingface.co/docs/transformers/en/model_doc/t5#transformers.T5TokenizerFast).
-    """
 
     model_cpu_offload_seq = "text_encoder->transformer->vae"
     _optional_components = []
@@ -369,7 +182,7 @@ class LTXConditionPipeline(DiffusionPipeline, FromSingleFileMixin, LTXVideoLoraL
     def encode_prompt(
         self,
         prompt: Union[str, List[str]],
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        negative_prompt: Optional[str] = None,
         do_classifier_free_guidance: bool = True,
         num_videos_per_prompt: int = 1,
         prompt_embeds: Optional[torch.Tensor] = None,
@@ -380,32 +193,8 @@ class LTXConditionPipeline(DiffusionPipeline, FromSingleFileMixin, LTXVideoLoraL
         device: Optional[torch.device] = None,
         dtype: Optional[torch.dtype] = None,
     ):
-        r"""
-        Encodes the prompt into text encoder hidden states.
-
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                prompt to be encoded
-            negative_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts not to guide the image generation. If not defined, one has to pass
-                `negative_prompt_embeds` instead. Ignored when not using guidance (i.e., ignored if `guidance_scale` is
-                less than `1`).
-            do_classifier_free_guidance (`bool`, *optional*, defaults to `True`):
-                Whether to use classifier free guidance or not.
-            num_videos_per_prompt (`int`, *optional*, defaults to 1):
-                Number of videos that should be generated per prompt. torch device to place the resulting embeddings on
-            prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt weighting. If not
-                provided, text embeddings will be generated from `prompt` input argument.
-            negative_prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated negative text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt
-                weighting. If not provided, negative_prompt_embeds will be generated from `negative_prompt` input
-                argument.
-            device: (`torch.device`, *optional*):
-                torch device
-            dtype: (`torch.dtype`, *optional*):
-                torch dtype
-        """
+        
+        """r"""
         device = device or self._execution_device
 
         prompt = [prompt] if isinstance(prompt, str) else prompt
@@ -570,10 +359,10 @@ class LTXConditionPipeline(DiffusionPipeline, FromSingleFileMixin, LTXVideoLoraL
     @staticmethod
     # Copied from diffusers.pipelines.ltx.pipeline_ltx.LTXPipeline._pack_latents
     def _pack_latents(latents: torch.Tensor, patch_size: int = 1, patch_size_t: int = 1) -> torch.Tensor:
-        # Unpacked latents of shape are [B, C, F, H, W] are patched into tokens of shape [B, C, F // p_t, p_t, H // p, p, W // p, p].
+        # Unpacked latents of shape are [B, C, F,...
         # The patch dimensions are then permuted and collapsed into the channel dimension of shape:
         # [B, F // p_t * H // p * W // p, C * p_t * p * p] (an ndim=3 tensor).
-        # dim=0 is the batch size, dim=1 is the effective video sequence length, dim=2 is the effective number of input features
+        # dim=0 is the batch size, dim=1 is the ef...
         batch_size, num_channels, num_frames, height, width = latents.shape
         post_patch_num_frames = num_frames // patch_size_t
         post_patch_height = height // patch_size
@@ -596,8 +385,8 @@ class LTXConditionPipeline(DiffusionPipeline, FromSingleFileMixin, LTXVideoLoraL
     def _unpack_latents(
         latents: torch.Tensor, num_frames: int, height: int, width: int, patch_size: int = 1, patch_size_t: int = 1
     ) -> torch.Tensor:
-        # Packed latents of shape [B, S, D] (S is the effective video sequence length, D is the effective feature dimensions)
-        # are unpacked and reshaped into a video tensor of shape [B, C, F, H, W]. This is the inverse operation of
+        # Packed latents of shape [B, S, D] (S is...
+        # are unpacked and reshaped into a video t...
         # what happens in the `_pack_latents` method.
         batch_size = latents.size(0)
         latents = latents.reshape(batch_size, num_frames, height, width, -1, patch_size_t, patch_size, patch_size)
@@ -627,16 +416,7 @@ class LTXConditionPipeline(DiffusionPipeline, FromSingleFileMixin, LTXVideoLoraL
         return latents
 
     def trim_conditioning_sequence(self, start_frame: int, sequence_num_frames: int, target_num_frames: int):
-        """
-        Trim a conditioning sequence to the allowed number of frames.
 
-        Args:
-            start_frame (int): The target frame number of the first frame in the sequence.
-            sequence_num_frames (int): The number of frames in the sequence.
-            target_num_frames (int): The target number of frames in the generated video.
-        Returns:
-            int: updated sequence length
-        """
         scale_factor = self.vae_temporal_compression_ratio
         num_frames = min(sequence_num_frames, target_num_frames - start_frame)
         # Trim down to a multiple of temporal_scale_factor frames plus 1
@@ -653,10 +433,7 @@ class LTXConditionPipeline(DiffusionPipeline, FromSingleFileMixin, LTXVideoLoraL
         generator,
         eps=1e-6,
     ):
-        """
-        Add timestep-dependent noise to the hard-conditioning latents. This helps with motion continuity, especially
-        when conditioned on a single frame.
-        """
+
         noise = randn_tensor(
             latents.shape,
             generator=generator,
@@ -856,7 +633,7 @@ class LTXConditionPipeline(DiffusionPipeline, FromSingleFileMixin, LTXVideoLoraL
         strength: Union[float, List[float]] = 1.0,
         denoise_strength: float = 1.0,
         prompt: Union[str, List[str]] = None,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        negative_prompt: Optional[str] = None,
         height: int = 512,
         width: int = 704,
         num_frames: int = 161,
@@ -867,14 +644,14 @@ class LTXConditionPipeline(DiffusionPipeline, FromSingleFileMixin, LTXVideoLoraL
         guidance_rescale: float = 0.0,
         image_cond_noise_scale: float = 0.15,
         num_videos_per_prompt: Optional[int] = 1,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+        generator: Optional[torch.Generator] = None,
         latents: Optional[torch.Tensor] = None,
         prompt_embeds: Optional[torch.Tensor] = None,
         prompt_attention_mask: Optional[torch.Tensor] = None,
         negative_prompt_embeds: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
         decode_timestep: Union[float, List[float]] = 0.0,
-        decode_noise_scale: Optional[Union[float, List[float]]] = None,
+        decode_noise_scale: Optional[float] = None,
         output_type: Optional[str] = "pil",
         return_dict: bool = True,
         attention_kwargs: Optional[Dict[str, Any]] = None,
@@ -882,15 +659,8 @@ class LTXConditionPipeline(DiffusionPipeline, FromSingleFileMixin, LTXVideoLoraL
         callback_on_step_end_tensor_inputs: List[str] = ["latents"],
         max_sequence_length: int = 256,
     ):
-        r"""
-        Function invoked when calling the pipeline for generation.
 
-        Args:
-            conditions (`List[LTXVideoCondition], *optional*`):
-                The list of frame-conditioning items for the video generation.If not provided, conditions will be
-                created using `image`, `video`, `frame_index` and `strength`.
-            image (`PipelineImageInput` or `List[PipelineImageInput]`, *optional*):
-                The image or images to condition the video generation. If not provided, one has to pass `video` or
+        Function invoked when calling the pipeline for generation.
                 `conditions`.
             video (`List[PipelineImageInput]`, *optional*):
                 The video to condition the video generation. If not provided, one has to pass `image` or `conditions`.
@@ -976,312 +746,3 @@ class LTXConditionPipeline(DiffusionPipeline, FromSingleFileMixin, LTXVideoLoraL
                 Maximum sequence length to use with the `prompt`.
 
         Examples:
-
-        Returns:
-            [`~pipelines.ltx.LTXPipelineOutput`] or `tuple`:
-                If `return_dict` is `True`, [`~pipelines.ltx.LTXPipelineOutput`] is returned, otherwise a `tuple` is
-                returned where the first element is a list with the generated images.
-        """
-
-        if isinstance(callback_on_step_end, (PipelineCallback, MultiPipelineCallbacks)):
-            callback_on_step_end_tensor_inputs = callback_on_step_end.tensor_inputs
-
-        # 1. Check inputs. Raise error if not correct
-        self.check_inputs(
-            prompt=prompt,
-            conditions=conditions,
-            image=image,
-            video=video,
-            frame_index=frame_index,
-            strength=strength,
-            denoise_strength=denoise_strength,
-            height=height,
-            width=width,
-            callback_on_step_end_tensor_inputs=callback_on_step_end_tensor_inputs,
-            prompt_embeds=prompt_embeds,
-            negative_prompt_embeds=negative_prompt_embeds,
-            prompt_attention_mask=prompt_attention_mask,
-            negative_prompt_attention_mask=negative_prompt_attention_mask,
-        )
-
-        self._guidance_scale = guidance_scale
-        self._guidance_rescale = guidance_rescale
-        self._attention_kwargs = attention_kwargs
-        self._interrupt = False
-        self._current_timestep = None
-
-        # 2. Define call parameters
-        if prompt is not None and isinstance(prompt, str):
-            batch_size = 1
-        elif prompt is not None and isinstance(prompt, list):
-            batch_size = len(prompt)
-        else:
-            batch_size = prompt_embeds.shape[0]
-
-        if conditions is not None:
-            if not isinstance(conditions, list):
-                conditions = [conditions]
-
-            strength = [condition.strength for condition in conditions]
-            frame_index = [condition.frame_index for condition in conditions]
-            image = [condition.image for condition in conditions]
-            video = [condition.video for condition in conditions]
-        elif image is not None or video is not None:
-            if not isinstance(image, list):
-                image = [image]
-                num_conditions = 1
-            elif isinstance(image, list):
-                num_conditions = len(image)
-            if not isinstance(video, list):
-                video = [video]
-                num_conditions = 1
-            elif isinstance(video, list):
-                num_conditions = len(video)
-
-            if not isinstance(frame_index, list):
-                frame_index = [frame_index] * num_conditions
-            if not isinstance(strength, list):
-                strength = [strength] * num_conditions
-
-        device = self._execution_device
-        vae_dtype = self.vae.dtype
-
-        # 3. Prepare text embeddings & conditioning image/video
-        (
-            prompt_embeds,
-            prompt_attention_mask,
-            negative_prompt_embeds,
-            negative_prompt_attention_mask,
-        ) = self.encode_prompt(
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            do_classifier_free_guidance=self.do_classifier_free_guidance,
-            num_videos_per_prompt=num_videos_per_prompt,
-            prompt_embeds=prompt_embeds,
-            negative_prompt_embeds=negative_prompt_embeds,
-            prompt_attention_mask=prompt_attention_mask,
-            negative_prompt_attention_mask=negative_prompt_attention_mask,
-            max_sequence_length=max_sequence_length,
-            device=device,
-        )
-        if self.do_classifier_free_guidance:
-            prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds], dim=0)
-            prompt_attention_mask = torch.cat([negative_prompt_attention_mask, prompt_attention_mask], dim=0)
-
-        conditioning_tensors = []
-        is_conditioning_image_or_video = image is not None or video is not None
-        if is_conditioning_image_or_video:
-            for condition_image, condition_video, condition_frame_index, condition_strength in zip(
-                image, video, frame_index, strength
-            ):
-                if condition_image is not None:
-                    condition_tensor = (
-                        self.video_processor.preprocess(condition_image, height, width)
-                        .unsqueeze(2)
-                        .to(device, dtype=vae_dtype)
-                    )
-                elif condition_video is not None:
-                    condition_tensor = self.video_processor.preprocess_video(condition_video, height, width)
-                    num_frames_input = condition_tensor.size(2)
-                    num_frames_output = self.trim_conditioning_sequence(
-                        condition_frame_index, num_frames_input, num_frames
-                    )
-                    condition_tensor = condition_tensor[:, :, :num_frames_output]
-                    condition_tensor = condition_tensor.to(device, dtype=vae_dtype)
-                else:
-                    raise ValueError("Either `image` or `video` must be provided for conditioning.")
-
-                if condition_tensor.size(2) % self.vae_temporal_compression_ratio != 1:
-                    raise ValueError(
-                        f"Number of frames in the video must be of the form (k * {self.vae_temporal_compression_ratio} + 1) "
-                        f"but got {condition_tensor.size(2)} frames."
-                    )
-                conditioning_tensors.append(condition_tensor)
-
-        # 4. Prepare timesteps
-        latent_num_frames = (num_frames - 1) // self.vae_temporal_compression_ratio + 1
-        latent_height = height // self.vae_spatial_compression_ratio
-        latent_width = width // self.vae_spatial_compression_ratio
-
-        if timesteps is None:
-            sigmas = linear_quadratic_schedule(num_inference_steps)
-            timesteps = sigmas * 1000
-
-        if XLA_AVAILABLE:
-            timestep_device = "cpu"
-        else:
-            timestep_device = device
-
-        timesteps, num_inference_steps = retrieve_timesteps(
-            self.scheduler,
-            num_inference_steps,
-            timestep_device,
-            timesteps,
-        )
-        sigmas = self.scheduler.sigmas
-
-        num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
-
-        latent_sigma = None
-        if denoise_strength < 1:
-            sigmas, timesteps, num_inference_steps = self.get_timesteps(
-                sigmas, timesteps, num_inference_steps, denoise_strength
-            )
-            latent_sigma = sigmas[:1].repeat(batch_size * num_videos_per_prompt)
-
-        self._num_timesteps = len(timesteps)
-
-        # 5. Prepare latent variables
-        num_channels_latents = self.transformer.config.in_channels
-        latents, conditioning_mask, video_coords, extra_conditioning_num_latents = self.prepare_latents(
-            conditioning_tensors,
-            strength,
-            frame_index,
-            batch_size=batch_size * num_videos_per_prompt,
-            num_channels_latents=num_channels_latents,
-            height=height,
-            width=width,
-            num_frames=num_frames,
-            sigma=latent_sigma,
-            latents=latents,
-            generator=generator,
-            device=device,
-            dtype=torch.float32,
-        )
-
-        video_coords = video_coords.float()
-        video_coords[:, 0] = video_coords[:, 0] * (1.0 / frame_rate)
-
-        init_latents = latents.clone() if is_conditioning_image_or_video else None
-
-        if self.do_classifier_free_guidance:
-            video_coords = torch.cat([video_coords, video_coords], dim=0)
-
-        # 6. Denoising loop
-        with self.progress_bar(total=num_inference_steps) as progress_bar:
-            for i, t in enumerate(timesteps):
-                if self.interrupt:
-                    continue
-
-                self._current_timestep = t
-
-                if image_cond_noise_scale > 0 and init_latents is not None:
-                    # Add timestep-dependent noise to the hard-conditioning latents
-                    # This helps with motion continuity, especially when conditioned on a single frame
-                    latents = self.add_noise_to_image_conditioning_latents(
-                        t / 1000.0,
-                        init_latents,
-                        latents,
-                        image_cond_noise_scale,
-                        conditioning_mask,
-                        generator,
-                    )
-
-                latent_model_input = torch.cat([latents] * 2) if self.do_classifier_free_guidance else latents
-                if is_conditioning_image_or_video:
-                    conditioning_mask_model_input = (
-                        torch.cat([conditioning_mask, conditioning_mask])
-                        if self.do_classifier_free_guidance
-                        else conditioning_mask
-                    )
-                latent_model_input = latent_model_input.to(prompt_embeds.dtype)
-
-                # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
-                timestep = t.expand(latent_model_input.shape[0]).unsqueeze(-1).float()
-                if is_conditioning_image_or_video:
-                    timestep = torch.min(timestep, (1 - conditioning_mask_model_input) * 1000.0)
-
-                with self.transformer.cache_context("cond_uncond"):
-                    noise_pred = self.transformer(
-                        hidden_states=latent_model_input,
-                        encoder_hidden_states=prompt_embeds,
-                        timestep=timestep,
-                        encoder_attention_mask=prompt_attention_mask,
-                        video_coords=video_coords,
-                        attention_kwargs=attention_kwargs,
-                        return_dict=False,
-                    )[0]
-
-                if self.do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                    noise_pred = noise_pred_uncond + self.guidance_scale * (noise_pred_text - noise_pred_uncond)
-                    timestep, _ = timestep.chunk(2)
-
-                    if self.guidance_rescale > 0:
-                        # Based on 3.4. in https://huggingface.co/papers/2305.08891
-                        noise_pred = rescale_noise_cfg(
-                            noise_pred, noise_pred_text, guidance_rescale=self.guidance_rescale
-                        )
-
-                denoised_latents = self.scheduler.step(
-                    -noise_pred, t, latents, per_token_timesteps=timestep, return_dict=False
-                )[0]
-                if is_conditioning_image_or_video:
-                    tokens_to_denoise_mask = (t / 1000 - 1e-6 < (1.0 - conditioning_mask)).unsqueeze(-1)
-                    latents = torch.where(tokens_to_denoise_mask, denoised_latents, latents)
-                else:
-                    latents = denoised_latents
-
-                if callback_on_step_end is not None:
-                    callback_kwargs = {}
-                    for k in callback_on_step_end_tensor_inputs:
-                        callback_kwargs[k] = locals()[k]
-                    callback_outputs = callback_on_step_end(self, i, t, callback_kwargs)
-
-                    latents = callback_outputs.pop("latents", latents)
-                    prompt_embeds = callback_outputs.pop("prompt_embeds", prompt_embeds)
-
-                # call the callback, if provided
-                if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
-                    progress_bar.update()
-
-                if XLA_AVAILABLE:
-                    xm.mark_step()
-
-        if is_conditioning_image_or_video:
-            latents = latents[:, extra_conditioning_num_latents:]
-
-        latents = self._unpack_latents(
-            latents,
-            latent_num_frames,
-            latent_height,
-            latent_width,
-            self.transformer_spatial_patch_size,
-            self.transformer_temporal_patch_size,
-        )
-
-        if output_type == "latent":
-            video = latents
-        else:
-            latents = self._denormalize_latents(
-                latents, self.vae.latents_mean, self.vae.latents_std, self.vae.config.scaling_factor
-            )
-            latents = latents.to(prompt_embeds.dtype)
-
-            if not self.vae.config.timestep_conditioning:
-                timestep = None
-            else:
-                noise = randn_tensor(latents.shape, generator=generator, device=device, dtype=latents.dtype)
-                if not isinstance(decode_timestep, list):
-                    decode_timestep = [decode_timestep] * batch_size
-                if decode_noise_scale is None:
-                    decode_noise_scale = decode_timestep
-                elif not isinstance(decode_noise_scale, list):
-                    decode_noise_scale = [decode_noise_scale] * batch_size
-
-                timestep = torch.tensor(decode_timestep, device=device, dtype=latents.dtype)
-                decode_noise_scale = torch.tensor(decode_noise_scale, device=device, dtype=latents.dtype)[
-                    :, None, None, None, None
-                ]
-                latents = (1 - decode_noise_scale) * latents + decode_noise_scale * noise
-
-            video = self.vae.decode(latents, timestep, return_dict=False)[0]
-            video = self.video_processor.postprocess_video(video, output_type=output_type)
-
-        # Offload all models
-        self.maybe_free_model_hooks()
-
-        if not return_dict:
-            return (video,)
-
-        return LTXPipelineOutput(frames=video)

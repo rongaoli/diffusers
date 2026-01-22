@@ -2,7 +2,6 @@ from typing import TYPE_CHECKING
 
 from ....utils import DIFFUSERS_SLOW_IMPORT, _LazyModule
 
-
 _import_structure = {"pipeline_stochastic_karras_ve": ["KarrasVePipeline"]}
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:

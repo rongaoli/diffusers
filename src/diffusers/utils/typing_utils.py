@@ -1,28 +1,9 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""
 Typing utilities: Utilities related to type checking and validation
-"""
 
 from typing import Any, Dict, List, Set, Tuple, Type, Union, get_args, get_origin
 
-
 def _is_valid_type(obj: Any, class_or_tuple: Union[Type, Tuple[Type, ...]]) -> bool:
-    """
-    Checks if an object is an instance of any of the provided types. For collections, it checks if every element is of
-    the correct type as well.
-    """
+
     if not isinstance(class_or_tuple, tuple):
         class_or_tuple = (class_or_tuple,)
 
@@ -70,11 +51,8 @@ def _is_valid_type(obj: Any, class_or_tuple: Union[Type, Tuple[Type, ...]]) -> b
     else:
         return False
 
-
 def _get_detailed_type(obj: Any) -> Type:
-    """
-    Gets a detailed type for an object, including nested types for collections.
-    """
+
     obj_type = type(obj)
 
     if obj_type in (list, set):

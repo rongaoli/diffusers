@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
@@ -40,9 +26,7 @@ from .unet_motion_model import (
     UpBlockMotion,
 )
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 class DownBlockMotion(DownBlockMotion):
     def __init__(self, *args, **kwargs):
@@ -50,13 +34,11 @@ class DownBlockMotion(DownBlockMotion):
         deprecate("DownBlockMotion", "1.0.0", deprecation_message)
         super().__init__(*args, **kwargs)
 
-
 class CrossAttnDownBlockMotion(CrossAttnDownBlockMotion):
     def __init__(self, *args, **kwargs):
         deprecation_message = "Importing `CrossAttnDownBlockMotion` from `diffusers.models.unets.unet_3d_blocks` is deprecated and this will be removed in a future version. Please use `from diffusers.models.unets.unet_motion_model import CrossAttnDownBlockMotion` instead."
         deprecate("CrossAttnDownBlockMotion", "1.0.0", deprecation_message)
         super().__init__(*args, **kwargs)
-
 
 class UpBlockMotion(UpBlockMotion):
     def __init__(self, *args, **kwargs):
@@ -64,20 +46,17 @@ class UpBlockMotion(UpBlockMotion):
         deprecate("UpBlockMotion", "1.0.0", deprecation_message)
         super().__init__(*args, **kwargs)
 
-
 class CrossAttnUpBlockMotion(CrossAttnUpBlockMotion):
     def __init__(self, *args, **kwargs):
         deprecation_message = "Importing `CrossAttnUpBlockMotion` from `diffusers.models.unets.unet_3d_blocks` is deprecated and this will be removed in a future version. Please use `from diffusers.models.unets.unet_motion_model import CrossAttnUpBlockMotion` instead."
         deprecate("CrossAttnUpBlockMotion", "1.0.0", deprecation_message)
         super().__init__(*args, **kwargs)
 
-
 class UNetMidBlockCrossAttnMotion(UNetMidBlockCrossAttnMotion):
     def __init__(self, *args, **kwargs):
         deprecation_message = "Importing `UNetMidBlockCrossAttnMotion` from `diffusers.models.unets.unet_3d_blocks` is deprecated and this will be removed in a future version. Please use `from diffusers.models.unets.unet_motion_model import UNetMidBlockCrossAttnMotion` instead."
         deprecate("UNetMidBlockCrossAttnMotion", "1.0.0", deprecation_message)
         super().__init__(*args, **kwargs)
-
 
 def get_down_block(
     down_block_type: str,
@@ -169,7 +148,6 @@ def get_down_block(
         )
 
     raise ValueError(f"{down_block_type} does not exist.")
-
 
 def get_up_block(
     up_block_type: str,
@@ -269,7 +247,6 @@ def get_up_block(
         )
 
     raise ValueError(f"{up_block_type} does not exist.")
-
 
 class UNetMidBlock3DCrossAttn(nn.Module):
     def __init__(
@@ -403,7 +380,6 @@ class UNetMidBlock3DCrossAttn(nn.Module):
             hidden_states = temp_conv(hidden_states, num_frames=num_frames)
 
         return hidden_states
-
 
 class CrossAttnDownBlock3D(nn.Module):
     def __init__(
@@ -546,7 +522,6 @@ class CrossAttnDownBlock3D(nn.Module):
 
         return hidden_states, output_states
 
-
 class DownBlock3D(nn.Module):
     def __init__(
         self,
@@ -634,7 +609,6 @@ class DownBlock3D(nn.Module):
             output_states += (hidden_states,)
 
         return hidden_states, output_states
-
 
 class CrossAttnUpBlock3D(nn.Module):
     def __init__(
@@ -792,7 +766,6 @@ class CrossAttnUpBlock3D(nn.Module):
 
         return hidden_states
 
-
 class UpBlock3D(nn.Module):
     def __init__(
         self,
@@ -895,7 +868,6 @@ class UpBlock3D(nn.Module):
 
         return hidden_states
 
-
 class MidBlockTemporalDecoder(nn.Module):
     def __init__(
         self,
@@ -958,7 +930,6 @@ class MidBlockTemporalDecoder(nn.Module):
 
         return hidden_states
 
-
 class UpBlockTemporalDecoder(nn.Module):
     def __init__(
         self,
@@ -1007,7 +978,6 @@ class UpBlockTemporalDecoder(nn.Module):
                 hidden_states = upsampler(hidden_states)
 
         return hidden_states
-
 
 class UNetMidBlockSpatioTemporal(nn.Module):
     def __init__(
@@ -1097,7 +1067,6 @@ class UNetMidBlockSpatioTemporal(nn.Module):
 
         return hidden_states
 
-
 class DownBlockSpatioTemporal(nn.Module):
     def __init__(
         self,
@@ -1161,7 +1130,6 @@ class DownBlockSpatioTemporal(nn.Module):
             output_states = output_states + (hidden_states,)
 
         return hidden_states, output_states
-
 
 class CrossAttnDownBlockSpatioTemporal(nn.Module):
     def __init__(
@@ -1263,7 +1231,6 @@ class CrossAttnDownBlockSpatioTemporal(nn.Module):
 
         return hidden_states, output_states
 
-
 class UpBlockSpatioTemporal(nn.Module):
     def __init__(
         self,
@@ -1327,7 +1294,6 @@ class UpBlockSpatioTemporal(nn.Module):
                 hidden_states = upsampler(hidden_states, upsample_size)
 
         return hidden_states
-
 
 class CrossAttnUpBlockSpatioTemporal(nn.Module):
     def __init__(

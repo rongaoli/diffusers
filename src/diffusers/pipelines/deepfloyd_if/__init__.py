@@ -9,7 +9,6 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 _dummy_objects = {}
 _import_structure = {
     "timesteps": [
@@ -41,7 +40,6 @@ else:
     _import_structure["pipeline_output"] = ["IFPipelineOutput"]
     _import_structure["safety_checker"] = ["IFSafetyChecker"]
     _import_structure["watermark"] = ["IFWatermarker"]
-
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:

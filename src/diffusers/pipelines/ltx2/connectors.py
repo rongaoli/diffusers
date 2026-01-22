@@ -10,11 +10,8 @@ from ...models.attention import FeedForward
 from ...models.modeling_utils import ModelMixin
 from ...models.transformers.transformer_ltx2 import LTX2Attention, LTX2AudioVideoAttnProcessor
 
-
 class LTX2RotaryPosEmbed1d(nn.Module):
-    """
-    1D rotary positional embeddings (RoPE) for the LTX 2.0 text encoder connectors.
-    """
+
 
     def __init__(
         self,
@@ -57,7 +54,7 @@ class LTX2RotaryPosEmbed1d(nn.Module):
         )
         freqs = (pow_indices * torch.pi / 2.0).to(dtype=torch.float32)
 
-        # 3. Matrix-vector outer product between pos ids of shape (batch_size, seq_len) and freqs vector of shape
+        # 3. Matrix-vector outer product between p...
         # (self.dim // 2,).
         freqs = (grid.unsqueeze(-1) * 2 - 1) * freqs  # [B, seq_len, self.dim // 2]
 
@@ -97,7 +94,6 @@ class LTX2RotaryPosEmbed1d(nn.Module):
             sin_freqs = torch.swapaxes(sin_freq, 1, 2)  # (B,H,T,D//2)
 
         return cos_freqs, sin_freqs
-
 
 class LTX2TransformerBlock1d(nn.Module):
     def __init__(
@@ -140,13 +136,50 @@ class LTX2TransformerBlock1d(nn.Module):
 
         return hidden_states
 
+class LTX2ConnectorTransformer1d(nn.Module):
+    class LTX2TransformerBlock1d(nn.Module):
+    def __init__(
+        self,
+        dim: int,
+        num_attention_heads: int,
+        attention_head_dim: int,
+        activation_fn: str = "gelu-approximate",
+        eps: float = 1e-6,
+        rope_type: str = "interleaved",
+    ):
+        super().__init__()
+
+        self.norm1 = torch.nn.RMSNorm(dim, eps=eps, elementwise_affine=False)
+        self.attn1 = LTX2Attention(
+            query_dim=dim,
+            heads=num_attention_heads,
+            kv_heads=num_attention_heads,
+            dim_head=attention_head_dim,
+            processor=LTX2AudioVideoAttnProcessor(),
+            rope_type=rope_type,
+        )
+
+        self.norm2 = torch.nn.RMSNorm(dim, eps=eps, elementwise_affine=False)
+        self.ff = FeedForward(dim, activation_fn=activation_fn)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        rotary_emb: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        norm_hidden_states = self.norm1(hidden_states)
+        attn_hidden_states = self.attn1(norm_hidden_states, attention_mask=attention_mask, query_rotary_emb=rotary_emb)
+        hidden_states = hidden_states + attn_hidden_states
+
+        norm_hidden_states = self.norm2(hidden_states)
+        ff_hidden_states = self.ff(norm_hidden_states)
+        hidden_states = hidden_states + ff_hidden_states
+
+        return hidden_states
 
 class LTX2ConnectorTransformer1d(nn.Module):
-    """
-    A 1D sequence transformer for modalities such as text.
 
-    In LTX 2.0, this is used to process the text encoder hidden states for each of the video and audio streams.
-    """
 
     _supports_gradient_checkpointing = True
 
@@ -252,12 +285,8 @@ class LTX2ConnectorTransformer1d(nn.Module):
 
         return hidden_states, attention_mask
 
-
 class LTX2TextConnectors(ModelMixin, PeftAdapterMixin, ConfigMixin):
-    """
-    Text connector stack used by LTX 2.0 to process the packed text encoder hidden states for both the video and audio
-    streams.
-    """
+
 
     @register_to_config
     def __init__(

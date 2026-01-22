@@ -1,17 +1,4 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """PyTorch - Flax general utilities."""
 
 import re
@@ -22,9 +9,7 @@ from jax.random import PRNGKey
 
 from ..utils import logging
 
-
 logger = logging.get_logger(__name__)
-
 
 def rename_key(key):
     regex = r"\w+[.]\d+"
@@ -33,16 +18,14 @@ def rename_key(key):
         key = key.replace(pat, "_".join(pat.split(".")))
     return key
 
-
 #####################
 # PyTorch => Flax #
 #####################
 
-
-# Adapted from https://github.com/huggingface/transformers/blob/c603c80f46881ae18b2ca50770ef65fa4033eacd/src/transformers/modeling_flax_pytorch_utils.py#L69
-# and https://github.com/patil-suraj/stable-diffusion-jax/blob/main/stable_diffusion_jax/convert_diffusers_to_jax.py
+# Adapted from https://github.com/huggingface/tran...
+# and https://github.com/patil-suraj/stable-diffus...
 def rename_key_and_reshape_tensor(pt_tuple_key, pt_tensor, random_flax_state_dict):
-    """Rename PT weight names to corresponding Flax weight names and reshape tensor if necessary"""
+
     # conv norm or layer norm
     renamed_pt_tuple_key = pt_tuple_key[:-1] + ("scale",)
 
@@ -102,7 +85,6 @@ def rename_key_and_reshape_tensor(pt_tuple_key, pt_tensor, random_flax_state_dic
         return renamed_pt_tuple_key, pt_tensor
 
     return pt_tuple_key, pt_tensor
-
 
 def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model, init_key=42):
     # Step 1: Convert pytorch tensor to numpy

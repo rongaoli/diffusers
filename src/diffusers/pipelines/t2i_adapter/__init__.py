@@ -9,7 +9,6 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
 
@@ -23,7 +22,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["pipeline_stable_diffusion_adapter"] = ["StableDiffusionAdapterPipeline"]
     _import_structure["pipeline_stable_diffusion_xl_adapter"] = ["StableDiffusionXLAdapterPipeline"]
-
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:

@@ -1,16 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 import importlib
 import inspect
 import os
@@ -38,7 +25,6 @@ from .single_file_utils import (
     load_single_file_checkpoint,
 )
 
-
 logger = logging.get_logger(__name__)
 
 # Legacy behaviour. `from_single_file` does not load the safety checker unless explicitly provided
@@ -47,7 +33,6 @@ SINGLE_FILE_OPTIONAL_COMPONENTS = ["safety_checker"]
 if is_transformers_available():
     import transformers
     from transformers import PreTrainedModel, PreTrainedTokenizer
-
 
 def load_single_file_sub_model(
     library_name,
@@ -97,7 +82,7 @@ def load_single_file_sub_model(
         load_method = getattr(class_obj, "from_single_file")
 
         # We cannot provide two different config options to the `from_single_file` method
-        # Here we have to ignore loading the config from `cached_model_config_path` if `original_config` is provided
+        # Here we have to ignore loading the confi...
         if original_config:
             cached_model_config_path = None
 
@@ -177,7 +162,6 @@ def load_single_file_sub_model(
 
     return loaded_sub_model
 
-
 def _map_component_types_to_config_dict(component_types):
     diffusers_module = importlib.import_module(__name__.split(".")[0])
     config_dict = {}
@@ -226,7 +210,6 @@ def _map_component_types_to_config_dict(component_types):
 
     return config_dict
 
-
 def _infer_pipeline_config_dict(pipeline_class):
     parameters = inspect.signature(pipeline_class.__init__).parameters
     required_parameters = {k: v for k, v in parameters.items() if v.default == inspect._empty}
@@ -237,7 +220,6 @@ def _infer_pipeline_config_dict(pipeline_class):
     config_dict = _map_component_types_to_config_dict(component_types)
 
     return config_dict
-
 
 def _download_diffusers_model_config_from_hub(
     pretrained_model_name_or_path,
@@ -262,86 +244,14 @@ def _download_diffusers_model_config_from_hub(
 
     return cached_model_path
 
-
 class FromSingleFileMixin:
-    """
-    Load model weights saved in the `.ckpt` format into a [`DiffusionPipeline`].
-    """
+
 
     @classmethod
     @validate_hf_hub_args
     def from_single_file(cls, pretrained_model_link_or_path, **kwargs) -> Self:
-        r"""
-        Instantiate a [`DiffusionPipeline`] from pretrained pipeline weights saved in the `.ckpt` or `.safetensors`
-        format. The pipeline is set in evaluation mode (`model.eval()`) by default.
-
-        Parameters:
-            pretrained_model_link_or_path (`str` or `os.PathLike`, *optional*):
-                Can be either:
-                    - A link to the `.ckpt` file (for example
-                      `"https://huggingface.co/<repo_id>/blob/main/<path_to_file>.ckpt"`) on the Hub.
-                    - A path to a *file* containing all pipeline weights.
-            torch_dtype (`str` or `torch.dtype`, *optional*):
-                Override the default `torch.dtype` and load the model with another dtype.
-            force_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to force the (re-)download of the model weights and configuration files, overriding the
-                cached versions if they exist.
-            cache_dir (`Union[str, os.PathLike]`, *optional*):
-                Path to a directory where a downloaded pretrained model configuration is cached if the standard cache
-                is not used.
-
-            proxies (`Dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, for example, `{'http': 'foo.bar:3128',
-                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
-            local_files_only (`bool`, *optional*, defaults to `False`):
-                Whether to only load local model weights and configuration files or not. If set to `True`, the model
-                won't be downloaded from the Hub.
-            token (`str` or *bool*, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, the token generated from
-                `diffusers-cli login` (stored in `~/.huggingface`) is used.
-            revision (`str`, *optional*, defaults to `"main"`):
-                The specific model version to use. It can be a branch name, a tag name, a commit id, or any identifier
-                allowed by Git.
-            original_config_file (`str`, *optional*):
-                The path to the original config file that was used to train the model. If not provided, the config file
-                will be inferred from the checkpoint file.
-            config (`str`, *optional*):
-                Can be either:
-                    - A string, the *repo id* (for example `CompVis/ldm-text2im-large-256`) of a pretrained pipeline
-                      hosted on the Hub.
-                    - A path to a *directory* (for example `./my_pipeline_directory/`) containing the pipeline
-                      component configs in Diffusers format.
-            disable_mmap ('bool', *optional*, defaults to 'False'):
-                Whether to disable mmap when loading a Safetensors model. This option can perform better when the model
-                is on a network mount or hard drive.
-            kwargs (remaining dictionary of keyword arguments, *optional*):
-                Can be used to overwrite load and saveable variables (the pipeline components of the specific pipeline
-                class). The overwritten components are passed directly to the pipelines `__init__` method. See example
-                below for more information.
-
-        Examples:
-
-        ```py
-        >>> from diffusers import StableDiffusionPipeline
-
-        >>> # Download pipeline from huggingface.co and cache.
-        >>> pipeline = StableDiffusionPipeline.from_single_file(
-        ...     "https://huggingface.co/WarriorMama777/OrangeMixs/blob/main/Models/AbyssOrangeMix/AbyssOrangeMix.safetensors"
-        ... )
-
-        >>> # Download pipeline from local file
-        >>> # file is downloaded under ./v1-5-pruned-emaonly.ckpt
-        >>> pipeline = StableDiffusionPipeline.from_single_file("./v1-5-pruned-emaonly.ckpt")
-
-        >>> # Enable float16 and move to GPU
-        >>> pipeline = StableDiffusionPipeline.from_single_file(
-        ...     "https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/blob/main/v1-5-pruned-emaonly.ckpt",
-        ...     torch_dtype=torch.float16,
-        ... )
-        >>> pipeline.to("cuda")
-        ```
-
-        """
+        
+        """r"""
         original_config_file = kwargs.pop("original_config_file", None)
         config = kwargs.pop("config", None)
         original_config = kwargs.pop("original_config", None)
@@ -371,7 +281,7 @@ class FromSingleFileMixin:
                 f"Passed `torch_dtype` {torch_dtype} is not a `torch.dtype`. Defaulting to `torch.float32`."
             )
 
-        # We shouldn't allow configuring individual models components through a Pipeline creation method
+        # We shouldn't allow configuring individua...
         # These model kwargs should be deprecated
         scaling_factor = kwargs.get("scaling_factor", None)
         if scaling_factor is not None:
@@ -426,7 +336,7 @@ class FromSingleFileMixin:
                 config_dict = pipeline_class.load_config(cached_model_config_path)
 
             except LocalEntryNotFoundError:
-                # `local_files_only=True` but a local diffusers format model config is not available in the cache
+                # `local_files_only=True` but a lo...
                 # If `original_config` is not provided, we need override `local_files_only` to False
                 # to fetch the config files from the hub so that we have a way
                 # to configure the pipeline components.
@@ -449,7 +359,7 @@ class FromSingleFileMixin:
 
                 else:
                     # For backwards compatibility
-                    # If `original_config` is provided, then we need to assume we are using legacy loading for pipeline components
+                    # If `original_config` is prov...
                     logger.warning(
                         "Detected legacy `from_single_file` loading behavior. Attempting to create the pipeline based on inferred components.\n"
                         "This may lead to errors if the model components are not correctly inferred. \n"

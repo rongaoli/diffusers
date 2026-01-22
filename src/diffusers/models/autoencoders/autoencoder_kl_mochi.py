@@ -1,18 +1,3 @@
-# Copyright 2025 The Mochi team and The HuggingFace Team.
-# All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import functools
 from typing import Dict, Optional, Tuple, Union
 
@@ -29,22 +14,10 @@ from ..modeling_utils import ModelMixin
 from .autoencoder_kl_cogvideox import CogVideoXCausalConv3d
 from .vae import AutoencoderMixin, DecoderOutput, DiagonalGaussianDistribution
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 class MochiChunkedGroupNorm3D(nn.Module):
-    r"""
-    Applies per-frame group normalization for 5D video inputs. It also supports memory-efficient chunked group
-    normalization.
 
-    Args:
-        num_channels (int): Number of channels expected in input
-        num_groups (int, optional): Number of groups to separate the channels into. Default: 32
-        affine (bool, optional): If True, this module has learnable affine parameters. Default: True
-        chunk_size (int, optional): Size of each chunk for processing. Default: 8
-
-    """
 
     def __init__(
         self,
@@ -66,19 +39,8 @@ class MochiChunkedGroupNorm3D(nn.Module):
 
         return output
 
-
 class MochiResnetBlock3D(nn.Module):
-    r"""
-    A 3D ResNet block used in the Mochi model.
 
-    Args:
-        in_channels (`int`):
-            Number of input channels.
-        out_channels (`int`, *optional*):
-            Number of output channels. If None, defaults to `in_channels`.
-        non_linearity (`str`, defaults to `"swish"`):
-            Activation function to use.
-    """
 
     def __init__(
         self,
@@ -124,23 +86,8 @@ class MochiResnetBlock3D(nn.Module):
         hidden_states = hidden_states + inputs
         return hidden_states, new_conv_cache
 
-
 class MochiDownBlock3D(nn.Module):
-    r"""
-    An downsampling block used in the Mochi model.
 
-    Args:
-        in_channels (`int`):
-            Number of input channels.
-        out_channels (`int`, *optional*):
-            Number of output channels. If None, defaults to `in_channels`.
-        num_layers (`int`, defaults to `1`):
-            Number of resnet blocks in the block.
-        temporal_expansion (`int`, defaults to `2`):
-            Temporal expansion factor.
-        spatial_expansion (`int`, defaults to `2`):
-            Spatial expansion factor.
-    """
 
     def __init__(
         self,
@@ -196,7 +143,8 @@ class MochiDownBlock3D(nn.Module):
         conv_cache: Optional[Dict[str, torch.Tensor]] = None,
         chunk_size: int = 2**15,
     ) -> torch.Tensor:
-        r"""Forward method of the `MochiUpBlock3D` class."""
+        
+        """r"""
 
         new_conv_cache = {}
         conv_cache = conv_cache or {}
@@ -242,17 +190,8 @@ class MochiDownBlock3D(nn.Module):
 
         return hidden_states, new_conv_cache
 
-
 class MochiMidBlock3D(nn.Module):
-    r"""
-    A middle block used in the Mochi model.
 
-    Args:
-        in_channels (`int`):
-            Number of input channels.
-        num_layers (`int`, defaults to `3`):
-            Number of resnet blocks in the block.
-    """
 
     def __init__(
         self,
@@ -296,7 +235,8 @@ class MochiMidBlock3D(nn.Module):
         hidden_states: torch.Tensor,
         conv_cache: Optional[Dict[str, torch.Tensor]] = None,
     ) -> torch.Tensor:
-        r"""Forward method of the `MochiMidBlock3D` class."""
+        
+        """r"""
 
         new_conv_cache = {}
         conv_cache = conv_cache or {}
@@ -326,23 +266,8 @@ class MochiMidBlock3D(nn.Module):
 
         return hidden_states, new_conv_cache
 
-
 class MochiUpBlock3D(nn.Module):
-    r"""
-    An upsampling block used in the Mochi model.
 
-    Args:
-        in_channels (`int`):
-            Number of input channels.
-        out_channels (`int`, *optional*):
-            Number of output channels. If None, defaults to `in_channels`.
-        num_layers (`int`, defaults to `1`):
-            Number of resnet blocks in the block.
-        temporal_expansion (`int`, defaults to `2`):
-            Temporal expansion factor.
-        spatial_expansion (`int`, defaults to `2`):
-            Spatial expansion factor.
-    """
 
     def __init__(
         self,
@@ -370,7 +295,8 @@ class MochiUpBlock3D(nn.Module):
         hidden_states: torch.Tensor,
         conv_cache: Optional[Dict[str, torch.Tensor]] = None,
     ) -> torch.Tensor:
-        r"""Forward method of the `MochiUpBlock3D` class."""
+        
+        """r"""
 
         new_conv_cache = {}
         conv_cache = conv_cache or {}
@@ -405,7 +331,6 @@ class MochiUpBlock3D(nn.Module):
 
         return hidden_states, new_conv_cache
 
-
 class FourierFeatures(nn.Module):
     def __init__(self, start: int = 6, stop: int = 8, step: int = 1):
         super().__init__()
@@ -415,7 +340,16 @@ class FourierFeatures(nn.Module):
         self.step = step
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        r"""Forward method of the `FourierFeatures` class."""
+        class FourierFeatures(nn.Module):
+    def __init__(self, start: int = 6, stop: int = 8, step: int = 1):
+        super().__init__()
+
+        self.start = start
+        self.stop = stop
+        self.step = step
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+
         original_dtype = inputs.dtype
         inputs = inputs.to(torch.float32)
         num_channels = inputs.shape[1]
@@ -434,28 +368,8 @@ class FourierFeatures(nn.Module):
 
         return torch.cat([inputs, torch.sin(h), torch.cos(h)], dim=1).to(original_dtype)
 
-
 class MochiEncoder3D(nn.Module):
-    r"""
-    The `MochiEncoder3D` layer of a variational autoencoder that encodes input video samples to its latent
-    representation.
 
-    Args:
-        in_channels (`int`, *optional*):
-            The number of input channels.
-        out_channels (`int`, *optional*):
-            The number of output channels.
-        block_out_channels (`Tuple[int, ...]`, *optional*, defaults to `(128, 256, 512, 768)`):
-            The number of output channels for each block.
-        layers_per_block (`Tuple[int, ...]`, *optional*, defaults to `(3, 3, 4, 6, 3)`):
-            The number of resnet blocks for each block.
-        temporal_expansions (`Tuple[int, ...]`, *optional*, defaults to `(1, 2, 3)`):
-            The temporal expansion factor for each of the up blocks.
-        spatial_expansions (`Tuple[int, ...]`, *optional*, defaults to `(2, 2, 2)`):
-            The spatial expansion factor for each of the up blocks.
-        non_linearity (`str`, *optional*, defaults to `"swish"`):
-            The non-linearity to use in the decoder.
-    """
 
     def __init__(
         self,
@@ -502,7 +416,8 @@ class MochiEncoder3D(nn.Module):
     def forward(
         self, hidden_states: torch.Tensor, conv_cache: Optional[Dict[str, torch.Tensor]] = None
     ) -> torch.Tensor:
-        r"""Forward method of the `MochiEncoder3D` class."""
+        
+        """r"""
 
         new_conv_cache = {}
         conv_cache = conv_cache or {}
@@ -547,28 +462,8 @@ class MochiEncoder3D(nn.Module):
 
         return hidden_states, new_conv_cache
 
-
 class MochiDecoder3D(nn.Module):
-    r"""
-    The `MochiDecoder3D` layer of a variational autoencoder that decodes its latent representation into an output
-    sample.
 
-    Args:
-        in_channels (`int`, *optional*):
-            The number of input channels.
-        out_channels (`int`, *optional*):
-            The number of output channels.
-        block_out_channels (`Tuple[int, ...]`, *optional*, defaults to `(128, 256, 512, 768)`):
-            The number of output channels for each block.
-        layers_per_block (`Tuple[int, ...]`, *optional*, defaults to `(3, 3, 4, 6, 3)`):
-            The number of resnet blocks for each block.
-        temporal_expansions (`Tuple[int, ...]`, *optional*, defaults to `(1, 2, 3)`):
-            The temporal expansion factor for each of the up blocks.
-        spatial_expansions (`Tuple[int, ...]`, *optional*, defaults to `(2, 2, 2)`):
-            The spatial expansion factor for each of the up blocks.
-        non_linearity (`str`, *optional*, defaults to `"swish"`):
-            The non-linearity to use in the decoder.
-    """
 
     def __init__(
         self,
@@ -615,7 +510,8 @@ class MochiDecoder3D(nn.Module):
     def forward(
         self, hidden_states: torch.Tensor, conv_cache: Optional[Dict[str, torch.Tensor]] = None
     ) -> torch.Tensor:
-        r"""Forward method of the `MochiDecoder3D` class."""
+        
+        """r"""
 
         new_conv_cache = {}
         conv_cache = conv_cache or {}
@@ -656,29 +552,8 @@ class MochiDecoder3D(nn.Module):
 
         return hidden_states, new_conv_cache
 
-
 class AutoencoderKLMochi(ModelMixin, AutoencoderMixin, ConfigMixin):
-    r"""
-    A VAE model with KL loss for encoding images into latents and decoding latent representations into images. Used in
-    [Mochi 1 preview](https://github.com/genmoai/models).
 
-    This model inherits from [`ModelMixin`]. Check the superclass documentation for it's generic methods implemented
-    for all models (such as downloading or saving).
-
-    Parameters:
-        in_channels (int, *optional*, defaults to 3): Number of channels in the input image.
-        out_channels (int,  *optional*, defaults to 3): Number of channels in the output.
-        block_out_channels (`Tuple[int]`, *optional*, defaults to `(64,)`):
-            Tuple of block output channels.
-        act_fn (`str`, *optional*, defaults to `"silu"`): The activation function to use.
-        scaling_factor (`float`, *optional*, defaults to `1.15258426`):
-            The component-wise standard deviation of the trained latent space computed using the first batch of the
-            training set. This is used to scale the latent space to have unit variance when training the diffusion
-            model. The latents are scaled with the formula `z = z * scaling_factor` before being passed to the
-            diffusion model. When decoding, the latents are scaled back to the original scale with the formula: `z = 1
-            / scaling_factor * z`. For more details, refer to sections 4.3.2 and D.1 of the [High-Resolution Image
-            Synthesis with Latent Diffusion Models](https://huggingface.co/papers/2112.10752) paper.
-    """
 
     _supports_gradient_checkpointing = True
     _no_split_modules = ["MochiResnetBlock3D"]
@@ -751,27 +626,27 @@ class AutoencoderKLMochi(ModelMixin, AutoencoderMixin, ConfigMixin):
         self.spatial_compression_ratio = functools.reduce(lambda x, y: x * y, spatial_expansions, 1)
         self.temporal_compression_ratio = functools.reduce(lambda x, y: x * y, temporal_expansions, 1)
 
-        # When decoding a batch of video latents at a time, one can save memory by slicing across the batch dimension
+        # When decoding a batch of video latents a...
         # to perform decoding of a single video latent at a time.
         self.use_slicing = False
 
-        # When decoding spatially large video latents, the memory requirement is very high. By breaking the video latent
-        # frames spatially into smaller tiles and performing multiple forward passes for decoding, and then blending the
+        # When decoding spatially large video late...
+        # frames spatially into smaller tiles and...
         # intermediate tiles together, the memory requirement can be lowered.
         self.use_tiling = False
 
-        # When decoding temporally long video latents, the memory requirement is very high. By decoding latent frames
-        # at a fixed frame batch size (based on `self.num_latent_frames_batch_sizes`), the memory requirement can be lowered.
+        # When decoding temporally long video late...
+        # at a fixed frame batch size (based on `s...
         self.use_framewise_encoding = False
         self.use_framewise_decoding = False
 
-        # This can be used to determine how the number of output frames in the final decoded video. To maintain consistency with
+        # This can be used to determine how the nu...
         # the original implementation, this defaults to `True`.
         #   - Original implementation (drop_last_temporal_frames=True):
         #       Output frames = (latent_frames - 1) * temporal_compression_ratio + 1
-        #   - Without dropping additional temporal upscaled frames (drop_last_temporal_frames=False):
+        #   - Without dropping additional temporal...
         #       Output frames = latent_frames * temporal_compression_ratio
-        # The latter case is useful for frame packing and some training/finetuning scenarios where the additional.
+        # The latter case is useful for frame pack...
         self.drop_last_temporal_frames = True
 
         # This can be configured based on the amount of GPU memory available.
@@ -795,23 +670,8 @@ class AutoencoderKLMochi(ModelMixin, AutoencoderMixin, ConfigMixin):
         tile_sample_stride_height: Optional[float] = None,
         tile_sample_stride_width: Optional[float] = None,
     ) -> None:
-        r"""
-        Enable tiled VAE decoding. When this option is enabled, the VAE will split the input tensor into tiles to
-        compute decoding and encoding in several steps. This is useful for saving a large amount of memory and to allow
-        processing larger images.
-
-        Args:
-            tile_sample_min_height (`int`, *optional*):
-                The minimum height required for a sample to be separated into tiles across the height dimension.
-            tile_sample_min_width (`int`, *optional*):
-                The minimum width required for a sample to be separated into tiles across the width dimension.
-            tile_sample_stride_height (`int`, *optional*):
-                The minimum amount of overlap between two consecutive vertical tiles. This is to ensure that there are
-                no tiling artifacts produced across the height dimension.
-            tile_sample_stride_width (`int`, *optional*):
-                The stride between two consecutive horizontal tiles. This is to ensure that there are no tiling
-                artifacts produced across the width dimension.
-        """
+        
+        """r"""
         self.use_tiling = True
         self.tile_sample_min_height = tile_sample_min_height or self.tile_sample_min_height
         self.tile_sample_min_width = tile_sample_min_width or self.tile_sample_min_width
@@ -819,23 +679,16 @@ class AutoencoderKLMochi(ModelMixin, AutoencoderMixin, ConfigMixin):
         self.tile_sample_stride_width = tile_sample_stride_width or self.tile_sample_stride_width
 
     def _enable_framewise_encoding(self):
-        r"""
-        Enables the framewise VAE encoding implementation with past latent padding. By default, Diffusers uses the
-        oneshot encoding implementation without current latent replicate padding.
-
-        Warning: Framewise encoding may not work as expected due to the causal attention layers. If you enable
-        framewise encoding, encode a video, and try to decode it, there will be noticeable jittering effect.
-        """
+        
+        """r"""
         self.use_framewise_encoding = True
         for name, module in self.named_modules():
             if isinstance(module, CogVideoXCausalConv3d):
                 module.pad_mode = "constant"
 
     def _enable_framewise_decoding(self):
-        r"""
-        Enables the framewise VAE decoding implementation with past latent padding. By default, Diffusers uses the
-        oneshot decoding implementation without current latent replicate padding.
-        """
+        
+        """r"""
         self.use_framewise_decoding = True
         for name, module in self.named_modules():
             if isinstance(module, CogVideoXCausalConv3d):
@@ -861,18 +714,7 @@ class AutoencoderKLMochi(ModelMixin, AutoencoderMixin, ConfigMixin):
     def encode(
         self, x: torch.Tensor, return_dict: bool = True
     ) -> Union[AutoencoderKLOutput, Tuple[DiagonalGaussianDistribution]]:
-        """
-        Encode a batch of images into latents.
 
-        Args:
-            x (`torch.Tensor`): Input batch of images.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether to return a [`~models.autoencoder_kl.AutoencoderKLOutput`] instead of a plain tuple.
-
-        Returns:
-                The latent representations of the encoded videos. If `return_dict` is True, a
-                [`~models.autoencoder_kl.AutoencoderKLOutput`] is returned, otherwise a plain `tuple` is returned.
-        """
         if self.use_slicing and x.shape[0] > 1:
             encoded_slices = [self._encode(x_slice) for x_slice in x.split(1)]
             h = torch.cat(encoded_slices)
@@ -916,19 +758,7 @@ class AutoencoderKLMochi(ModelMixin, AutoencoderMixin, ConfigMixin):
 
     @apply_forward_hook
     def decode(self, z: torch.Tensor, return_dict: bool = True) -> Union[DecoderOutput, torch.Tensor]:
-        """
-        Decode a batch of images.
 
-        Args:
-            z (`torch.Tensor`): Input batch of latent vectors.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether to return a [`~models.vae.DecoderOutput`] instead of a plain tuple.
-
-        Returns:
-            [`~models.vae.DecoderOutput`] or `tuple`:
-                If return_dict is True, a [`~models.vae.DecoderOutput`] is returned, otherwise a plain `tuple` is
-                returned.
-        """
         if self.use_slicing and z.shape[0] > 1:
             decoded_slices = [self._decode(z_slice).sample for z_slice in z.split(1)]
             decoded = torch.cat(decoded_slices)
@@ -957,15 +787,8 @@ class AutoencoderKLMochi(ModelMixin, AutoencoderMixin, ConfigMixin):
         return b
 
     def tiled_encode(self, x: torch.Tensor) -> torch.Tensor:
-        r"""Encode a batch of images using a tiled encoder.
-
-        Args:
-            x (`torch.Tensor`): Input batch of videos.
-
-        Returns:
-            `torch.Tensor`:
-                The latent representation of the encoded videos.
-        """
+        
+        """r"""
         batch_size, num_channels, num_frames, height, width = x.shape
         latent_height = height // self.spatial_compression_ratio
         latent_width = width // self.spatial_compression_ratio
@@ -1014,19 +837,8 @@ class AutoencoderKLMochi(ModelMixin, AutoencoderMixin, ConfigMixin):
         return enc
 
     def tiled_decode(self, z: torch.Tensor, return_dict: bool = True) -> Union[DecoderOutput, torch.Tensor]:
-        r"""
-        Decode a batch of images using a tiled decoder.
-
-        Args:
-            z (`torch.Tensor`): Input batch of latent vectors.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether or not to return a [`~models.vae.DecoderOutput`] instead of a plain tuple.
-
-        Returns:
-            [`~models.vae.DecoderOutput`] or `tuple`:
-                If return_dict is True, a [`~models.vae.DecoderOutput`] is returned, otherwise a plain `tuple` is
-                returned.
-        """
+        
+        """r"""
 
         batch_size, num_channels, num_frames, height, width = z.shape
         sample_height = height * self.spatial_compression_ratio

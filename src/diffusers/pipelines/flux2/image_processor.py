@@ -1,17 +1,3 @@
-# Copyright 2025 The Black Forest Labs Team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import math
 from typing import List
 
@@ -20,25 +6,8 @@ import PIL.Image
 from ...configuration_utils import register_to_config
 from ...image_processor import VaeImageProcessor
 
-
 class Flux2ImageProcessor(VaeImageProcessor):
-    r"""
-    Image processor to preprocess the reference (character) image for the Flux2 model.
 
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to downscale the image's (height, width) dimensions to multiples of `vae_scale_factor`. Can accept
-            `height` and `width` arguments from [`image_processor.VaeImageProcessor.preprocess`] method.
-        vae_scale_factor (`int`, *optional*, defaults to `16`):
-            VAE (spatial) scale factor. If `do_resize` is `True`, the image is automatically resized to multiples of
-            this factor.
-        vae_latent_channels (`int`, *optional*, defaults to `32`):
-            VAE latent channels.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image to [-1,1].
-        do_convert_rgb (`bool`, *optional*, defaults to be `True`):
-            Whether to convert the images to RGB format.
-    """
 
     @register_to_config
     def __init__(
@@ -61,21 +30,7 @@ class Flux2ImageProcessor(VaeImageProcessor):
     def check_image_input(
         image: PIL.Image.Image, max_aspect_ratio: int = 8, min_side_length: int = 64, max_area: int = 1024 * 1024
     ) -> PIL.Image.Image:
-        """
-        Check if image meets minimum size and aspect ratio requirements.
 
-        Args:
-            image: PIL Image to validate
-            max_aspect_ratio: Maximum allowed aspect ratio (width/height or height/width)
-            min_side_length: Minimum pixels required for width and height
-            max_area: Maximum allowed area in pixels²
-
-        Returns:
-            The input image if valid
-
-        Raises:
-            ValueError: If image is too small or aspect ratio is too extreme
-        """
         if not isinstance(image, PIL.Image.Image):
             raise ValueError(f"Image must be a PIL.Image.Image, got {type(image)}")
 
@@ -121,21 +76,8 @@ class Flux2ImageProcessor(VaeImageProcessor):
         width: int,
         height: int,
     ) -> PIL.Image.Image:
-        r"""
-        center crop the image to the specified width and height.
-
-        Args:
-            image (`PIL.Image.Image`):
-                The image to resize and crop.
-            width (`int`):
-                The width to resize the image to.
-            height (`int`):
-                The height to resize the image to.
-
-        Returns:
-            `PIL.Image.Image`:
-                The resized and cropped image.
-        """
+        
+        """r"""
         image_width, image_height = image.size
 
         left = (image_width - width) // 2
@@ -146,12 +88,10 @@ class Flux2ImageProcessor(VaeImageProcessor):
         return image.crop((left, top, right, bottom))
 
     # Taken from
-    # https://github.com/black-forest-labs/flux2/blob/5a5d316b1b42f6b59a8c9194b77c8256be848432/src/flux2/sampling.py#L310C1-L339C19
+    # https://github.com/black-forest-labs/flux2/b...
     @staticmethod
     def concatenate_images(images: List[PIL.Image.Image]) -> PIL.Image.Image:
-        """
-        Concatenate a list of PIL images horizontally with center alignment and white background.
-        """
+
 
         # If only one image, return a copy of it
         if len(images) == 1:

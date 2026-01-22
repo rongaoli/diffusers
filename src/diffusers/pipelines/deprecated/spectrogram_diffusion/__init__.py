@@ -38,7 +38,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["midi_utils"] = ["MidiProcessor"]
 
-
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:
         if not (is_transformers_available() and is_torch_available()):

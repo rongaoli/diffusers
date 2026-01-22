@@ -1,16 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -29,57 +16,21 @@ from ..unets.unet_2d_blocks import (
     get_up_block,
 )
 
-
 @dataclass
 class EncoderOutput(BaseOutput):
-    r"""
-    Output of encoding method.
 
-    Args:
-        latent (`torch.Tensor` of shape `(batch_size, num_channels, latent_height, latent_width)`):
-            The encoded latent.
-    """
 
     latent: torch.Tensor
 
-
 @dataclass
 class DecoderOutput(BaseOutput):
-    r"""
-    Output of decoding method.
 
-    Args:
-        sample (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
-            The decoded output sample from the last layer of the model.
-    """
 
     sample: torch.Tensor
     commit_loss: Optional[torch.FloatTensor] = None
 
-
 class Encoder(nn.Module):
-    r"""
-    The `Encoder` layer of a variational autoencoder that encodes its input into a latent representation.
 
-    Args:
-        in_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        out_channels (`int`, *optional*, defaults to 3):
-            The number of output channels.
-        down_block_types (`Tuple[str, ...]`, *optional*, defaults to `("DownEncoderBlock2D",)`):
-            The types of down blocks to use. See `~diffusers.models.unet_2d_blocks.get_down_block` for available
-            options.
-        block_out_channels (`Tuple[int, ...]`, *optional*, defaults to `(64,)`):
-            The number of output channels for each block.
-        layers_per_block (`int`, *optional*, defaults to 2):
-            The number of layers per block.
-        norm_num_groups (`int`, *optional*, defaults to 32):
-            The number of groups for normalization.
-        act_fn (`str`, *optional*, defaults to `"silu"`):
-            The activation function to use. See `~diffusers.models.activations.get_activation` for available options.
-        double_z (`bool`, *optional*, defaults to `True`):
-            Whether to double the number of output channels for the last block.
-    """
 
     def __init__(
         self,
@@ -151,7 +102,8 @@ class Encoder(nn.Module):
         self.gradient_checkpointing = False
 
     def forward(self, sample: torch.Tensor) -> torch.Tensor:
-        r"""The forward method of the `Encoder` class."""
+        
+        """r"""
 
         sample = self.conv_in(sample)
 
@@ -177,29 +129,8 @@ class Encoder(nn.Module):
 
         return sample
 
-
 class Decoder(nn.Module):
-    r"""
-    The `Decoder` layer of a variational autoencoder that decodes its latent representation into an output sample.
 
-    Args:
-        in_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        out_channels (`int`, *optional*, defaults to 3):
-            The number of output channels.
-        up_block_types (`Tuple[str, ...]`, *optional*, defaults to `("UpDecoderBlock2D",)`):
-            The types of up blocks to use. See `~diffusers.models.unet_2d_blocks.get_up_block` for available options.
-        block_out_channels (`Tuple[int, ...]`, *optional*, defaults to `(64,)`):
-            The number of output channels for each block.
-        layers_per_block (`int`, *optional*, defaults to 2):
-            The number of layers per block.
-        norm_num_groups (`int`, *optional*, defaults to 32):
-            The number of groups for normalization.
-        act_fn (`str`, *optional*, defaults to `"silu"`):
-            The activation function to use. See `~diffusers.models.activations.get_activation` for available options.
-        norm_type (`str`, *optional*, defaults to `"group"`):
-            The normalization type to use. Can be either `"group"` or `"spatial"`.
-    """
 
     def __init__(
         self,
@@ -282,7 +213,8 @@ class Decoder(nn.Module):
         sample: torch.Tensor,
         latent_embeds: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        r"""The forward method of the `Decoder` class."""
+        
+        """r"""
 
         sample = self.conv_in(sample)
 
@@ -311,17 +243,8 @@ class Decoder(nn.Module):
 
         return sample
 
-
 class UpSample(nn.Module):
-    r"""
-    The `UpSample` layer of a variational autoencoder that upsamples its input.
 
-    Args:
-        in_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        out_channels (`int`, *optional*, defaults to 3):
-            The number of output channels.
-    """
 
     def __init__(
         self,
@@ -334,16 +257,14 @@ class UpSample(nn.Module):
         self.deconv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        r"""The forward method of the `UpSample` class."""
+        
+        """r"""
         x = torch.relu(x)
         x = self.deconv(x)
         return x
 
-
 class MaskConditionEncoder(nn.Module):
-    """
-    used in AsymmetricAutoencoderKL
-    """
+
 
     def __init__(
         self,
@@ -383,7 +304,8 @@ class MaskConditionEncoder(nn.Module):
         self.layers = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor, mask=None) -> torch.Tensor:
-        r"""The forward method of the `MaskConditionEncoder` class."""
+        
+        """r"""
         out = {}
         for l in range(len(self.layers)):
             layer = self.layers[l]
@@ -392,29 +314,8 @@ class MaskConditionEncoder(nn.Module):
             x = torch.relu(x)
         return out
 
-
 class MaskConditionDecoder(nn.Module):
-    r"""The `MaskConditionDecoder` should be used in combination with [`AsymmetricAutoencoderKL`] to enhance the model's
-    decoder with a conditioner on the mask and masked image.
 
-    Args:
-        in_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        out_channels (`int`, *optional*, defaults to 3):
-            The number of output channels.
-        up_block_types (`Tuple[str, ...]`, *optional*, defaults to `("UpDecoderBlock2D",)`):
-            The types of up blocks to use. See `~diffusers.models.unet_2d_blocks.get_up_block` for available options.
-        block_out_channels (`Tuple[int, ...]`, *optional*, defaults to `(64,)`):
-            The number of output channels for each block.
-        layers_per_block (`int`, *optional*, defaults to 2):
-            The number of layers per block.
-        norm_num_groups (`int`, *optional*, defaults to 32):
-            The number of groups for normalization.
-        act_fn (`str`, *optional*, defaults to `"silu"`):
-            The activation function to use. See `~diffusers.models.activations.get_activation` for available options.
-        norm_type (`str`, *optional*, defaults to `"group"`):
-            The normalization type to use. Can be either `"group"` or `"spatial"`.
-    """
 
     def __init__(
         self,
@@ -504,7 +405,8 @@ class MaskConditionDecoder(nn.Module):
         mask: Optional[torch.Tensor] = None,
         latent_embeds: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        r"""The forward method of the `MaskConditionDecoder` class."""
+        
+        """r"""
         sample = z
         sample = self.conv_in(sample)
 
@@ -562,12 +464,8 @@ class MaskConditionDecoder(nn.Module):
 
         return sample
 
-
 class VectorQuantizer(nn.Module):
-    """
-    Improved version over VectorQuantizer, can be used as a drop-in replacement. Mostly avoids costly matrix
-    multiplications and allows for post-hoc remapping of indices.
-    """
+
 
     # NOTE: due to a bug the beta term was applied to the wrong term. for
     # backwards compatibility we use the buggy version by default, but you can
@@ -684,7 +582,6 @@ class VectorQuantizer(nn.Module):
 
         return z_q
 
-
 class DiagonalGaussianDistribution(object):
     def __init__(self, parameters: torch.Tensor, deterministic: bool = False):
         self.parameters = parameters
@@ -740,6 +637,71 @@ class DiagonalGaussianDistribution(object):
     def mode(self) -> torch.Tensor:
         return self.mean
 
+class IdentityDistribution(object):
+    def __init__(self, parameters: torch.Tensor):
+        self.parameters = parameters
+
+    def sample(self, generator: Optional[torch.Generator] = None) -> torch.Tensor:
+        return self.parameters
+
+    def mode(self) -> torch.Tensor:
+        return self.parameters
+
+class EncoderTiny(nn.Module):
+    class DiagonalGaussianDistribution(object):
+    def __init__(self, parameters: torch.Tensor, deterministic: bool = False):
+        self.parameters = parameters
+        self.mean, self.logvar = torch.chunk(parameters, 2, dim=1)
+        self.logvar = torch.clamp(self.logvar, -30.0, 20.0)
+        self.deterministic = deterministic
+        self.std = torch.exp(0.5 * self.logvar)
+        self.var = torch.exp(self.logvar)
+        if self.deterministic:
+            self.var = self.std = torch.zeros_like(
+                self.mean, device=self.parameters.device, dtype=self.parameters.dtype
+            )
+
+    def sample(self, generator: Optional[torch.Generator] = None) -> torch.Tensor:
+        # make sure sample is on the same device as the parameters and has same dtype
+        sample = randn_tensor(
+            self.mean.shape,
+            generator=generator,
+            device=self.parameters.device,
+            dtype=self.parameters.dtype,
+        )
+        x = self.mean + self.std * sample
+        return x
+
+    def kl(self, other: "DiagonalGaussianDistribution" = None) -> torch.Tensor:
+        if self.deterministic:
+            return torch.Tensor([0.0])
+        else:
+            if other is None:
+                return 0.5 * torch.sum(
+                    torch.pow(self.mean, 2) + self.var - 1.0 - self.logvar,
+                    dim=[1, 2, 3],
+                )
+            else:
+                return 0.5 * torch.sum(
+                    torch.pow(self.mean - other.mean, 2) / other.var
+                    + self.var / other.var
+                    - 1.0
+                    - self.logvar
+                    + other.logvar,
+                    dim=[1, 2, 3],
+                )
+
+    def nll(self, sample: torch.Tensor, dims: Tuple[int, ...] = [1, 2, 3]) -> torch.Tensor:
+        if self.deterministic:
+            return torch.Tensor([0.0])
+        logtwopi = np.log(2.0 * np.pi)
+        return 0.5 * torch.sum(
+            logtwopi + self.logvar + torch.pow(sample - self.mean, 2) / self.var,
+            dim=dims,
+        )
+
+    def mode(self) -> torch.Tensor:
+        return self.mean
 
 class IdentityDistribution(object):
     def __init__(self, parameters: torch.Tensor):
@@ -751,24 +713,8 @@ class IdentityDistribution(object):
     def mode(self) -> torch.Tensor:
         return self.parameters
 
-
 class EncoderTiny(nn.Module):
-    r"""
-    The `EncoderTiny` layer is a simpler version of the `Encoder` layer.
 
-    Args:
-        in_channels (`int`):
-            The number of input channels.
-        out_channels (`int`):
-            The number of output channels.
-        num_blocks (`Tuple[int, ...]`):
-            Each value of the tuple represents a Conv2d layer followed by `value` number of `AutoencoderTinyBlock`'s to
-            use.
-        block_out_channels (`Tuple[int, ...]`):
-            The number of output channels for each block.
-        act_fn (`str`):
-            The activation function to use. See `~diffusers.models.activations.get_activation` for available options.
-    """
 
     def __init__(
         self,
@@ -807,7 +753,8 @@ class EncoderTiny(nn.Module):
         self.gradient_checkpointing = False
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        r"""The forward method of the `EncoderTiny` class."""
+        
+        """r"""
         if torch.is_grad_enabled() and self.gradient_checkpointing:
             x = self._gradient_checkpointing_func(self.layers, x)
 
@@ -817,26 +764,8 @@ class EncoderTiny(nn.Module):
 
         return x
 
-
 class DecoderTiny(nn.Module):
-    r"""
-    The `DecoderTiny` layer is a simpler version of the `Decoder` layer.
 
-    Args:
-        in_channels (`int`):
-            The number of input channels.
-        out_channels (`int`):
-            The number of output channels.
-        num_blocks (`Tuple[int, ...]`):
-            Each value of the tuple represents a Conv2d layer followed by `value` number of `AutoencoderTinyBlock`'s to
-            use.
-        block_out_channels (`Tuple[int, ...]`):
-            The number of output channels for each block.
-        upsampling_scaling_factor (`int`):
-            The scaling factor to use for upsampling.
-        act_fn (`str`):
-            The activation function to use. See `~diffusers.models.activations.get_activation` for available options.
-    """
 
     def __init__(
         self,
@@ -880,7 +809,8 @@ class DecoderTiny(nn.Module):
         self.gradient_checkpointing = False
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        r"""The forward method of the `DecoderTiny` class."""
+        
+        """r"""
         # Clamp.
         x = torch.tanh(x / 3) * 3
 
@@ -892,37 +822,28 @@ class DecoderTiny(nn.Module):
         # scale image from [0, 1] to [-1, 1] to match diffusers convention
         return x.mul(2).sub(1)
 
-
 class AutoencoderMixin:
     def enable_tiling(self):
-        r"""
-        Enable tiled VAE decoding. When this option is enabled, the VAE will split the input tensor into tiles to
-        compute decoding and encoding in several steps. This is useful for saving a large amount of memory and to allow
-        processing larger images.
-        """
+        class AutoencoderMixin:
+    def enable_tiling(self):
+
         if not hasattr(self, "use_tiling"):
             raise NotImplementedError(f"Tiling doesn't seem to be implemented for {self.__class__.__name__}.")
         self.use_tiling = True
 
     def disable_tiling(self):
-        r"""
-        Disable tiled VAE decoding. If `enable_tiling` was previously enabled, this method will go back to computing
-        decoding in one step.
-        """
+        
+        """r"""
         self.use_tiling = False
 
     def enable_slicing(self):
-        r"""
-        Enable sliced VAE decoding. When this option is enabled, the VAE will split the input tensor in slices to
-        compute decoding in several steps. This is useful to save some memory and allow larger batch sizes.
-        """
+        
+        """r"""
         if not hasattr(self, "use_slicing"):
             raise NotImplementedError(f"Slicing doesn't seem to be implemented for {self.__class__.__name__}.")
         self.use_slicing = True
 
     def disable_slicing(self):
-        r"""
-        Disable sliced VAE decoding. If `enable_slicing` was previously enabled, this method will go back to computing
-        decoding in one step.
-        """
+        
+        """r"""
         self.use_slicing = False

@@ -1,17 +1,3 @@
-# Copyright 2025 VisualCloze team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import torch
@@ -28,62 +14,14 @@ from ..flux.pipeline_output import FluxPipelineOutput
 from ..pipeline_utils import DiffusionPipeline
 from .pipeline_visualcloze_generation import VisualClozeGenerationPipeline
 
-
 if is_torch_xla_available():
     XLA_AVAILABLE = True
 else:
     XLA_AVAILABLE = False
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 EXAMPLE_DOC_STRING = """
-    Examples:
-        ```python
-        >>> import torch
-        >>> from diffusers import VisualClozePipeline
-        >>> from diffusers.utils import load_image
-
-        >>> image_paths = [
-        ...     # in-context examples
-        ...     [
-        ...         load_image(
-        ...             "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/visualcloze/visualcloze_mask2image_incontext-example-1_mask.jpg"
-        ...         ),
-        ...         load_image(
-        ...             "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/visualcloze/visualcloze_mask2image_incontext-example-1_image.jpg"
-        ...         ),
-        ...     ],
-        ...     # query with the target image
-        ...     [
-        ...         load_image(
-        ...             "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/visualcloze/visualcloze_mask2image_query_mask.jpg"
-        ...         ),
-        ...         None,  # No image needed for the target image
-        ...     ],
-        ... ]
-        >>> task_prompt = "In each row, a logical task is demonstrated to achieve [IMAGE2] an aesthetically pleasing photograph based on [IMAGE1] sam 2-generated masks with rich color coding."
-        >>> content_prompt = "Majestic photo of a golden eagle perched on a rocky outcrop in a mountainous landscape. The eagle is positioned in the right foreground, facing left, with its sharp beak and keen eyes prominently visible. Its plumage is a mix of dark brown and golden hues, with intricate feather details. The background features a soft-focus view of snow-capped mountains under a cloudy sky, creating a serene and grandiose atmosphere. The foreground includes rugged rocks and patches of green moss. Photorealistic, medium depth of field, soft natural lighting, cool color palette, high contrast, sharp focus on the eagle, blurred background, tranquil, majestic, wildlife photography."
-        >>> pipe = VisualClozePipeline.from_pretrained(
-        ...     "VisualCloze/VisualClozePipeline-384", resolution=384, torch_dtype=torch.bfloat16
-        ... )
-        >>> pipe.to("cuda")
-
-        >>> image = pipe(
-        ...     task_prompt=task_prompt,
-        ...     content_prompt=content_prompt,
-        ...     image=image_paths,
-        ...     upsampling_width=1344,
-        ...     upsampling_height=768,
-        ...     upsampling_strength=0.4,
-        ...     guidance_scale=30,
-        ...     num_inference_steps=30,
-        ...     max_sequence_length=512,
-        ...     generator=torch.Generator("cpu").manual_seed(0),
-        ... ).images[0][0]
-        >>> image.save("visualcloze.png")
-        ```
-"""
 
 
 class VisualClozePipeline(
@@ -92,33 +30,7 @@ class VisualClozePipeline(
     FromSingleFileMixin,
     TextualInversionLoaderMixin,
 ):
-    r"""
-    The VisualCloze pipeline for image generation with visual context. Reference:
-    https://github.com/lzyhha/VisualCloze/tree/main. This pipeline is designed to generate images based on visual
-    in-context examples.
 
-    Args:
-        transformer ([`FluxTransformer2DModel`]):
-            Conditional Transformer (MMDiT) architecture to denoise the encoded image latents.
-        scheduler ([`FlowMatchEulerDiscreteScheduler`]):
-            A scheduler to be used in combination with `transformer` to denoise the encoded image latents.
-        vae ([`AutoencoderKL`]):
-            Variational Auto-Encoder (VAE) Model to encode and decode images to and from latent representations.
-        text_encoder ([`CLIPTextModel`]):
-            [CLIP](https://huggingface.co/docs/transformers/model_doc/clip#transformers.CLIPTextModel), specifically
-            the [clip-vit-large-patch14](https://huggingface.co/openai/clip-vit-large-patch14) variant.
-        text_encoder_2 ([`T5EncoderModel`]):
-            [T5](https://huggingface.co/docs/transformers/en/model_doc/t5#transformers.T5EncoderModel), specifically
-            the [google/t5-v1_1-xxl](https://huggingface.co/google/t5-v1_1-xxl) variant.
-        tokenizer (`CLIPTokenizer`):
-            Tokenizer of class
-            [CLIPTokenizer](https://huggingface.co/docs/transformers/en/model_doc/clip#transformers.CLIPTokenizer).
-        tokenizer_2 (`T5TokenizerFast`):
-            Second Tokenizer of class
-            [T5TokenizerFast](https://huggingface.co/docs/transformers/en/model_doc/t5#transformers.T5TokenizerFast).
-        resolution (`int`, *optional*, defaults to 384):
-            The resolution of each image when concatenating images from the query and in-context examples.
-    """
 
     model_cpu_offload_seq = "text_encoder->text_encoder_2->transformer->vae"
     _optional_components = []
@@ -259,7 +171,7 @@ class VisualClozePipeline(
         sigmas: Optional[List[float]] = None,
         guidance_scale: float = 30.0,
         num_images_per_prompt: Optional[int] = 1,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+        generator: Optional[torch.Generator] = None,
         latents: Optional[torch.FloatTensor] = None,
         prompt_embeds: Optional[torch.FloatTensor] = None,
         pooled_prompt_embeds: Optional[torch.FloatTensor] = None,
@@ -271,15 +183,8 @@ class VisualClozePipeline(
         max_sequence_length: int = 512,
         upsampling_strength: float = 1.0,
     ):
-        r"""
-        Function invoked when calling the VisualCloze pipeline for generation.
 
-        Args:
-            task_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to define the task intention.
-            content_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to define the content or caption of the target image to be generated.
-            image (`torch.Tensor`, `PIL.Image.Image`, `np.ndarray`, `List[torch.Tensor]`, `List[PIL.Image.Image]`, or `List[np.ndarray]`):
+        Function invoked when calling the VisualCloze pipeline for generation.
                 `Image`, numpy array or tensor representing an image batch to be used as the starting point. For both
                 numpy array and pytorch tensor, the expected value range is between `[0, 1]` If it's a tensor or a list
                 or tensors, the expected shape should be `(B, C, H, W)` or `(C, H, W)`. If it is a numpy array or a
@@ -350,91 +255,3 @@ class VisualClozePipeline(
                 output the results at the resolution of `self.resolution`.
 
         Examples:
-
-        Returns:
-            [`~pipelines.flux.FluxPipelineOutput`] or `tuple`: [`~pipelines.flux.FluxPipelineOutput`] if `return_dict`
-            is True, otherwise a `tuple`. When returning a tuple, the first element is a list with the generated
-            images.
-        """
-
-        generation_output = self.generation_pipe(
-            task_prompt=task_prompt,
-            content_prompt=content_prompt,
-            image=image,
-            num_inference_steps=num_inference_steps,
-            sigmas=sigmas,
-            guidance_scale=guidance_scale,
-            num_images_per_prompt=num_images_per_prompt,
-            generator=generator,
-            latents=latents,
-            prompt_embeds=prompt_embeds,
-            pooled_prompt_embeds=pooled_prompt_embeds,
-            joint_attention_kwargs=joint_attention_kwargs,
-            callback_on_step_end=callback_on_step_end,
-            callback_on_step_end_tensor_inputs=callback_on_step_end_tensor_inputs,
-            max_sequence_length=max_sequence_length,
-            output_type=output_type if upsampling_strength == 0 else "pil",
-        )
-        if upsampling_strength == 0:
-            if not return_dict:
-                return (generation_output,)
-
-            return FluxPipelineOutput(images=generation_output)
-
-        # Upsampling the generated images
-        # 1. Prepare the input images and prompts
-        if not isinstance(content_prompt, (list)):
-            content_prompt = [content_prompt]
-        n_target_per_sample = []
-        upsampling_image = []
-        upsampling_mask = []
-        upsampling_prompt = []
-        upsampling_generator = generator if isinstance(generator, (torch.Generator,)) else []
-        for i in range(len(generation_output.images)):
-            n_target_per_sample.append(len(generation_output.images[i]))
-            for image in generation_output.images[i]:
-                upsampling_image.append(image)
-                upsampling_mask.append(Image.new("RGB", image.size, (255, 255, 255)))
-                upsampling_prompt.append(
-                    content_prompt[i % len(content_prompt)] if content_prompt[i % len(content_prompt)] else ""
-                )
-                if not isinstance(generator, (torch.Generator,)):
-                    upsampling_generator.append(generator[i % len(content_prompt)])
-
-        # 2. Apply the denosing loop
-        upsampling_output = self.upsampling_pipe(
-            prompt=upsampling_prompt,
-            image=upsampling_image,
-            mask_image=upsampling_mask,
-            height=upsampling_height,
-            width=upsampling_width,
-            strength=upsampling_strength,
-            num_inference_steps=num_inference_steps,
-            sigmas=sigmas,
-            guidance_scale=guidance_scale,
-            generator=upsampling_generator,
-            output_type=output_type,
-            joint_attention_kwargs=joint_attention_kwargs,
-            callback_on_step_end=callback_on_step_end,
-            callback_on_step_end_tensor_inputs=callback_on_step_end_tensor_inputs,
-            max_sequence_length=max_sequence_length,
-        )
-        image = upsampling_output.images
-
-        output = []
-        if output_type == "pil":
-            # Each sample in the batch may have multiple output images. When returning as PIL images,
-            # these images cannot be concatenated. Therefore, for each sample,
-            # a list is used to represent all the output images.
-            output = []
-            start = 0
-            for n in n_target_per_sample:
-                output.append(image[start : start + n])
-                start += n
-        else:
-            output = image
-
-        if not return_dict:
-            return (output,)
-
-        return FluxPipelineOutput(images=output)

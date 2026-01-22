@@ -9,10 +9,8 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
-
 
 try:
     if not (is_transformers_available() and is_torch_available()):
@@ -24,7 +22,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["pipeline_omnigen"] = ["OmniGenPipeline"]
 
-
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:
         if not (is_transformers_available() and is_torch_available()):
@@ -34,7 +31,6 @@ if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
         from ...utils.dummy_torch_and_transformers_objects import *
     else:
         from .pipeline_omnigen import OmniGenPipeline
-
 
 else:
     import sys

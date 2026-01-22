@@ -9,7 +9,6 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
 
@@ -27,7 +26,6 @@ else:
     _import_structure["pipeline_wuerstchen"] = ["WuerstchenDecoderPipeline"]
     _import_structure["pipeline_wuerstchen_combined"] = ["WuerstchenCombinedPipeline"]
     _import_structure["pipeline_wuerstchen_prior"] = ["DEFAULT_STAGE_C_TIMESTEPS", "WuerstchenPriorPipeline"]
-
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:

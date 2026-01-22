@@ -1,17 +1,3 @@
-# Copyright 2025 Alibaba DAMO-VILAB and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import inspect
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -35,7 +21,6 @@ from ...utils.torch_utils import randn_tensor
 from ...video_processor import VideoProcessor
 from ..pipeline_utils import DeprecatedPipelineMixin, DiffusionPipeline, StableDiffusionMixin
 
-
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
@@ -45,56 +30,14 @@ else:
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 EXAMPLE_DOC_STRING = """
-    Examples:
-        ```py
-        >>> import torch
-        >>> from diffusers import I2VGenXLPipeline
-        >>> from diffusers.utils import export_to_gif, load_image
-
-        >>> pipeline = I2VGenXLPipeline.from_pretrained(
-        ...     "ali-vilab/i2vgen-xl", torch_dtype=torch.float16, variant="fp16"
-        ... )
-        >>> pipeline.enable_model_cpu_offload()
-
-        >>> image_url = (
-        ...     "https://huggingface.co/datasets/diffusers/docs-images/resolve/main/i2vgen_xl_images/img_0009.png"
-        ... )
-        >>> image = load_image(image_url).convert("RGB")
-
-        >>> prompt = "Papers were floating in the air on a table in the library"
-        >>> negative_prompt = "Distorted, discontinuous, Ugly, blurry, low resolution, motionless, static, disfigured, disconnected limbs, Ugly faces, incomplete arms"
-        >>> generator = torch.manual_seed(8888)
-
-        >>> frames = pipeline(
-        ...     prompt=prompt,
-        ...     image=image,
-        ...     num_inference_steps=50,
-        ...     negative_prompt=negative_prompt,
-        ...     guidance_scale=9.0,
-        ...     generator=generator,
-        ... ).frames[0]
-        >>> video_path = export_to_gif(frames, "i2v.gif")
-        ```
-"""
 
 
 @dataclass
 class I2VGenXLPipelineOutput(BaseOutput):
-    r"""
-     Output class for image-to-video pipeline.
 
-    Args:
-         frames (`torch.Tensor`, `np.ndarray`, or List[List[PIL.Image.Image]]):
-             List of video outputs - It can be a nested list of length `batch_size,` with each sub-list containing
-             denoised
-     PIL image sequences of length `num_frames.` It can also be a NumPy array or Torch tensor of shape
-    `(batch_size, num_frames, channels, height, width)`
-    """
 
     frames: Union[torch.Tensor, np.ndarray, List[List[PIL.Image.Image]]]
-
 
 class I2VGenXLPipeline(
     DeprecatedPipelineMixin,
@@ -102,24 +45,8 @@ class I2VGenXLPipeline(
     StableDiffusionMixin,
 ):
     _last_supported_version = "0.33.1"
-    r"""
-    Pipeline for image-to-video generation as proposed in [I2VGenXL](https://i2vgen-xl.github.io/).
-
-    This model inherits from [`DiffusionPipeline`]. Check the superclass documentation for the generic methods
-    implemented for all pipelines (downloading, saving, running on a particular device, etc.).
-
-    Args:
-        vae ([`AutoencoderKL`]):
-            Variational Auto-Encoder (VAE) Model to encode and decode images to and from latent representations.
-        text_encoder ([`CLIPTextModel`]):
-            Frozen text-encoder ([clip-vit-large-patch14](https://huggingface.co/openai/clip-vit-large-patch14)).
-        tokenizer (`CLIPTokenizer`):
-            A [`~transformers.CLIPTokenizer`] to tokenize text.
-        unet ([`I2VGenXLUNet`]):
-            A [`I2VGenXLUNet`] to denoise the encoded video latents.
-        scheduler ([`DDIMScheduler`]):
-            A scheduler to be used in combination with `unet` to denoise the encoded image latents.
-    """
+    
+    """r"""
 
     model_cpu_offload_seq = "text_encoder->image_encoder->unet->vae"
 
@@ -169,33 +96,64 @@ class I2VGenXLPipeline(
         negative_prompt_embeds: Optional[torch.Tensor] = None,
         clip_skip: Optional[int] = None,
     ):
-        r"""
-        Encodes the prompt into text encoder hidden states.
+        class I2VGenXLPipeline(
+    DeprecatedPipelineMixin,
+    DiffusionPipeline,
+    StableDiffusionMixin,
+):
+    _last_supported_version = "0.33.1"
+    
+    """r"""
 
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                prompt to be encoded
-            device: (`torch.device`):
-                torch device
-            num_videos_per_prompt (`int`):
-                number of images that should be generated per prompt
-            do_classifier_free_guidance (`bool`):
-                whether to use classifier free guidance or not
-            negative_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts not to guide the image generation. If not defined, one has to pass
-                `negative_prompt_embeds` instead. Ignored when not using guidance (i.e., ignored if `guidance_scale` is
-                less than `1`).
-            prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt weighting. If not
-                provided, text embeddings will be generated from `prompt` input argument.
-            negative_prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated negative text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt
-                weighting. If not provided, negative_prompt_embeds will be generated from `negative_prompt` input
-                argument.
-            clip_skip (`int`, *optional*):
-                Number of layers to be skipped from CLIP while computing the prompt embeddings. A value of 1 means that
-                the output of the pre-final layer will be used for computing the prompt embeddings.
-        """
+    model_cpu_offload_seq = "text_encoder->image_encoder->unet->vae"
+
+    def __init__(
+        self,
+        vae: AutoencoderKL,
+        text_encoder: CLIPTextModel,
+        tokenizer: CLIPTokenizer,
+        image_encoder: CLIPVisionModelWithProjection,
+        feature_extractor: CLIPImageProcessor,
+        unet: I2VGenXLUNet,
+        scheduler: DDIMScheduler,
+    ):
+        super().__init__()
+
+        self.register_modules(
+            vae=vae,
+            text_encoder=text_encoder,
+            tokenizer=tokenizer,
+            image_encoder=image_encoder,
+            feature_extractor=feature_extractor,
+            unet=unet,
+            scheduler=scheduler,
+        )
+        self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1) if getattr(self, "vae", None) else 8
+        # `do_resize=False` as we do custom resizing.
+        self.video_processor = VideoProcessor(vae_scale_factor=self.vae_scale_factor, do_resize=False)
+
+    @property
+    def guidance_scale(self):
+        return self._guidance_scale
+
+    # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
+    # of the Imagen paper: https://huggingface.co/papers/2205.11487 . `guidance_scale = 1`
+    # corresponds to doing no classifier free guidance.
+    @property
+    def do_classifier_free_guidance(self):
+        return self._guidance_scale > 1
+
+    def encode_prompt(
+        self,
+        prompt,
+        device,
+        num_videos_per_prompt,
+        negative_prompt=None,
+        prompt_embeds: Optional[torch.Tensor] = None,
+        negative_prompt_embeds: Optional[torch.Tensor] = None,
+        clip_skip: Optional[int] = None,
+    ):
+
         if prompt is not None and isinstance(prompt, str):
             batch_size = 1
         elif prompt is not None and isinstance(prompt, list):
@@ -318,7 +276,7 @@ class I2VGenXLPipeline(
                 negative_prompt_embeds = self.text_encoder.text_model.final_layer_norm(negative_prompt_embeds)
 
         if self.do_classifier_free_guidance:
-            # duplicate unconditional embeddings for each generation per prompt, using mps friendly method
+            # duplicate unconditional embeddings f...
             seq_len = negative_prompt_embeds.shape[1]
 
             negative_prompt_embeds = negative_prompt_embeds.to(dtype=prompt_embeds_dtype, device=device)
@@ -378,13 +336,13 @@ class I2VGenXLPipeline(
         decode_shape = (batch_size, num_frames, -1) + image.shape[2:]
         video = image[None, :].reshape(decode_shape).permute(0, 2, 1, 3, 4)
 
-        # we always cast to float32 as this does not cause significant overhead and is compatible with bfloat16
+        # we always cast to float32 as this does n...
         video = video.float()
         return video
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_extra_step_kwargs
+    # Copied from diffusers.pipelines.stable_diffu...
     def prepare_extra_step_kwargs(self, generator, eta):
-        # prepare extra kwargs for the scheduler step, since not all schedulers have the same signature
+        # prepare extra kwargs for the scheduler s...
         # eta (η) is only used with the DDIMScheduler, it will be ignored for other schedulers.
         # eta corresponds to η in DDIM paper: https://huggingface.co/papers/2010.02502
         # and should be between [0, 1]
@@ -481,7 +439,7 @@ class I2VGenXLPipeline(
 
         return image_latents
 
-    # Copied from diffusers.pipelines.text_to_video_synthesis.pipeline_text_to_video_synth.TextToVideoSDPipeline.prepare_latents
+    # Copied from diffusers.pipelines.text_to_vide...
     def prepare_latents(
         self, batch_size, num_channels_latents, num_frames, height, width, dtype, device, generator, latents=None
     ):
@@ -519,11 +477,11 @@ class I2VGenXLPipeline(
         num_frames: int = 16,
         num_inference_steps: int = 50,
         guidance_scale: float = 9.0,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        negative_prompt: Optional[str] = None,
         eta: float = 0.0,
         num_videos_per_prompt: Optional[int] = 1,
         decode_chunk_size: Optional[int] = 1,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+        generator: Optional[torch.Generator] = None,
         latents: Optional[torch.Tensor] = None,
         prompt_embeds: Optional[torch.Tensor] = None,
         negative_prompt_embeds: Optional[torch.Tensor] = None,
@@ -532,14 +490,8 @@ class I2VGenXLPipeline(
         cross_attention_kwargs: Optional[Dict[str, Any]] = None,
         clip_skip: Optional[int] = 1,
     ):
-        r"""
-        The call function to the pipeline for image-to-video generation with [`I2VGenXLPipeline`].
 
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to guide image generation. If not defined, you need to pass `prompt_embeds`.
-            image (`PIL.Image.Image` or `List[PIL.Image.Image]` or `torch.Tensor`):
-                Image or images to guide image generation. If you provide a tensor, it needs to be compatible with
+        The call function to the pipeline for image-to-video generation with [`I2VGenXLPipeline`].
                 [`CLIPImageProcessor`](https://huggingface.co/lambdalabs/sd-image-variations-diffusers/blob/main/feature_extractor/preprocessor_config.json).
             height (`int`, *optional*, defaults to `self.unet.config.sample_size * self.vae_scale_factor`):
                 The height in pixels of the generated image.
@@ -593,157 +545,7 @@ class I2VGenXLPipeline(
                 the output of the pre-final layer will be used for computing the prompt embeddings.
 
         Examples:
-
-        Returns:
-            [`pipelines.i2vgen_xl.pipeline_i2vgen_xl.I2VGenXLPipelineOutput`] or `tuple`:
-                If `return_dict` is `True`, [`pipelines.i2vgen_xl.pipeline_i2vgen_xl.I2VGenXLPipelineOutput`] is
-                returned, otherwise a `tuple` is returned where the first element is a list with the generated frames.
-        """
-        # 0. Default height and width to unet
-        height = height or self.unet.config.sample_size * self.vae_scale_factor
-        width = width or self.unet.config.sample_size * self.vae_scale_factor
-
-        # 1. Check inputs. Raise error if not correct
-        self.check_inputs(prompt, image, height, width, negative_prompt, prompt_embeds, negative_prompt_embeds)
-
-        # 2. Define call parameters
-        if prompt is not None and isinstance(prompt, str):
-            batch_size = 1
-        elif prompt is not None and isinstance(prompt, list):
-            batch_size = len(prompt)
-        else:
-            batch_size = prompt_embeds.shape[0]
-
-        device = self._execution_device
-        # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
-        # of the Imagen paper: https://huggingface.co/papers/2205.11487 . `guidance_scale = 1`
-        # corresponds to doing no classifier free guidance.
-        self._guidance_scale = guidance_scale
-
-        # 3.1 Encode input text prompt
-        prompt_embeds, negative_prompt_embeds = self.encode_prompt(
-            prompt,
-            device,
-            num_videos_per_prompt,
-            negative_prompt,
-            prompt_embeds=prompt_embeds,
-            negative_prompt_embeds=negative_prompt_embeds,
-            clip_skip=clip_skip,
-        )
-        # For classifier free guidance, we need to do two forward passes.
-        # Here we concatenate the unconditional and text embeddings into a single batch
-        # to avoid doing two forward passes
-        if self.do_classifier_free_guidance:
-            prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
-
-        # 3.2 Encode image prompt
-        # 3.2.1 Image encodings.
-        # https://github.com/ali-vilab/i2vgen-xl/blob/2539c9262ff8a2a22fa9daecbfd13f0a2dbc32d0/tools/inferences/inference_i2vgen_entrance.py#L114
-        cropped_image = _center_crop_wide(image, (width, width))
-        cropped_image = _resize_bilinear(
-            cropped_image, (self.feature_extractor.crop_size["width"], self.feature_extractor.crop_size["height"])
-        )
-        image_embeddings = self._encode_image(cropped_image, device, num_videos_per_prompt)
-
-        # 3.2.2 Image latents.
-        resized_image = _center_crop_wide(image, (width, height))
-        image = self.video_processor.preprocess(resized_image).to(device=device, dtype=image_embeddings.dtype)
-        image_latents = self.prepare_image_latents(
-            image,
-            device=device,
-            num_frames=num_frames,
-            num_videos_per_prompt=num_videos_per_prompt,
-        )
-
-        # 3.3 Prepare additional conditions for the UNet.
-        if self.do_classifier_free_guidance:
-            fps_tensor = torch.tensor([target_fps, target_fps]).to(device)
-        else:
-            fps_tensor = torch.tensor([target_fps]).to(device)
-        fps_tensor = fps_tensor.repeat(batch_size * num_videos_per_prompt, 1).ravel()
-
-        # 4. Prepare timesteps
-        self.scheduler.set_timesteps(num_inference_steps, device=device)
-        timesteps = self.scheduler.timesteps
-
-        # 5. Prepare latent variables
-        num_channels_latents = self.unet.config.in_channels
-        latents = self.prepare_latents(
-            batch_size * num_videos_per_prompt,
-            num_channels_latents,
-            num_frames,
-            height,
-            width,
-            prompt_embeds.dtype,
-            device,
-            generator,
-            latents,
-        )
-
-        # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
-        extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
-
-        # 7. Denoising loop
-        num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
-        with self.progress_bar(total=num_inference_steps) as progress_bar:
-            for i, t in enumerate(timesteps):
-                # expand the latents if we are doing classifier free guidance
-                latent_model_input = torch.cat([latents] * 2) if self.do_classifier_free_guidance else latents
-                latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
-
-                # predict the noise residual
-                noise_pred = self.unet(
-                    latent_model_input,
-                    t,
-                    encoder_hidden_states=prompt_embeds,
-                    fps=fps_tensor,
-                    image_latents=image_latents,
-                    image_embeddings=image_embeddings,
-                    cross_attention_kwargs=cross_attention_kwargs,
-                    return_dict=False,
-                )[0]
-
-                # perform guidance
-                if self.do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                    noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
-
-                # reshape latents
-                batch_size, channel, frames, width, height = latents.shape
-                latents = latents.permute(0, 2, 1, 3, 4).reshape(batch_size * frames, channel, width, height)
-                noise_pred = noise_pred.permute(0, 2, 1, 3, 4).reshape(batch_size * frames, channel, width, height)
-
-                # compute the previous noisy sample x_t -> x_t-1
-                latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
-
-                # reshape latents back
-                latents = latents[None, :].reshape(batch_size, frames, channel, width, height).permute(0, 2, 1, 3, 4)
-                # call the callback, if provided
-                if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
-                    progress_bar.update()
-
-                if XLA_AVAILABLE:
-                    xm.mark_step()
-
-        # 8. Post processing
-        if output_type == "latent":
-            video = latents
-        else:
-            video_tensor = self.decode_latents(latents, decode_chunk_size=decode_chunk_size)
-            video = self.video_processor.postprocess_video(video=video_tensor, output_type=output_type)
-
-        # 9. Offload all models
-        self.maybe_free_model_hooks()
-
-        if not return_dict:
-            return (video,)
-
-        return I2VGenXLPipelineOutput(frames=video)
-
-
-# The following utilities are taken and adapted from
 # https://github.com/ali-vilab/i2vgen-xl/blob/main/utils/transforms.py.
-
 
 def _convert_pt_to_pil(image: Union[torch.Tensor, List[torch.Tensor]]):
     if isinstance(image, list) and isinstance(image[0], torch.Tensor):
@@ -759,7 +561,6 @@ def _convert_pt_to_pil(image: Union[torch.Tensor, List[torch.Tensor]]):
 
     return image
 
-
 def _resize_bilinear(
     image: Union[torch.Tensor, List[torch.Tensor], PIL.Image.Image, List[PIL.Image.Image]], resolution: Tuple[int, int]
 ):
@@ -771,7 +572,6 @@ def _resize_bilinear(
     else:
         image = image.resize(resolution, PIL.Image.BILINEAR)
     return image
-
 
 def _center_crop_wide(
     image: Union[torch.Tensor, List[torch.Tensor], PIL.Image.Image, List[PIL.Image.Image]], resolution: Tuple[int, int]

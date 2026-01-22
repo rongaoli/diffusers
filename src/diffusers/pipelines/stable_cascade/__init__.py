@@ -9,7 +9,6 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
 
@@ -24,7 +23,6 @@ else:
     _import_structure["pipeline_stable_cascade"] = ["StableCascadeDecoderPipeline"]
     _import_structure["pipeline_stable_cascade_combined"] = ["StableCascadeCombinedPipeline"]
     _import_structure["pipeline_stable_cascade_prior"] = ["StableCascadePriorPipeline"]
-
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:

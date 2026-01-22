@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import math
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
@@ -20,42 +6,13 @@ import torch
 from ..configuration_utils import register_to_config
 from .guider_utils import BaseGuidance, GuiderOutput, rescale_noise_cfg
 
-
 if TYPE_CHECKING:
     from ..modular_pipelines.modular_pipeline import BlockState
 
-
 class ClassifierFreeZeroStarGuidance(BaseGuidance):
-    """
-    Classifier-free Zero* (CFG-Zero*): https://huggingface.co/papers/2503.18886
+    
+    class ClassifierFreeZeroStarGuidance(BaseGuidance):
 
-    This is an implementation of the Classifier-Free Zero* guidance technique, which is a variant of classifier-free
-    guidance. It proposes zero initialization of the noise predictions for the first few steps of the diffusion
-    process, and also introduces an optimal rescaling factor for the noise predictions, which can help in improving the
-    quality of generated images.
-
-    The authors of the paper suggest setting zero initialization in the first 4% of the inference steps.
-
-    Args:
-        guidance_scale (`float`, defaults to `7.5`):
-            The scale parameter for classifier-free guidance. Higher values result in stronger conditioning on the text
-            prompt, while lower values allow for more freedom in generation. Higher values may lead to saturation and
-            deterioration of image quality.
-        zero_init_steps (`int`, defaults to `1`):
-            The number of inference steps for which the noise predictions are zeroed out (see Section 4.2).
-        guidance_rescale (`float`, defaults to `0.0`):
-            The rescale factor applied to the noise predictions. This is used to improve image quality and fix
-            overexposure. Based on Section 3.4 from [Common Diffusion Noise Schedules and Sample Steps are
-            Flawed](https://huggingface.co/papers/2305.08891).
-        use_original_formulation (`bool`, defaults to `False`):
-            Whether to use the original formulation of classifier-free guidance as proposed in the paper. By default,
-            we use the diffusers-native implementation that has been in the codebase for a long time. See
-            [~guiders.classifier_free_guidance.ClassifierFreeGuidance] for more details.
-        start (`float`, defaults to `0.01`):
-            The fraction of the total number of denoising steps after which guidance starts.
-        stop (`float`, defaults to `0.2`):
-            The fraction of the total number of denoising steps after which guidance stops.
-    """
 
     _input_predictions = ["pred_cond", "pred_uncond"]
 
@@ -149,7 +106,6 @@ class ClassifierFreeZeroStarGuidance(BaseGuidance):
             is_close = math.isclose(self.guidance_scale, 1.0)
 
         return is_within_range and not is_close
-
 
 def cfg_zero_star_scale(cond: torch.Tensor, uncond: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
     cond_dtype = cond.dtype

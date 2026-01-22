@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -26,570 +12,21 @@ from .attention_processor import Attention, AttentionProcessor, JointAttnProcess
 from .embeddings import SinusoidalPositionalEmbedding
 from .normalization import AdaLayerNorm, AdaLayerNormContinuous, AdaLayerNormZero, RMSNorm, SD35AdaLayerNormZeroX
 
-
 if is_xformers_available():
     import xformers as xops
 else:
     xops = None
 
-
 logger = logging.get_logger(__name__)
-
 
 class AttentionMixin:
     @property
     def attn_processors(self) -> Dict[str, AttentionProcessor]:
-        r"""
-        Returns:
-            `dict` of attention processors: A dictionary containing all attention processors used in the model with
-            indexed by its weight name.
-        """
-        # set recursively
-        processors = {}
+        class AttentionMixin:
+    @property
+    def attn_processors(self) -> Dict[str, AttentionProcessor]:
 
-        def fn_recursive_add_processors(name: str, module: torch.nn.Module, processors: Dict[str, AttentionProcessor]):
-            if hasattr(module, "get_processor"):
-                processors[f"{name}.processor"] = module.get_processor()
-
-            for sub_name, child in module.named_children():
-                fn_recursive_add_processors(f"{name}.{sub_name}", child, processors)
-
-            return processors
-
-        for name, module in self.named_children():
-            fn_recursive_add_processors(name, module, processors)
-
-        return processors
-
-    def set_attn_processor(self, processor: Union[AttentionProcessor, Dict[str, AttentionProcessor]]):
-        r"""
-        Sets the attention processor to use to compute attention.
-
-        Parameters:
-            processor (`dict` of `AttentionProcessor` or only `AttentionProcessor`):
-                The instantiated processor class or a dictionary of processor classes that will be set as the processor
-                for **all** `Attention` layers.
-
-                If `processor` is a dict, the key needs to define the path to the corresponding cross attention
-                processor. This is strongly recommended when setting trainable attention processors.
-
-        """
-        count = len(self.attn_processors.keys())
-
-        if isinstance(processor, dict) and len(processor) != count:
-            raise ValueError(
-                f"A dict of processors was passed, but the number of processors {len(processor)} does not match the"
-                f" number of attention layers: {count}. Please make sure to pass {count} processor classes."
-            )
-
-        def fn_recursive_attn_processor(name: str, module: torch.nn.Module, processor):
-            if hasattr(module, "set_processor"):
-                if not isinstance(processor, dict):
-                    module.set_processor(processor)
-                else:
-                    module.set_processor(processor.pop(f"{name}.processor"))
-
-            for sub_name, child in module.named_children():
-                fn_recursive_attn_processor(f"{name}.{sub_name}", child, processor)
-
-        for name, module in self.named_children():
-            fn_recursive_attn_processor(name, module, processor)
-
-    def fuse_qkv_projections(self):
-        """
-        Enables fused QKV projections. For self-attention modules, all projection matrices (i.e., query, key, value)
-        are fused. For cross-attention modules, key and value projection matrices are fused.
-        """
-        for _, attn_processor in self.attn_processors.items():
-            if "Added" in str(attn_processor.__class__.__name__):
-                raise ValueError("`fuse_qkv_projections()` is not supported for models having added KV projections.")
-
-        for module in self.modules():
-            if isinstance(module, AttentionModuleMixin) and module._supports_qkv_fusion:
-                module.fuse_projections()
-
-    def unfuse_qkv_projections(self):
-        """Disables the fused QKV projection if enabled.
-
-        > [!WARNING] > This API is 🧪 experimental.
-        """
-        for module in self.modules():
-            if isinstance(module, AttentionModuleMixin) and module._supports_qkv_fusion:
-                module.unfuse_projections()
-
-
-class AttentionModuleMixin:
-    _default_processor_cls = None
-    _available_processors = []
-    _supports_qkv_fusion = True
-    fused_projections = False
-
-    def set_processor(self, processor: AttentionProcessor) -> None:
-        """
-        Set the attention processor to use.
-
-        Args:
-            processor (`AttnProcessor`):
-                The attention processor to use.
-        """
-        # if current processor is in `self._modules` and if passed `processor` is not, we need to
-        # pop `processor` from `self._modules`
-        if (
-            hasattr(self, "processor")
-            and isinstance(self.processor, torch.nn.Module)
-            and not isinstance(processor, torch.nn.Module)
-        ):
-            logger.info(f"You are removing possibly trained weights of {self.processor} with {processor}")
-            self._modules.pop("processor")
-
-        self.processor = processor
-
-    def get_processor(self, return_deprecated_lora: bool = False) -> "AttentionProcessor":
-        """
-        Get the attention processor in use.
-
-        Args:
-            return_deprecated_lora (`bool`, *optional*, defaults to `False`):
-                Set to `True` to return the deprecated LoRA attention processor.
-
-        Returns:
-            "AttentionProcessor": The attention processor in use.
-        """
-        if not return_deprecated_lora:
-            return self.processor
-
-    def set_attention_backend(self, backend: str):
-        from .attention_dispatch import AttentionBackendName
-
-        available_backends = {x.value for x in AttentionBackendName.__members__.values()}
-        if backend not in available_backends:
-            raise ValueError(f"`{backend=}` must be one of the following: " + ", ".join(available_backends))
-
-        backend = AttentionBackendName(backend.lower())
-        self.processor._attention_backend = backend
-
-    def set_use_npu_flash_attention(self, use_npu_flash_attention: bool) -> None:
-        """
-        Set whether to use NPU flash attention from `torch_npu` or not.
-
-        Args:
-            use_npu_flash_attention (`bool`): Whether to use NPU flash attention or not.
-        """
-
-        if use_npu_flash_attention:
-            if not is_torch_npu_available():
-                raise ImportError("torch_npu is not available")
-
-        self.set_attention_backend("_native_npu")
-
-    def set_use_xla_flash_attention(
-        self,
-        use_xla_flash_attention: bool,
-        partition_spec: Optional[Tuple[Optional[str], ...]] = None,
-        is_flux=False,
-    ) -> None:
-        """
-        Set whether to use XLA flash attention from `torch_xla` or not.
-
-        Args:
-            use_xla_flash_attention (`bool`):
-                Whether to use pallas flash attention kernel from `torch_xla` or not.
-            partition_spec (`Tuple[]`, *optional*):
-                Specify the partition specification if using SPMD. Otherwise None.
-            is_flux (`bool`, *optional*, defaults to `False`):
-                Whether the model is a Flux model.
-        """
-        if use_xla_flash_attention:
-            if not is_torch_xla_available():
-                raise ImportError("torch_xla is not available")
-
-        self.set_attention_backend("_native_xla")
-
-    def set_use_memory_efficient_attention_xformers(
-        self, use_memory_efficient_attention_xformers: bool, attention_op: Optional[Callable] = None
-    ) -> None:
-        """
-        Set whether to use memory efficient attention from `xformers` or not.
-
-        Args:
-            use_memory_efficient_attention_xformers (`bool`):
-                Whether to use memory efficient attention from `xformers` or not.
-            attention_op (`Callable`, *optional*):
-                The attention operation to use. Defaults to `None` which uses the default attention operation from
-                `xformers`.
-        """
-        if use_memory_efficient_attention_xformers:
-            if not is_xformers_available():
-                raise ModuleNotFoundError(
-                    "Refer to https://github.com/facebookresearch/xformers for more information on how to install xformers",
-                    name="xformers",
-                )
-            elif not torch.cuda.is_available():
-                raise ValueError(
-                    "torch.cuda.is_available() should be True but is False. xformers' memory efficient attention is"
-                    " only available for GPU "
-                )
-            else:
-                try:
-                    # Make sure we can run the memory efficient attention
-                    if is_xformers_available():
-                        dtype = None
-                        if attention_op is not None:
-                            op_fw, op_bw = attention_op
-                            dtype, *_ = op_fw.SUPPORTED_DTYPES
-                        q = torch.randn((1, 2, 40), device="cuda", dtype=dtype)
-                        _ = xops.ops.memory_efficient_attention(q, q, q)
-                except Exception as e:
-                    raise e
-
-                self.set_attention_backend("xformers")
-
-    @torch.no_grad()
-    def fuse_projections(self):
-        """
-        Fuse the query, key, and value projections into a single projection for efficiency.
-        """
-        # Skip if the AttentionModuleMixin subclass does not support fusion (for example, the QKV projections in Flux2
-        # single stream blocks are always fused)
-        if not self._supports_qkv_fusion:
-            logger.debug(
-                f"{self.__class__.__name__} does not support fusing QKV projections, so `fuse_projections` will no-op."
-            )
-            return
-
-        # Skip if already fused
-        if getattr(self, "fused_projections", False):
-            return
-
-        device = self.to_q.weight.data.device
-        dtype = self.to_q.weight.data.dtype
-
-        if hasattr(self, "is_cross_attention") and self.is_cross_attention:
-            # Fuse cross-attention key-value projections
-            concatenated_weights = torch.cat([self.to_k.weight.data, self.to_v.weight.data])
-            in_features = concatenated_weights.shape[1]
-            out_features = concatenated_weights.shape[0]
-
-            self.to_kv = nn.Linear(in_features, out_features, bias=self.use_bias, device=device, dtype=dtype)
-            self.to_kv.weight.copy_(concatenated_weights)
-            if hasattr(self, "use_bias") and self.use_bias:
-                concatenated_bias = torch.cat([self.to_k.bias.data, self.to_v.bias.data])
-                self.to_kv.bias.copy_(concatenated_bias)
-        else:
-            # Fuse self-attention projections
-            concatenated_weights = torch.cat([self.to_q.weight.data, self.to_k.weight.data, self.to_v.weight.data])
-            in_features = concatenated_weights.shape[1]
-            out_features = concatenated_weights.shape[0]
-
-            self.to_qkv = nn.Linear(in_features, out_features, bias=self.use_bias, device=device, dtype=dtype)
-            self.to_qkv.weight.copy_(concatenated_weights)
-            if hasattr(self, "use_bias") and self.use_bias:
-                concatenated_bias = torch.cat([self.to_q.bias.data, self.to_k.bias.data, self.to_v.bias.data])
-                self.to_qkv.bias.copy_(concatenated_bias)
-
-        # Handle added projections for models like SD3, Flux, etc.
-        if (
-            getattr(self, "add_q_proj", None) is not None
-            and getattr(self, "add_k_proj", None) is not None
-            and getattr(self, "add_v_proj", None) is not None
-        ):
-            concatenated_weights = torch.cat(
-                [self.add_q_proj.weight.data, self.add_k_proj.weight.data, self.add_v_proj.weight.data]
-            )
-            in_features = concatenated_weights.shape[1]
-            out_features = concatenated_weights.shape[0]
-
-            self.to_added_qkv = nn.Linear(
-                in_features, out_features, bias=self.added_proj_bias, device=device, dtype=dtype
-            )
-            self.to_added_qkv.weight.copy_(concatenated_weights)
-            if self.added_proj_bias:
-                concatenated_bias = torch.cat(
-                    [self.add_q_proj.bias.data, self.add_k_proj.bias.data, self.add_v_proj.bias.data]
-                )
-                self.to_added_qkv.bias.copy_(concatenated_bias)
-
-        self.fused_projections = True
-
-    @torch.no_grad()
-    def unfuse_projections(self):
-        """
-        Unfuse the query, key, and value projections back to separate projections.
-        """
-        # Skip if the AttentionModuleMixin subclass does not support fusion (for example, the QKV projections in Flux2
-        # single stream blocks are always fused)
-        if not self._supports_qkv_fusion:
-            return
-
-        # Skip if not fused
-        if not getattr(self, "fused_projections", False):
-            return
-
-        # Remove fused projection layers
-        if hasattr(self, "to_qkv"):
-            delattr(self, "to_qkv")
-
-        if hasattr(self, "to_kv"):
-            delattr(self, "to_kv")
-
-        if hasattr(self, "to_added_qkv"):
-            delattr(self, "to_added_qkv")
-
-        self.fused_projections = False
-
-    def set_attention_slice(self, slice_size: int) -> None:
-        """
-        Set the slice size for attention computation.
-
-        Args:
-            slice_size (`int`):
-                The slice size for attention computation.
-        """
-        if hasattr(self, "sliceable_head_dim") and slice_size is not None and slice_size > self.sliceable_head_dim:
-            raise ValueError(f"slice_size {slice_size} has to be smaller or equal to {self.sliceable_head_dim}.")
-
-        processor = None
-
-        # Try to get a compatible processor for sliced attention
-        if slice_size is not None:
-            processor = self._get_compatible_processor("sliced")
-
-        # If no processor was found or slice_size is None, use default processor
-        if processor is None:
-            processor = self.default_processor_cls()
-
-        self.set_processor(processor)
-
-    def batch_to_head_dim(self, tensor: torch.Tensor) -> torch.Tensor:
-        """
-        Reshape the tensor from `[batch_size, seq_len, dim]` to `[batch_size // heads, seq_len, dim * heads]`.
-
-        Args:
-            tensor (`torch.Tensor`): The tensor to reshape.
-
-        Returns:
-            `torch.Tensor`: The reshaped tensor.
-        """
-        head_size = self.heads
-        batch_size, seq_len, dim = tensor.shape
-        tensor = tensor.reshape(batch_size // head_size, head_size, seq_len, dim)
-        tensor = tensor.permute(0, 2, 1, 3).reshape(batch_size // head_size, seq_len, dim * head_size)
-        return tensor
-
-    def head_to_batch_dim(self, tensor: torch.Tensor, out_dim: int = 3) -> torch.Tensor:
-        """
-        Reshape the tensor for multi-head attention processing.
-
-        Args:
-            tensor (`torch.Tensor`): The tensor to reshape.
-            out_dim (`int`, *optional*, defaults to `3`): The output dimension of the tensor.
-
-        Returns:
-            `torch.Tensor`: The reshaped tensor.
-        """
-        head_size = self.heads
-        if tensor.ndim == 3:
-            batch_size, seq_len, dim = tensor.shape
-            extra_dim = 1
-        else:
-            batch_size, extra_dim, seq_len, dim = tensor.shape
-        tensor = tensor.reshape(batch_size, seq_len * extra_dim, head_size, dim // head_size)
-        tensor = tensor.permute(0, 2, 1, 3)
-
-        if out_dim == 3:
-            tensor = tensor.reshape(batch_size * head_size, seq_len * extra_dim, dim // head_size)
-
-        return tensor
-
-    def get_attention_scores(
-        self, query: torch.Tensor, key: torch.Tensor, attention_mask: Optional[torch.Tensor] = None
-    ) -> torch.Tensor:
-        """
-        Compute the attention scores.
-
-        Args:
-            query (`torch.Tensor`): The query tensor.
-            key (`torch.Tensor`): The key tensor.
-            attention_mask (`torch.Tensor`, *optional*): The attention mask to use.
-
-        Returns:
-            `torch.Tensor`: The attention probabilities/scores.
-        """
-        dtype = query.dtype
-        if self.upcast_attention:
-            query = query.float()
-            key = key.float()
-
-        if attention_mask is None:
-            baddbmm_input = torch.empty(
-                query.shape[0], query.shape[1], key.shape[1], dtype=query.dtype, device=query.device
-            )
-            beta = 0
-        else:
-            baddbmm_input = attention_mask
-            beta = 1
-
-        attention_scores = torch.baddbmm(
-            baddbmm_input,
-            query,
-            key.transpose(-1, -2),
-            beta=beta,
-            alpha=self.scale,
-        )
-        del baddbmm_input
-
-        if self.upcast_softmax:
-            attention_scores = attention_scores.float()
-
-        attention_probs = attention_scores.softmax(dim=-1)
-        del attention_scores
-
-        attention_probs = attention_probs.to(dtype)
-
-        return attention_probs
-
-    def prepare_attention_mask(
-        self, attention_mask: torch.Tensor, target_length: int, batch_size: int, out_dim: int = 3
-    ) -> torch.Tensor:
-        """
-        Prepare the attention mask for the attention computation.
-
-        Args:
-            attention_mask (`torch.Tensor`): The attention mask to prepare.
-            target_length (`int`): The target length of the attention mask.
-            batch_size (`int`): The batch size for repeating the attention mask.
-            out_dim (`int`, *optional*, defaults to `3`): Output dimension.
-
-        Returns:
-            `torch.Tensor`: The prepared attention mask.
-        """
-        head_size = self.heads
-        if attention_mask is None:
-            return attention_mask
-
-        current_length: int = attention_mask.shape[-1]
-        if current_length != target_length:
-            if attention_mask.device.type == "mps":
-                # HACK: MPS: Does not support padding by greater than dimension of input tensor.
-                # Instead, we can manually construct the padding tensor.
-                padding_shape = (attention_mask.shape[0], attention_mask.shape[1], target_length)
-                padding = torch.zeros(padding_shape, dtype=attention_mask.dtype, device=attention_mask.device)
-                attention_mask = torch.cat([attention_mask, padding], dim=2)
-            else:
-                # TODO: for pipelines such as stable-diffusion, padding cross-attn mask:
-                #       we want to instead pad by (0, remaining_length), where remaining_length is:
-                #       remaining_length: int = target_length - current_length
-                # TODO: re-enable tests/models/test_models_unet_2d_condition.py#test_model_xattn_padding
-                attention_mask = F.pad(attention_mask, (0, target_length), value=0.0)
-
-        if out_dim == 3:
-            if attention_mask.shape[0] < batch_size * head_size:
-                attention_mask = attention_mask.repeat_interleave(head_size, dim=0)
-        elif out_dim == 4:
-            attention_mask = attention_mask.unsqueeze(1)
-            attention_mask = attention_mask.repeat_interleave(head_size, dim=1)
-
-        return attention_mask
-
-    def norm_encoder_hidden_states(self, encoder_hidden_states: torch.Tensor) -> torch.Tensor:
-        """
-        Normalize the encoder hidden states.
-
-        Args:
-            encoder_hidden_states (`torch.Tensor`): Hidden states of the encoder.
-
-        Returns:
-            `torch.Tensor`: The normalized encoder hidden states.
-        """
-        assert self.norm_cross is not None, "self.norm_cross must be defined to call self.norm_encoder_hidden_states"
-        if isinstance(self.norm_cross, nn.LayerNorm):
-            encoder_hidden_states = self.norm_cross(encoder_hidden_states)
-        elif isinstance(self.norm_cross, nn.GroupNorm):
-            # Group norm norms along the channels dimension and expects
-            # input to be in the shape of (N, C, *). In this case, we want
-            # to norm along the hidden dimension, so we need to move
-            # (batch_size, sequence_length, hidden_size) ->
-            # (batch_size, hidden_size, sequence_length)
-            encoder_hidden_states = encoder_hidden_states.transpose(1, 2)
-            encoder_hidden_states = self.norm_cross(encoder_hidden_states)
-            encoder_hidden_states = encoder_hidden_states.transpose(1, 2)
-        else:
-            assert False
-
-        return encoder_hidden_states
-
-
-def _chunked_feed_forward(ff: nn.Module, hidden_states: torch.Tensor, chunk_dim: int, chunk_size: int):
-    # "feed_forward_chunk_size" can be used to save memory
-    if hidden_states.shape[chunk_dim] % chunk_size != 0:
-        raise ValueError(
-            f"`hidden_states` dimension to be chunked: {hidden_states.shape[chunk_dim]} has to be divisible by chunk size: {chunk_size}. Make sure to set an appropriate `chunk_size` when calling `unet.enable_forward_chunking`."
-        )
-
-    num_chunks = hidden_states.shape[chunk_dim] // chunk_size
-    ff_output = torch.cat(
-        [ff(hid_slice) for hid_slice in hidden_states.chunk(num_chunks, dim=chunk_dim)],
-        dim=chunk_dim,
-    )
-    return ff_output
-
-
-@maybe_allow_in_graph
-class GatedSelfAttentionDense(nn.Module):
-    r"""
     A gated self-attention dense layer that combines visual features and object features.
-
-    Parameters:
-        query_dim (`int`): The number of channels in the query.
-        context_dim (`int`): The number of channels in the context.
-        n_heads (`int`): The number of heads to use for attention.
-        d_head (`int`): The number of channels in each head.
-    """
-
-    def __init__(self, query_dim: int, context_dim: int, n_heads: int, d_head: int):
-        super().__init__()
-
-        # we need a linear projection since we need cat visual feature and obj feature
-        self.linear = nn.Linear(context_dim, query_dim)
-
-        self.attn = Attention(query_dim=query_dim, heads=n_heads, dim_head=d_head)
-        self.ff = FeedForward(query_dim, activation_fn="geglu")
-
-        self.norm1 = nn.LayerNorm(query_dim)
-        self.norm2 = nn.LayerNorm(query_dim)
-
-        self.register_parameter("alpha_attn", nn.Parameter(torch.tensor(0.0)))
-        self.register_parameter("alpha_dense", nn.Parameter(torch.tensor(0.0)))
-
-        self.enabled = True
-
-    def forward(self, x: torch.Tensor, objs: torch.Tensor) -> torch.Tensor:
-        if not self.enabled:
-            return x
-
-        n_visual = x.shape[1]
-        objs = self.linear(objs)
-
-        x = x + self.alpha_attn.tanh() * self.attn(self.norm1(torch.cat([x, objs], dim=1)))[:, :n_visual, :]
-        x = x + self.alpha_dense.tanh() * self.ff(self.norm2(x))
-
-        return x
-
-
-@maybe_allow_in_graph
-class JointTransformerBlock(nn.Module):
-    r"""
-    A Transformer block following the MMDiT architecture, introduced in Stable Diffusion 3.
-
-    Reference: https://huggingface.co/papers/2403.03206
-
-    Parameters:
-        dim (`int`): The number of channels in the input and output.
-        num_attention_heads (`int`): The number of heads to use for multi-head attention.
-        attention_head_dim (`int`): The number of channels in each head.
-        context_pre_only (`bool`): Boolean to determine if we should add some blocks associated with the
-            processing of `context` conditions.
-    """
 
     def __init__(
         self,
@@ -747,42 +184,9 @@ class JointTransformerBlock(nn.Module):
 
         return encoder_hidden_states, hidden_states
 
-
 @maybe_allow_in_graph
 class BasicTransformerBlock(nn.Module):
-    r"""
-    A basic Transformer block.
 
-    Parameters:
-        dim (`int`): The number of channels in the input and output.
-        num_attention_heads (`int`): The number of heads to use for multi-head attention.
-        attention_head_dim (`int`): The number of channels in each head.
-        dropout (`float`, *optional*, defaults to 0.0): The dropout probability to use.
-        cross_attention_dim (`int`, *optional*): The size of the encoder_hidden_states vector for cross attention.
-        activation_fn (`str`, *optional*, defaults to `"geglu"`): Activation function to be used in feed-forward.
-        num_embeds_ada_norm (:
-            obj: `int`, *optional*): The number of diffusion steps used during training. See `Transformer2DModel`.
-        attention_bias (:
-            obj: `bool`, *optional*, defaults to `False`): Configure if the attentions should contain a bias parameter.
-        only_cross_attention (`bool`, *optional*):
-            Whether to use only cross-attention layers. In this case two cross attention layers are used.
-        double_self_attention (`bool`, *optional*):
-            Whether to use two self-attention layers. In this case no cross attention layers are used.
-        upcast_attention (`bool`, *optional*):
-            Whether to upcast the attention computation to float32. This is useful for mixed precision training.
-        norm_elementwise_affine (`bool`, *optional*, defaults to `True`):
-            Whether to use learnable elementwise affine parameters for normalization.
-        norm_type (`str`, *optional*, defaults to `"layer_norm"`):
-            The normalization layer to use. Can be `"layer_norm"`, `"ada_norm"` or `"ada_norm_zero"`.
-        final_dropout (`bool` *optional*, defaults to False):
-            Whether to apply a final dropout after the last feed-forward layer.
-        attention_type (`str`, *optional*, defaults to `"default"`):
-            The type of attention to use. Can be `"default"` or `"gated"` or `"gated-text-image"`.
-        positional_embeddings (`str`, *optional*, defaults to `None`):
-            The type of positional embeddings to apply to.
-        num_positional_embeddings (`int`, *optional*, defaults to `None`):
-            The maximum number of positional embeddings to apply.
-    """
 
     def __init__(
         self,
@@ -881,8 +285,8 @@ class BasicTransformerBlock(nn.Module):
 
         # 2. Cross-Attn
         if cross_attention_dim is not None or double_self_attention:
-            # We currently only use AdaLayerNormZero for self attention where there will only be one attention block.
-            # I.e. the number of returned modulation chunks from AdaLayerZero would not make sense if returned during
+            # We currently only use AdaLayerNormZe...
+            # I.e. the number of returned modulati...
             # the second cross attention block.
             if norm_type == "ada_norm":
                 self.norm2 = AdaLayerNorm(dim, num_embeds_ada_norm)
@@ -972,7 +376,7 @@ class BasicTransformerBlock(nn.Module):
             if cross_attention_kwargs.get("scale", None) is not None:
                 logger.warning("Passing `scale` to `cross_attention_kwargs` is deprecated. `scale` will be ignored.")
 
-        # Notice that normalization is always applied before the real computation in the following blocks.
+        # Notice that normalization is always appl...
         # 0. Self-Attention
         batch_size = hidden_states.shape[0]
 
@@ -1030,7 +434,7 @@ class BasicTransformerBlock(nn.Module):
                 norm_hidden_states = self.norm2(hidden_states)
             elif self.norm_type == "ada_norm_single":
                 # For PixArt norm2 isn't applied here:
-                # https://github.com/PixArt-alpha/PixArt-alpha/blob/0f55e922376d8b797edd44d25d0e7464b260dcab/diffusion/model/nets/PixArtMS.py#L70C1-L76C103
+                # https://github.com/PixArt-alpha/...
                 norm_hidden_states = hidden_states
             elif self.norm_type == "ada_norm_continuous":
                 norm_hidden_states = self.norm2(hidden_states, added_cond_kwargs["pooled_text_emb"])
@@ -1079,21 +483,8 @@ class BasicTransformerBlock(nn.Module):
 
         return hidden_states
 
-
 class LuminaFeedForward(nn.Module):
-    r"""
-    A feed-forward layer.
 
-    Parameters:
-        hidden_size (`int`):
-            The dimensionality of the hidden layers in the model. This parameter determines the width of the model's
-            hidden representations.
-        intermediate_size (`int`): The intermediate dimension of the feedforward layer.
-        multiple_of (`int`, *optional*): Value to ensure hidden dimension is a multiple
-            of this value.
-        ffn_dim_multiplier (float, *optional*): Custom multiplier for hidden
-            dimension. Defaults to None.
-    """
 
     def __init__(
         self,
@@ -1128,19 +519,9 @@ class LuminaFeedForward(nn.Module):
     def forward(self, x):
         return self.linear_2(self.silu(self.linear_1(x)) * self.linear_3(x))
 
-
 @maybe_allow_in_graph
 class TemporalBasicTransformerBlock(nn.Module):
-    r"""
-    A basic Transformer block for video like data.
 
-    Parameters:
-        dim (`int`): The number of channels in the input and output.
-        time_mix_inner_dim (`int`): The number of channels for temporal attention.
-        num_attention_heads (`int`): The number of heads to use for multi-head attention.
-        attention_head_dim (`int`): The number of channels in each head.
-        cross_attention_dim (`int`, *optional*): The size of the encoder_hidden_states vector for cross attention.
-    """
 
     def __init__(
         self,
@@ -1173,8 +554,8 @@ class TemporalBasicTransformerBlock(nn.Module):
 
         # 2. Cross-Attn
         if cross_attention_dim is not None:
-            # We currently only use AdaLayerNormZero for self attention where there will only be one attention block.
-            # I.e. the number of returned modulation chunks from AdaLayerZero would not make sense if returned during
+            # We currently only use AdaLayerNormZe...
+            # I.e. the number of returned modulati...
             # the second cross attention block.
             self.norm2 = nn.LayerNorm(time_mix_inner_dim)
             self.attn2 = Attention(
@@ -1207,7 +588,7 @@ class TemporalBasicTransformerBlock(nn.Module):
         num_frames: int,
         encoder_hidden_states: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        # Notice that normalization is always applied before the real computation in the following blocks.
+        # Notice that normalization is always appl...
         # 0. Self-Attention
         batch_size = hidden_states.shape[0]
 
@@ -1257,7 +638,6 @@ class TemporalBasicTransformerBlock(nn.Module):
         hidden_states = hidden_states.reshape(batch_size * num_frames, seq_length, channels)
 
         return hidden_states
-
 
 class SkipFFTransformerBlock(nn.Module):
     def __init__(
@@ -1330,62 +710,82 @@ class SkipFFTransformerBlock(nn.Module):
 
         return hidden_states
 
+@maybe_allow_in_graph
+class FreeNoiseTransformerBlock(nn.Module):
+    class SkipFFTransformerBlock(nn.Module):
+    def __init__(
+        self,
+        dim: int,
+        num_attention_heads: int,
+        attention_head_dim: int,
+        kv_input_dim: int,
+        kv_input_dim_proj_use_bias: bool,
+        dropout=0.0,
+        cross_attention_dim: Optional[int] = None,
+        attention_bias: bool = False,
+        attention_out_bias: bool = True,
+    ):
+        super().__init__()
+        if kv_input_dim != dim:
+            self.kv_mapper = nn.Linear(kv_input_dim, dim, kv_input_dim_proj_use_bias)
+        else:
+            self.kv_mapper = None
+
+        self.norm1 = RMSNorm(dim, 1e-06)
+
+        self.attn1 = Attention(
+            query_dim=dim,
+            heads=num_attention_heads,
+            dim_head=attention_head_dim,
+            dropout=dropout,
+            bias=attention_bias,
+            cross_attention_dim=cross_attention_dim,
+            out_bias=attention_out_bias,
+        )
+
+        self.norm2 = RMSNorm(dim, 1e-06)
+
+        self.attn2 = Attention(
+            query_dim=dim,
+            cross_attention_dim=cross_attention_dim,
+            heads=num_attention_heads,
+            dim_head=attention_head_dim,
+            dropout=dropout,
+            bias=attention_bias,
+            out_bias=attention_out_bias,
+        )
+
+    def forward(self, hidden_states, encoder_hidden_states, cross_attention_kwargs):
+        cross_attention_kwargs = cross_attention_kwargs.copy() if cross_attention_kwargs is not None else {}
+
+        if self.kv_mapper is not None:
+            encoder_hidden_states = self.kv_mapper(F.silu(encoder_hidden_states))
+
+        norm_hidden_states = self.norm1(hidden_states)
+
+        attn_output = self.attn1(
+            norm_hidden_states,
+            encoder_hidden_states=encoder_hidden_states,
+            **cross_attention_kwargs,
+        )
+
+        hidden_states = attn_output + hidden_states
+
+        norm_hidden_states = self.norm2(hidden_states)
+
+        attn_output = self.attn2(
+            norm_hidden_states,
+            encoder_hidden_states=encoder_hidden_states,
+            **cross_attention_kwargs,
+        )
+
+        hidden_states = attn_output + hidden_states
+
+        return hidden_states
 
 @maybe_allow_in_graph
 class FreeNoiseTransformerBlock(nn.Module):
-    r"""
-    A FreeNoise Transformer block.
 
-    Parameters:
-        dim (`int`):
-            The number of channels in the input and output.
-        num_attention_heads (`int`):
-            The number of heads to use for multi-head attention.
-        attention_head_dim (`int`):
-            The number of channels in each head.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability to use.
-        cross_attention_dim (`int`, *optional*):
-            The size of the encoder_hidden_states vector for cross attention.
-        activation_fn (`str`, *optional*, defaults to `"geglu"`):
-            Activation function to be used in feed-forward.
-        num_embeds_ada_norm (`int`, *optional*):
-            The number of diffusion steps used during training. See `Transformer2DModel`.
-        attention_bias (`bool`, defaults to `False`):
-            Configure if the attentions should contain a bias parameter.
-        only_cross_attention (`bool`, defaults to `False`):
-            Whether to use only cross-attention layers. In this case two cross attention layers are used.
-        double_self_attention (`bool`, defaults to `False`):
-            Whether to use two self-attention layers. In this case no cross attention layers are used.
-        upcast_attention (`bool`, defaults to `False`):
-            Whether to upcast the attention computation to float32. This is useful for mixed precision training.
-        norm_elementwise_affine (`bool`, defaults to `True`):
-            Whether to use learnable elementwise affine parameters for normalization.
-        norm_type (`str`, defaults to `"layer_norm"`):
-            The normalization layer to use. Can be `"layer_norm"`, `"ada_norm"` or `"ada_norm_zero"`.
-        final_dropout (`bool` defaults to `False`):
-            Whether to apply a final dropout after the last feed-forward layer.
-        attention_type (`str`, defaults to `"default"`):
-            The type of attention to use. Can be `"default"` or `"gated"` or `"gated-text-image"`.
-        positional_embeddings (`str`, *optional*):
-            The type of positional embeddings to apply to.
-        num_positional_embeddings (`int`, *optional*, defaults to `None`):
-            The maximum number of positional embeddings to apply.
-        ff_inner_dim (`int`, *optional*):
-            Hidden dimension of feed-forward MLP.
-        ff_bias (`bool`, defaults to `True`):
-            Whether or not to use bias in feed-forward MLP.
-        attention_out_bias (`bool`, defaults to `True`):
-            Whether or not to use bias in attention output project layer.
-        context_length (`int`, defaults to `16`):
-            The maximum number of frames that the FreeNoise block processes at once.
-        context_stride (`int`, defaults to `4`):
-            The number of frames to be skipped before starting to process a new batch of `context_length` frames.
-        weighting_scheme (`str`, defaults to `"pyramid"`):
-            The weighting scheme to use for weighting averaging of processed latent frames. As described in the
-            Equation 9. of the [FreeNoise](https://huggingface.co/papers/2310.15169) paper, "pyramid" is the default
-            setting used.
-    """
 
     def __init__(
         self,
@@ -1580,7 +980,7 @@ class FreeNoiseTransformerBlock(nn.Module):
         is_last_frame_batch_complete = frame_indices[-1][1] == num_frames
 
         # Handle out-of-bounds case if num_frames isn't perfectly divisible by context_length
-        # For example, num_frames=25, context_length=16, context_stride=4, then we expect the ranges:
+        # For example, num_frames=25, context_leng...
         #    [(0, 16), (4, 20), (8, 24), (10, 26)]
         if not is_last_frame_batch_complete:
             if num_frames < self.context_length:
@@ -1592,15 +992,15 @@ class FreeNoiseTransformerBlock(nn.Module):
         accumulated_values = torch.zeros_like(hidden_states)
 
         for i, (frame_start, frame_end) in enumerate(frame_indices):
-            # The reason for slicing here is to ensure that if (frame_end - frame_start) is to handle
-            # cases like frame_indices=[(0, 16), (16, 20)], if the user provided a video with 19 frames, or
+            # The reason for slicing here is to en...
+            # cases like frame_indices=[(0, 16), (...
             # essentially a non-multiple of `context_length`.
             weights = torch.ones_like(num_times_accumulated[:, frame_start:frame_end])
             weights *= frame_weights
 
             hidden_states_chunk = hidden_states[:, frame_start:frame_end]
 
-            # Notice that normalization is always applied before the real computation in the following blocks.
+            # Notice that normalization is always...
             # 1. Self-Attention
             norm_hidden_states = self.norm1(hidden_states_chunk)
 
@@ -1646,13 +1046,13 @@ class FreeNoiseTransformerBlock(nn.Module):
         #
         # Previously, this was:
         # hidden_states = torch.where(
-        #    num_times_accumulated > 0, accumulated_values / num_times_accumulated, accumulated_values
+        #    num_times_accumulated > 0, accumulate...
         # )
         #
-        # The reasoning for the change here is `torch.where` became a bottleneck at some point when golfing memory
-        # spikes. It is particularly noticeable when the number of frames is high. My understanding is that this comes
-        # from tensors being copied - which is why we resort to spliting and concatenating here. I've not particularly
-        # looked into this deeply because other memory optimizations led to more pronounced reductions.
+        # The reasoning for the change here is `to...
+        # spikes. It is particularly noticeable wh...
+        # from tensors being copied - which is why...
+        # looked into this deeply because other me...
         hidden_states = torch.cat(
             [
                 torch.where(num_times_split > 0, accumulated_split / num_times_split, accumulated_split)
@@ -1678,20 +1078,8 @@ class FreeNoiseTransformerBlock(nn.Module):
 
         return hidden_states
 
-
 class FeedForward(nn.Module):
-    r"""
-    A feed-forward layer.
 
-    Parameters:
-        dim (`int`): The number of channels in the input.
-        dim_out (`int`, *optional*): The number of channels in the output. If not given, defaults to `dim`.
-        mult (`int`, *optional*, defaults to 4): The multiplier to use for the hidden dimension.
-        dropout (`float`, *optional*, defaults to 0.0): The dropout probability to use.
-        activation_fn (`str`, *optional*, defaults to `"geglu"`): Activation function to be used in feed-forward.
-        final_dropout (`bool` *optional*, defaults to False): Apply a final dropout.
-        bias (`bool`, defaults to True): Whether to use a bias in the linear layer.
-    """
 
     def __init__(
         self,

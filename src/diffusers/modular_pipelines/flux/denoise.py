@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import Any, List, Tuple
 
 import torch
@@ -28,9 +14,7 @@ from ..modular_pipeline import (
 from ..modular_pipeline_utils import ComponentSpec, InputParam, OutputParam
 from .modular_pipeline import FluxModularPipeline
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 class FluxLoopDenoiser(ModularPipelineBlocks):
     model_name = "flux"
@@ -107,7 +91,6 @@ class FluxLoopDenoiser(ModularPipelineBlocks):
         block_state.noise_pred = noise_pred
 
         return components, block_state
-
 
 class FluxKontextLoopDenoiser(ModularPipelineBlocks):
     model_name = "flux-kontext"
@@ -198,7 +181,6 @@ class FluxKontextLoopDenoiser(ModularPipelineBlocks):
 
         return components, block_state
 
-
 class FluxLoopAfterDenoiser(ModularPipelineBlocks):
     model_name = "flux"
 
@@ -241,7 +223,6 @@ class FluxLoopAfterDenoiser(ModularPipelineBlocks):
             block_state.latents = block_state.latents.to(latents_dtype)
 
         return components, block_state
-
 
 class FluxDenoiseLoopWrapper(LoopSequentialPipelineBlocks):
     model_name = "flux"
@@ -296,7 +277,6 @@ class FluxDenoiseLoopWrapper(LoopSequentialPipelineBlocks):
 
         return components, state
 
-
 class FluxDenoiseStep(FluxDenoiseLoopWrapper):
     block_classes = [FluxLoopDenoiser, FluxLoopAfterDenoiser]
     block_names = ["denoiser", "after_denoiser"]
@@ -311,7 +291,6 @@ class FluxDenoiseStep(FluxDenoiseLoopWrapper):
             " - `FluxLoopAfterDenoiser`\n"
             "This block supports both text2image and img2img tasks."
         )
-
 
 class FluxKontextDenoiseStep(FluxDenoiseLoopWrapper):
     model_name = "flux-kontext"

@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import html
 from typing import List, Optional, Union
 
@@ -28,32 +14,26 @@ from ..modular_pipeline import ModularPipelineBlocks, PipelineState
 from ..modular_pipeline_utils import ComponentSpec, InputParam, OutputParam
 from .modular_pipeline import FluxModularPipeline
 
-
 if is_ftfy_available():
     import ftfy
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 def basic_clean(text):
     text = ftfy.fix_text(text)
     text = html.unescape(html.unescape(text))
     return text.strip()
 
-
 def whitespace_clean(text):
     text = re.sub(r"\s+", " ", text)
     text = text.strip()
     return text
 
-
 def prompt_clean(text):
     text = whitespace_clean(basic_clean(text))
     return text
 
-
-# Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img.retrieve_latents
+# Copied from diffusers.pipelines.stable_diffusion...
 def retrieve_latents(
     encoder_output: torch.Tensor, generator: Optional[torch.Generator] = None, sample_mode: str = "sample"
 ):
@@ -65,7 +45,6 @@ def retrieve_latents(
         return encoder_output.latents
     else:
         raise AttributeError("Could not access latents of provided encoder_output")
-
 
 def encode_vae_image(vae: AutoencoderKL, image: torch.Tensor, generator: torch.Generator, sample_mode="sample"):
     if isinstance(generator, list):
@@ -80,7 +59,6 @@ def encode_vae_image(vae: AutoencoderKL, image: torch.Tensor, generator: torch.G
     image_latents = (image_latents - vae.config.shift_factor) * vae.config.scaling_factor
 
     return image_latents
-
 
 class FluxProcessImagesInputStep(ModularPipelineBlocks):
     model_name = "flux"
@@ -138,7 +116,6 @@ class FluxProcessImagesInputStep(ModularPipelineBlocks):
 
         self.set_block_state(state, block_state)
         return components, state
-
 
 class FluxKontextProcessImagesInputStep(ModularPipelineBlocks):
     model_name = "flux-kontext"
@@ -205,6 +182,133 @@ class FluxKontextProcessImagesInputStep(ModularPipelineBlocks):
         self.set_block_state(state, block_state)
         return components, state
 
+class FluxVaeEncoderDynamicStep(ModularPipelineBlocks):
+    model_name = "flux"
+
+    def __init__(
+        self, input_name: str = "processed_image", output_name: str = "image_latents", sample_mode: str = "sample"
+    ):
+        class FluxProcessImagesInputStep(ModularPipelineBlocks):
+    model_name = "flux"
+
+    @property
+    def description(self) -> str:
+        return "Image Preprocess step."
+
+    @property
+    def expected_components(self) -> List[ComponentSpec]:
+        return [
+            ComponentSpec(
+                "image_processor",
+                VaeImageProcessor,
+                config=FrozenDict({"vae_scale_factor": 16, "vae_latent_channels": 16}),
+                default_creation_method="from_config",
+            ),
+        ]
+
+    @property
+    def inputs(self) -> List[InputParam]:
+        return [InputParam("resized_image"), InputParam("image"), InputParam("height"), InputParam("width")]
+
+    @property
+    def intermediate_outputs(self) -> List[OutputParam]:
+        return [OutputParam(name="processed_image")]
+
+    @staticmethod
+    def check_inputs(height, width, vae_scale_factor):
+        if height is not None and height % (vae_scale_factor * 2) != 0:
+            raise ValueError(f"Height must be divisible by {vae_scale_factor * 2} but is {height}")
+
+        if width is not None and width % (vae_scale_factor * 2) != 0:
+            raise ValueError(f"Width must be divisible by {vae_scale_factor * 2} but is {width}")
+
+    @torch.no_grad()
+    def __call__(self, components: FluxModularPipeline, state: PipelineState):
+        block_state = self.get_block_state(state)
+
+        if block_state.resized_image is None and block_state.image is None:
+            raise ValueError("`resized_image` and `image` cannot be None at the same time")
+
+        if block_state.resized_image is None:
+            image = block_state.image
+            self.check_inputs(
+                height=block_state.height, width=block_state.width, vae_scale_factor=components.vae_scale_factor
+            )
+            height = block_state.height or components.default_height
+            width = block_state.width or components.default_width
+        else:
+            width, height = block_state.resized_image[0].size
+            image = block_state.resized_image
+
+        block_state.processed_image = components.image_processor.preprocess(image=image, height=height, width=width)
+
+        self.set_block_state(state, block_state)
+        return components, state
+
+class FluxKontextProcessImagesInputStep(ModularPipelineBlocks):
+    model_name = "flux-kontext"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Image preprocess step for Flux Kontext. The preprocessed image goes to the VAE.\n"
+            "Kontext works as a T2I model, too, in case no input image is provided."
+        )
+
+    @property
+    def expected_components(self) -> List[ComponentSpec]:
+        return [
+            ComponentSpec(
+                "image_processor",
+                VaeImageProcessor,
+                config=FrozenDict({"vae_scale_factor": 16}),
+                default_creation_method="from_config",
+            ),
+        ]
+
+    @property
+    def inputs(self) -> List[InputParam]:
+        return [InputParam("image"), InputParam("_auto_resize", type_hint=bool, default=True)]
+
+    @property
+    def intermediate_outputs(self) -> List[OutputParam]:
+        return [OutputParam(name="processed_image")]
+
+    @torch.no_grad()
+    def __call__(self, components: FluxModularPipeline, state: PipelineState):
+        from ...pipelines.flux.pipeline_flux_kontext import PREFERRED_KONTEXT_RESOLUTIONS
+
+        block_state = self.get_block_state(state)
+        images = block_state.image
+
+        if images is None:
+            block_state.processed_image = None
+
+        else:
+            multiple_of = components.image_processor.config.vae_scale_factor
+
+            if not is_valid_image_imagelist(images):
+                raise ValueError(f"Images must be image or list of images but are {type(images)}")
+
+            if is_valid_image(images):
+                images = [images]
+
+            img = images[0]
+            image_height, image_width = components.image_processor.get_default_height_width(img)
+            aspect_ratio = image_width / image_height
+            _auto_resize = block_state._auto_resize
+            if _auto_resize:
+                # Kontext is trained on specific resolutions, using one of them is recommended
+                _, image_width, image_height = min(
+                    (abs(aspect_ratio - w / h), w, h) for w, h in PREFERRED_KONTEXT_RESOLUTIONS
+                )
+            image_width = image_width // multiple_of * multiple_of
+            image_height = image_height // multiple_of * multiple_of
+            images = components.image_processor.resize(images, image_height, image_width)
+            block_state.processed_image = components.image_processor.preprocess(images, image_height, image_width)
+
+        self.set_block_state(state, block_state)
+        return components, state
 
 class FluxVaeEncoderDynamicStep(ModularPipelineBlocks):
     model_name = "flux"
@@ -212,25 +316,7 @@ class FluxVaeEncoderDynamicStep(ModularPipelineBlocks):
     def __init__(
         self, input_name: str = "processed_image", output_name: str = "image_latents", sample_mode: str = "sample"
     ):
-        """Initialize a VAE encoder step for converting images to latent representations.
 
-        Both the input and output names are configurable so this block can be configured to process to different image
-        inputs (e.g., "processed_image" -> "image_latents", "processed_control_image" -> "control_image_latents").
-
-        Args:
-            input_name (str, optional): Name of the input image tensor. Defaults to "processed_image".
-                Examples: "processed_image" or "processed_control_image"
-            output_name (str, optional): Name of the output latent tensor. Defaults to "image_latents".
-                Examples: "image_latents" or "control_image_latents"
-            sample_mode (str, optional): Sampling mode to be used.
-
-        Examples:
-            # Basic usage with default settings (includes image processor): # FluxImageVaeEncoderDynamicStep()
-
-            # Custom input/output names for control image: # FluxImageVaeEncoderDynamicStep(
-                input_name="processed_control_image", output_name="control_image_latents"
-            )
-        """
         self._image_input_name = input_name
         self._image_latents_output_name = output_name
         self.sample_mode = sample_mode
@@ -281,7 +367,6 @@ class FluxVaeEncoderDynamicStep(ModularPipelineBlocks):
         self.set_block_state(state, block_state)
 
         return components, state
-
 
 class FluxTextEncoderStep(ModularPipelineBlocks):
     model_name = "flux"

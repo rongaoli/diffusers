@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import Optional, Tuple
 
 import torch
@@ -22,22 +8,8 @@ from ..utils import deprecate
 from ..utils.import_utils import is_torch_version
 from .normalization import RMSNorm
 
-
 class Upsample1D(nn.Module):
-    """A 1D upsampling layer with an optional convolution.
 
-    Parameters:
-        channels (`int`):
-            number of channels in the inputs and outputs.
-        use_conv (`bool`, default `False`):
-            option to use a convolution.
-        use_conv_transpose (`bool`, default `False`):
-            option to use a convolution transpose.
-        out_channels (`int`, optional):
-            number of output channels. Defaults to `channels`.
-        name (`str`, default `conv`):
-            name of the upsampling 1D layer.
-    """
 
     def __init__(
         self,
@@ -72,22 +44,8 @@ class Upsample1D(nn.Module):
 
         return outputs
 
-
 class Upsample2D(nn.Module):
-    """A 2D upsampling layer with an optional convolution.
 
-    Parameters:
-        channels (`int`):
-            number of channels in the inputs and outputs.
-        use_conv (`bool`, default `False`):
-            option to use a convolution.
-        use_conv_transpose (`bool`, default `False`):
-            option to use a convolution transpose.
-        out_channels (`int`, optional):
-            number of output channels. Defaults to `channels`.
-        name (`str`, default `conv`):
-            name of the upsampling 2D layer.
-    """
 
     def __init__(
         self,
@@ -152,13 +110,13 @@ class Upsample2D(nn.Module):
         if self.use_conv_transpose:
             return self.conv(hidden_states)
 
-        # Cast to float32 to as 'upsample_nearest2d_out_frame' op does not support bfloat16 until PyTorch 2.1
+        # Cast to float32 to as 'upsample_nearest2...
         # https://github.com/pytorch/pytorch/issues/86679#issuecomment-1783978767
         dtype = hidden_states.dtype
         if dtype == torch.bfloat16 and is_torch_version("<", "2.1"):
             hidden_states = hidden_states.to(torch.float32)
 
-        # upsample_nearest_nhwc fails with large batch sizes. see https://github.com/huggingface/diffusers/issues/984
+        # upsample_nearest_nhwc fails with large b...
         if hidden_states.shape[0] >= 64:
             hidden_states = hidden_states.contiguous()
 
@@ -191,20 +149,8 @@ class Upsample2D(nn.Module):
 
         return hidden_states
 
-
 class FirUpsample2D(nn.Module):
-    """A 2D FIR upsampling layer with an optional convolution.
 
-    Parameters:
-        channels (`int`, optional):
-            number of channels in the inputs and outputs.
-        use_conv (`bool`, default `False`):
-            option to use a convolution.
-        out_channels (`int`, optional):
-            number of output channels. Defaults to `channels`.
-        fir_kernel (`tuple`, default `(1, 3, 3, 1)`):
-            kernel for the FIR filter.
-    """
 
     def __init__(
         self,
@@ -229,29 +175,7 @@ class FirUpsample2D(nn.Module):
         factor: int = 2,
         gain: float = 1,
     ) -> torch.Tensor:
-        """Fused `upsample_2d()` followed by `Conv2d()`.
 
-        Padding is performed only once at the beginning, not between the operations. The fused op is considerably more
-        efficient than performing the same calculation using standard TensorFlow ops. It supports gradients of
-        arbitrary order.
-
-        Args:
-            hidden_states (`torch.Tensor`):
-                Input tensor of the shape `[N, C, H, W]` or `[N, H, W, C]`.
-            weight (`torch.Tensor`, *optional*):
-                Weight tensor of the shape `[filterH, filterW, inChannels, outChannels]`. Grouped convolution can be
-                performed by `inChannels = x.shape[0] // numGroups`.
-            kernel (`torch.Tensor`, *optional*):
-                FIR filter of the shape `[firH, firW]` or `[firN]` (separable). The default is `[1] * factor`, which
-                corresponds to nearest-neighbor upsampling.
-            factor (`int`, *optional*): Integer upsampling factor (default: 2).
-            gain (`float`, *optional*): Scaling factor for signal magnitude (default: 1.0).
-
-        Returns:
-            output (`torch.Tensor`):
-                Tensor of the shape `[N, C, H * factor, W * factor]` or `[N, H * factor, W * factor, C]`, and same
-                datatype as `hidden_states`.
-        """
 
         assert isinstance(factor, int) and factor >= 1
 
@@ -325,13 +249,8 @@ class FirUpsample2D(nn.Module):
 
         return height
 
-
 class KUpsample2D(nn.Module):
-    r"""A 2D K-upsampling layer.
 
-    Parameters:
-        pad_mode (`str`, *optional*, default to `"reflect"`): the padding mode to use.
-    """
 
     def __init__(self, pad_mode: str = "reflect"):
         super().__init__()
@@ -355,25 +274,8 @@ class KUpsample2D(nn.Module):
         weight[indices, indices] = kernel
         return F.conv_transpose2d(inputs, weight, stride=2, padding=self.pad * 2 + 1)
 
-
 class CogVideoXUpsample3D(nn.Module):
-    r"""
-    A 3D Upsample layer using in CogVideoX by Tsinghua University & ZhipuAI # Todo: Wait for paper release.
 
-    Args:
-        in_channels (`int`):
-            Number of channels in the input image.
-        out_channels (`int`):
-            Number of channels produced by the convolution.
-        kernel_size (`int`, defaults to `3`):
-            Size of the convolving kernel.
-        stride (`int`, defaults to `1`):
-            Stride of the convolution.
-        padding (`int`, defaults to `1`):
-            Padding added to all four sides of the input.
-        compress_time (`bool`, defaults to `False`):
-            Whether or not to compress the time dimension.
-    """
 
     def __init__(
         self,
@@ -418,7 +320,6 @@ class CogVideoXUpsample3D(nn.Module):
         inputs = inputs.reshape(b, t, *inputs.shape[1:]).permute(0, 2, 1, 3, 4)
 
         return inputs
-
 
 def upfirdn2d_native(
     tensor: torch.Tensor,
@@ -469,34 +370,14 @@ def upfirdn2d_native(
 
     return out.view(-1, channel, out_h, out_w)
 
-
 def upsample_2d(
     hidden_states: torch.Tensor,
     kernel: Optional[torch.Tensor] = None,
     factor: int = 2,
     gain: float = 1,
 ) -> torch.Tensor:
-    r"""Upsample2D a batch of 2D images with the given filter.
-    Accepts a batch of 2D images of the shape `[N, C, H, W]` or `[N, H, W, C]` and upsamples each image with the given
-    filter. The filter is normalized so that if the input pixels are constant, they will be scaled by the specified
-    `gain`. Pixels outside the image are assumed to be zero, and the filter is padded with zeros so that its shape is
-    a: multiple of the upsampling factor.
-
-    Args:
-        hidden_states (`torch.Tensor`):
-            Input tensor of the shape `[N, C, H, W]` or `[N, H, W, C]`.
-        kernel (`torch.Tensor`, *optional*):
-            FIR filter of the shape `[firH, firW]` or `[firN]` (separable). The default is `[1] * factor`, which
-            corresponds to nearest-neighbor upsampling.
-        factor (`int`, *optional*, default to `2`):
-            Integer upsampling factor.
-        gain (`float`, *optional*, default to `1.0`):
-            Scaling factor for signal magnitude (default: 1.0).
-
-    Returns:
-        output (`torch.Tensor`):
-            Tensor of the shape `[N, C, H * factor, W * factor]`
-    """
+    
+    """r"""
     assert isinstance(factor, int) and factor >= 1
     if kernel is None:
         kernel = [1] * factor

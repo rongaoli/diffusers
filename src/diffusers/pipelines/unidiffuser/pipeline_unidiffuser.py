@@ -32,7 +32,6 @@ from ..pipeline_utils import DeprecatedPipelineMixin, DiffusionPipeline
 from .modeling_text_decoder import UniDiffuserTextDecoder
 from .modeling_uvit import UniDiffuserModel
 
-
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
@@ -42,59 +41,16 @@ else:
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 # New BaseOutput child class for joint image-text output
 @dataclass
 class ImageTextPipelineOutput(BaseOutput):
-    """
-    Output class for joint image-text pipelines.
 
-    Args:
-        images (`List[PIL.Image.Image]` or `np.ndarray`)
-            List of denoised PIL images of length `batch_size` or NumPy array of shape `(batch_size, height, width,
-            num_channels)`.
-        text (`List[str]` or `List[List[str]]`)
-            List of generated text strings of length `batch_size` or a list of list of strings whose outer list has
-            length `batch_size`.
-    """
 
     images: Optional[Union[List[PIL.Image.Image], np.ndarray]]
     text: Optional[Union[List[str], List[List[str]]]]
 
-
 class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
-    r"""
-    Pipeline for a bimodal image-text model which supports unconditional text and image generation, text-conditioned
-    image generation, image-conditioned text generation, and joint image-text generation.
 
-    This model inherits from [`DiffusionPipeline`]. Check the superclass documentation for the generic methods
-    implemented for all pipelines (downloading, saving, running on a particular device, etc.).
-
-    Args:
-        vae ([`AutoencoderKL`]):
-            Variational Auto-Encoder (VAE) model to encode and decode images to and from latent representations. This
-            is part of the UniDiffuser image representation along with the CLIP vision encoding.
-        text_encoder ([`CLIPTextModel`]):
-            Frozen text-encoder ([clip-vit-large-patch14](https://huggingface.co/openai/clip-vit-large-patch14)).
-        image_encoder ([`CLIPVisionModel`]):
-            A [`~transformers.CLIPVisionModel`] to encode images as part of its image representation along with the VAE
-            latent representation.
-        image_processor ([`CLIPImageProcessor`]):
-            [`~transformers.CLIPImageProcessor`] to preprocess an image before CLIP encoding it with `image_encoder`.
-        clip_tokenizer ([`CLIPTokenizer`]):
-             A [`~transformers.CLIPTokenizer`] to tokenize the prompt before encoding it with `text_encoder`.
-        text_decoder ([`UniDiffuserTextDecoder`]):
-            Frozen text decoder. This is a GPT-style model which is used to generate text from the UniDiffuser
-            embedding.
-        text_tokenizer ([`GPT2Tokenizer`]):
-            A [`~transformers.GPT2Tokenizer`] to decode text for text generation; used along with the `text_decoder`.
-        unet ([`UniDiffuserModel`]):
-            A [U-ViT](https://github.com/baofff/U-ViT) model with UNNet-style skip connections between transformer
-            layers to denoise the encoded image latents.
-        scheduler ([`SchedulerMixin`]):
-            A scheduler to be used in combination with `unet` to denoise the encoded image and/or text latents. The
-            original UniDiffuser paper uses the [`DPMSolverMultistepScheduler`] scheduler.
-    """
 
     _last_supported_version = "0.33.1"
     # TODO: support for moving submodules for components with enable_model_cpu_offload
@@ -150,9 +106,9 @@ class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
         # TODO: handle safety checking?
         self.safety_checker = None
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_extra_step_kwargs
+    # Copied from diffusers.pipelines.stable_diffu...
     def prepare_extra_step_kwargs(self, generator, eta):
-        # prepare extra kwargs for the scheduler step, since not all schedulers have the same signature
+        # prepare extra kwargs for the scheduler s...
         # eta (η) is only used with the DDIMScheduler, it will be ignored for other schedulers.
         # eta corresponds to η in DDIM paper: https://huggingface.co/papers/2010.02502
         # and should be between [0, 1]
@@ -169,10 +125,8 @@ class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
         return extra_step_kwargs
 
     def _infer_mode(self, prompt, prompt_embeds, image, latents, prompt_latents, vae_latents, clip_latents):
-        r"""
-        Infer the generation task ('mode') from the inputs to `__call__`. If the mode has been manually set, the set
-        mode will be used.
-        """
+        
+        """r"""
         prompt_available = (prompt is not None) or (prompt_embeds is not None)
         image_available = image is not None
         input_available = prompt_available or image_available
@@ -228,10 +182,8 @@ class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
 
     # Copied from diffusers.pipelines.pipeline_utils.StableDiffusionMixin.enable_vae_slicing
     def enable_vae_slicing(self):
-        r"""
-        Enable sliced VAE decoding. When this option is enabled, the VAE will split the input tensor in slices to
-        compute decoding in several steps. This is useful to save some memory and allow larger batch sizes.
-        """
+        
+        """r"""
         depr_message = f"Calling `enable_vae_slicing()` on a `{self.__class__.__name__}` is deprecated and this method will be removed in a future version. Please use `pipe.vae.enable_slicing()`."
         deprecate(
             "enable_vae_slicing",
@@ -242,10 +194,8 @@ class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
 
     # Copied from diffusers.pipelines.pipeline_utils.StableDiffusionMixin.disable_vae_slicing
     def disable_vae_slicing(self):
-        r"""
-        Disable sliced VAE decoding. If `enable_vae_slicing` was previously enabled, this method will go back to
-        computing decoding in one step.
-        """
+        
+        """r"""
         depr_message = f"Calling `disable_vae_slicing()` on a `{self.__class__.__name__}` is deprecated and this method will be removed in a future version. Please use `pipe.vae.disable_slicing()`."
         deprecate(
             "disable_vae_slicing",
@@ -256,11 +206,8 @@ class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
 
     # Copied from diffusers.pipelines.pipeline_utils.StableDiffusionMixin.enable_vae_tiling
     def enable_vae_tiling(self):
-        r"""
-        Enable tiled VAE decoding. When this option is enabled, the VAE will split the input tensor into tiles to
-        compute decoding and encoding in several steps. This is useful for saving a large amount of memory and to allow
-        processing larger images.
-        """
+        
+        """r"""
         depr_message = f"Calling `enable_vae_tiling()` on a `{self.__class__.__name__}` is deprecated and this method will be removed in a future version. Please use `pipe.vae.enable_tiling()`."
         deprecate(
             "enable_vae_tiling",
@@ -271,10 +218,8 @@ class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
 
     # Copied from diffusers.pipelines.pipeline_utils.StableDiffusionMixin.disable_vae_tiling
     def disable_vae_tiling(self):
-        r"""
-        Disable tiled VAE decoding. If `enable_vae_tiling` was previously enabled, this method will go back to
-        computing decoding in one step.
-        """
+        
+        """r"""
         depr_message = f"Calling `disable_vae_tiling()` on a `{self.__class__.__name__}` is deprecated and this method will be removed in a future version. Please use `pipe.vae.disable_tiling()`."
         deprecate(
             "disable_vae_tiling",
@@ -285,27 +230,33 @@ class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
 
     # Functions to manually set the mode
     def set_text_mode(self):
-        r"""Manually set the generation mode to unconditional ("marginal") text generation."""
+        
+        """r"""
         self.mode = "text"
 
     def set_image_mode(self):
-        r"""Manually set the generation mode to unconditional ("marginal") image generation."""
+        
+        """r"""
         self.mode = "img"
 
     def set_text_to_image_mode(self):
-        r"""Manually set the generation mode to text-conditioned image generation."""
+        
+        """r"""
         self.mode = "text2img"
 
     def set_image_to_text_mode(self):
-        r"""Manually set the generation mode to image-conditioned text generation."""
+        
+        """r"""
         self.mode = "img2text"
 
     def set_joint_mode(self):
-        r"""Manually set the generation mode to unconditional joint image-text generation."""
+        
+        """r"""
         self.mode = "joint"
 
     def reset_mode(self):
-        r"""Removes a manually set mode; after calling this, the pipeline will infer the mode from inputs."""
+        
+        """r"""
         self.mode = None
 
     def _infer_batch_size(
@@ -321,7 +272,8 @@ class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
         vae_latents,
         clip_latents,
     ):
-        r"""Infers the batch size and multiplier depending on mode and supplied arguments to `__call__`."""
+        
+        """r"""
         if num_images_per_prompt is None:
             num_images_per_prompt = 1
         if num_prompts_per_image is None:
@@ -384,7 +336,7 @@ class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
                 )
         return batch_size, multiplier
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline._encode_prompt
+    # Copied from diffusers.pipelines.stable_diffu...
     def _encode_prompt(
         self,
         prompt,
@@ -417,7 +369,7 @@ class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
 
         return prompt_embeds
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.encode_prompt with self.tokenizer->self.clip_tokenizer
+    # Copied from diffusers.pipelines.stable_diffu...
     def encode_prompt(
         self,
         prompt,
@@ -430,35 +382,8 @@ class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
         lora_scale: Optional[float] = None,
         clip_skip: Optional[int] = None,
     ):
-        r"""
-        Encodes the prompt into text encoder hidden states.
-
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                prompt to be encoded
-            device: (`torch.device`):
-                torch device
-            num_images_per_prompt (`int`):
-                number of images that should be generated per prompt
-            do_classifier_free_guidance (`bool`):
-                whether to use classifier free guidance or not
-            negative_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts not to guide the image generation. If not defined, one has to pass
-                `negative_prompt_embeds` instead. Ignored when not using guidance (i.e., ignored if `guidance_scale` is
-                less than `1`).
-            prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt weighting. If not
-                provided, text embeddings will be generated from `prompt` input argument.
-            negative_prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated negative text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt
-                weighting. If not provided, negative_prompt_embeds will be generated from `negative_prompt` input
-                argument.
-            lora_scale (`float`, *optional*):
-                A LoRA scale that will be applied to all LoRA layers of the text encoder if LoRA layers are loaded.
-            clip_skip (`int`, *optional*):
-                Number of layers to be skipped from CLIP while computing the prompt embeddings. A value of 1 means that
-                the output of the pre-final layer will be used for computing the prompt embeddings.
-        """
+        
+        """r"""
         # set lora scale so that monkey patched LoRA
         # function of text encoder can correctly access it
         if lora_scale is not None and isinstance(self, StableDiffusionLoraLoaderMixin):
@@ -585,7 +510,7 @@ class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
             negative_prompt_embeds = negative_prompt_embeds[0]
 
         if do_classifier_free_guidance:
-            # duplicate unconditional embeddings for each generation per prompt, using mps friendly method
+            # duplicate unconditional embeddings f...
             seq_len = negative_prompt_embeds.shape[1]
 
             negative_prompt_embeds = negative_prompt_embeds.to(dtype=prompt_embeds_dtype, device=device)
@@ -600,7 +525,7 @@ class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
 
         return prompt_embeds, negative_prompt_embeds
 
-    # Modified from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_instruct_pix2pix.StableDiffusionInstructPix2PixPipeline.prepare_image_latents
+    # Modified from diffusers.pipelines.stable_dif...
     # Add num_prompts_per_image argument, sample from autoencoder moment distribution
     def encode_image_vae_latents(
         self,
@@ -740,7 +665,7 @@ class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
         latents = latents * self.scheduler.init_noise_sigma
         return latents
 
-    # Modified from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_latents
+    # Modified from diffusers.pipelines.stable_dif...
     # Rename prepare_latents -> prepare_image_vae_latents and add num_prompts_per_image argument.
     def prepare_image_vae_latents(
         self,
@@ -811,10 +736,8 @@ class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
         return generated_text
 
     def _split(self, x, height, width):
-        r"""
-        Splits a flattened embedding x of shape (B, C * H * W + clip_img_dim) into two tensors of shape (B, C, H, W)
-        and (B, 1, clip_img_dim)
-        """
+        
+        """r"""
         batch_size = x.shape[0]
         latent_height = height // self.vae_scale_factor
         latent_width = width // self.vae_scale_factor
@@ -827,20 +750,15 @@ class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
         return img_vae, img_clip
 
     def _combine(self, img_vae, img_clip):
-        r"""
-        Combines a latent image img_vae of shape (B, C, H, W) and a CLIP-embedded image img_clip of shape (B, 1,
-        clip_img_dim) into a single tensor of shape (B, C * H * W + clip_img_dim).
-        """
+        
+        """r"""
         img_vae = torch.reshape(img_vae, (img_vae.shape[0], -1))
         img_clip = torch.reshape(img_clip, (img_clip.shape[0], -1))
         return torch.concat([img_vae, img_clip], dim=-1)
 
     def _split_joint(self, x, height, width):
-        r"""
-        Splits a flattened embedding x of shape (B, C * H * W + clip_img_dim + text_seq_len * text_dim] into (img_vae,
-        img_clip, text) where img_vae is of shape (B, C, H, W), img_clip is of shape (B, 1, clip_img_dim), and text is
-        of shape (B, text_seq_len, text_dim).
-        """
+        
+        """r"""
         batch_size = x.shape[0]
         latent_height = height // self.vae_scale_factor
         latent_width = width // self.vae_scale_factor
@@ -855,11 +773,8 @@ class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
         return img_vae, img_clip, text
 
     def _combine_joint(self, img_vae, img_clip, text):
-        r"""
-        Combines a latent image img_vae of shape (B, C, H, W), a CLIP-embedded image img_clip of shape (B, L_img,
-        clip_img_dim), and a text embedding text of shape (B, L_text, text_dim) into a single embedding x of shape (B,
-        C * H * W + L_img * clip_img_dim + L_text * text_dim).
-        """
+        
+        """r"""
         img_vae = torch.reshape(img_vae, (img_vae.shape[0], -1))
         img_clip = torch.reshape(img_clip, (img_clip.shape[0], -1))
         text = torch.reshape(text, (text.shape[0], -1))
@@ -881,9 +796,8 @@ class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
         height,
         width,
     ):
-        r"""
-        Gets the noise prediction using the `unet` and performs classifier-free guidance, if necessary.
-        """
+        
+        """r"""
         if mode == "joint":
             # Joint text-image generation
             img_vae_latents, img_clip_latents, text_latents = self._split_joint(latents, height, width)
@@ -1119,18 +1033,18 @@ class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
     @torch.no_grad()
     def __call__(
         self,
-        prompt: Optional[Union[str, List[str]]] = None,
+        prompt: Optional[str] = None,
         image: Optional[Union[torch.Tensor, PIL.Image.Image]] = None,
         height: Optional[int] = None,
         width: Optional[int] = None,
         data_type: Optional[int] = 1,
         num_inference_steps: int = 50,
         guidance_scale: float = 8.0,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        negative_prompt: Optional[str] = None,
         num_images_per_prompt: Optional[int] = 1,
         num_prompts_per_image: Optional[int] = 1,
         eta: float = 0.0,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+        generator: Optional[torch.Generator] = None,
         latents: Optional[torch.Tensor] = None,
         prompt_latents: Optional[torch.Tensor] = None,
         vae_latents: Optional[torch.Tensor] = None,
@@ -1142,14 +1056,8 @@ class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
         callback: Optional[Callable[[int, int, torch.Tensor], None]] = None,
         callback_steps: int = 1,
     ):
-        r"""
-        The call function to the pipeline for generation.
 
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to guide image generation. If not defined, you need to pass `prompt_embeds`.
-                Required for text-conditioned image generation (`text2img`) mode.
-            image (`torch.Tensor` or `PIL.Image.Image`, *optional*):
+        The call function to the pipeline for generation.
                 `Image` or tensor representing an image batch. Required for image-conditioned text generation
                 (`img2text`) mode.
             height (`int`, *optional*, defaults to `self.unet.config.sample_size * self.vae_scale_factor`):
@@ -1220,243 +1128,3 @@ class UniDiffuserPipeline(DeprecatedPipelineMixin, DiffusionPipeline):
             callback_steps (`int`, *optional*, defaults to 1):
                 The frequency at which the `callback` function is called. If not specified, the callback is called at
                 every step.
-
-        Returns:
-            [`~pipelines.unidiffuser.ImageTextPipelineOutput`] or `tuple`:
-                If `return_dict` is `True`, [`~pipelines.unidiffuser.ImageTextPipelineOutput`] is returned, otherwise a
-                `tuple` is returned where the first element is a list with the generated images and the second element
-                is a list of generated texts.
-        """
-
-        # 0. Default height and width to unet
-        height = height or self.unet_resolution * self.vae_scale_factor
-        width = width or self.unet_resolution * self.vae_scale_factor
-
-        # 1. Check inputs
-        # Recalculate mode for each call to the pipeline.
-        mode = self._infer_mode(prompt, prompt_embeds, image, latents, prompt_latents, vae_latents, clip_latents)
-        self.check_inputs(
-            mode,
-            prompt,
-            image,
-            height,
-            width,
-            callback_steps,
-            negative_prompt,
-            prompt_embeds,
-            negative_prompt_embeds,
-            latents,
-            prompt_latents,
-            vae_latents,
-            clip_latents,
-        )
-
-        # 2. Define call parameters
-        batch_size, multiplier = self._infer_batch_size(
-            mode,
-            prompt,
-            prompt_embeds,
-            image,
-            num_images_per_prompt,
-            num_prompts_per_image,
-            latents,
-            prompt_latents,
-            vae_latents,
-            clip_latents,
-        )
-        device = self._execution_device
-        reduce_text_emb_dim = self.text_intermediate_dim < self.text_encoder_hidden_size or self.mode != "text2img"
-
-        # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
-        # of the Imagen paper: https://huggingface.co/papers/2205.11487 . `guidance_scale = 1`
-        # corresponds to doing no classifier free guidance.
-        # Note that this differs from the formulation in the unidiffusers paper!
-        do_classifier_free_guidance = guidance_scale > 1.0
-
-        # check if scheduler is in sigmas space
-        # scheduler_is_in_sigma_space = hasattr(self.scheduler, "sigmas")
-
-        # 3. Encode input prompt, if available; otherwise prepare text latents
-        if latents is not None:
-            # Overwrite individual latents
-            vae_latents, clip_latents, prompt_latents = self._split_joint(latents, height, width)
-
-        if mode in ["text2img"]:
-            # 3.1. Encode input prompt, if available
-            assert prompt is not None or prompt_embeds is not None
-            prompt_embeds, negative_prompt_embeds = self.encode_prompt(
-                prompt=prompt,
-                device=device,
-                num_images_per_prompt=multiplier,
-                do_classifier_free_guidance=do_classifier_free_guidance,
-                negative_prompt=negative_prompt,
-                prompt_embeds=prompt_embeds,
-                negative_prompt_embeds=negative_prompt_embeds,
-            )
-
-            # if do_classifier_free_guidance:
-            #     prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
-        else:
-            # 3.2. Prepare text latent variables, if input not available
-            prompt_embeds = self.prepare_text_latents(
-                batch_size=batch_size,
-                num_images_per_prompt=multiplier,
-                seq_len=self.text_encoder_seq_len,
-                hidden_size=self.text_encoder_hidden_size,
-                dtype=self.text_encoder.dtype,  # Should work with both full precision and mixed precision
-                device=device,
-                generator=generator,
-                latents=prompt_latents,
-            )
-
-        if reduce_text_emb_dim:
-            prompt_embeds = self.text_decoder.encode(prompt_embeds)
-
-        # 4. Encode image, if available; otherwise prepare image latents
-        if mode in ["img2text"]:
-            # 4.1. Encode images, if available
-            assert image is not None, "`img2text` requires a conditioning image"
-            # Encode image using VAE
-            image_vae = self.image_processor.preprocess(image)
-            height, width = image_vae.shape[-2:]
-            image_vae_latents = self.encode_image_vae_latents(
-                image=image_vae,
-                batch_size=batch_size,
-                num_prompts_per_image=multiplier,
-                dtype=prompt_embeds.dtype,
-                device=device,
-                do_classifier_free_guidance=False,  # Copied from InstructPix2Pix, don't use their version of CFG
-                generator=generator,
-            )
-
-            # Encode image using CLIP
-            image_clip_latents = self.encode_image_clip_latents(
-                image=image,
-                batch_size=batch_size,
-                num_prompts_per_image=multiplier,
-                dtype=prompt_embeds.dtype,
-                device=device,
-                generator=generator,
-            )
-            # (batch_size, clip_hidden_size) => (batch_size, 1, clip_hidden_size)
-            image_clip_latents = image_clip_latents.unsqueeze(1)
-        else:
-            # 4.2. Prepare image latent variables, if input not available
-            # Prepare image VAE latents in latent space
-            image_vae_latents = self.prepare_image_vae_latents(
-                batch_size=batch_size,
-                num_prompts_per_image=multiplier,
-                num_channels_latents=self.num_channels_latents,
-                height=height,
-                width=width,
-                dtype=prompt_embeds.dtype,
-                device=device,
-                generator=generator,
-                latents=vae_latents,
-            )
-
-            # Prepare image CLIP latents
-            image_clip_latents = self.prepare_image_clip_latents(
-                batch_size=batch_size,
-                num_prompts_per_image=multiplier,
-                clip_img_dim=self.image_encoder_projection_dim,
-                dtype=prompt_embeds.dtype,
-                device=device,
-                generator=generator,
-                latents=clip_latents,
-            )
-
-        # 5. Set timesteps
-        self.scheduler.set_timesteps(num_inference_steps, device=device)
-        timesteps = self.scheduler.timesteps
-        # max_timestep = timesteps[0]
-        max_timestep = self.scheduler.config.num_train_timesteps
-
-        # 6. Prepare latent variables
-        if mode == "joint":
-            latents = self._combine_joint(image_vae_latents, image_clip_latents, prompt_embeds)
-        elif mode in ["text2img", "img"]:
-            latents = self._combine(image_vae_latents, image_clip_latents)
-        elif mode in ["img2text", "text"]:
-            latents = prompt_embeds
-
-        # 7. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
-        extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
-
-        logger.debug(f"Scheduler extra step kwargs: {extra_step_kwargs}")
-
-        # 8. Denoising loop
-        num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
-        with self.progress_bar(total=num_inference_steps) as progress_bar:
-            for i, t in enumerate(timesteps):
-                # predict the noise residual
-                # Also applies classifier-free guidance as described in the UniDiffuser paper
-                noise_pred = self._get_noise_pred(
-                    mode,
-                    latents,
-                    t,
-                    prompt_embeds,
-                    image_vae_latents,
-                    image_clip_latents,
-                    max_timestep,
-                    data_type,
-                    guidance_scale,
-                    generator,
-                    device,
-                    height,
-                    width,
-                )
-
-                # compute the previous noisy sample x_t -> x_t-1
-                latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
-
-                # call the callback, if provided
-                if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
-                    progress_bar.update()
-                    if callback is not None and i % callback_steps == 0:
-                        step_idx = i // getattr(self.scheduler, "order", 1)
-                        callback(step_idx, t, latents)
-
-                if XLA_AVAILABLE:
-                    xm.mark_step()
-
-        # 9. Post-processing
-        image = None
-        text = None
-        if mode == "joint":
-            image_vae_latents, image_clip_latents, text_latents = self._split_joint(latents, height, width)
-
-            if not output_type == "latent":
-                # Map latent VAE image back to pixel space
-                image = self.vae.decode(image_vae_latents / self.vae.config.scaling_factor, return_dict=False)[0]
-            else:
-                image = image_vae_latents
-
-            text = self.decode_text_latents(text_latents, device)
-        elif mode in ["text2img", "img"]:
-            image_vae_latents, image_clip_latents = self._split(latents, height, width)
-
-            if not output_type == "latent":
-                # Map latent VAE image back to pixel space
-                image = self.vae.decode(image_vae_latents / self.vae.config.scaling_factor, return_dict=False)[0]
-            else:
-                image = image_vae_latents
-        elif mode in ["img2text", "text"]:
-            text_latents = latents
-            text = self.decode_text_latents(text_latents, device)
-
-        self.maybe_free_model_hooks()
-
-        # 10. Postprocess the image, if necessary
-        if image is not None:
-            do_denormalize = [True] * image.shape[0]
-            image = self.image_processor.postprocess(image, output_type=output_type, do_denormalize=do_denormalize)
-
-        # Offload last model to CPU
-        if hasattr(self, "final_offload_hook") and self.final_offload_hook is not None:
-            self.final_offload_hook.offload()
-
-        if not return_dict:
-            return (image, text)
-
-        return ImageTextPipelineOutput(images=image, text=text)

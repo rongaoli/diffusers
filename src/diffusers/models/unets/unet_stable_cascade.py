@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import math
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
@@ -26,8 +12,7 @@ from ...utils import BaseOutput
 from ..attention_processor import Attention
 from ..modeling_utils import ModelMixin
 
-
-# Copied from diffusers.pipelines.wuerstchen.modeling_wuerstchen_common.WuerstchenLayerNorm with WuerstchenLayerNorm -> SDCascadeLayerNorm
+# Copied from diffusers.pipelines.wuerstchen.model...
 class SDCascadeLayerNorm(nn.LayerNorm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -36,7 +21,6 @@ class SDCascadeLayerNorm(nn.LayerNorm):
         x = x.permute(0, 2, 3, 1)
         x = super().forward(x)
         return x.permute(0, 3, 1, 2)
-
 
 class SDCascadeTimestepBlock(nn.Module):
     def __init__(self, c, c_timestep, conds=[]):
@@ -54,7 +38,6 @@ class SDCascadeTimestepBlock(nn.Module):
             ac, bc = getattr(self, f"mapper_{c}")(t[i + 1])[:, :, None, None].chunk(2, dim=1)
             a, b = a + ac, b + bc
         return x * (1 + a) + b
-
 
 class SDCascadeResBlock(nn.Module):
     def __init__(self, c, c_skip=0, kernel_size=3, dropout=0.0):
@@ -77,8 +60,7 @@ class SDCascadeResBlock(nn.Module):
         x = self.channelwise(x.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         return x + x_res
 
-
-# from https://github.com/facebookresearch/ConvNeXt-V2/blob/3608f67cc1dae164790c5d0aead7bf2d73d9719b/models/utils.py#L105
+# from https://github.com/facebookresearch/ConvNeX...
 class GlobalResponseNorm(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -89,7 +71,6 @@ class GlobalResponseNorm(nn.Module):
         agg_norm = torch.norm(x, p=2, dim=(1, 2), keepdim=True)
         stand_div_norm = agg_norm / (agg_norm.mean(dim=-1, keepdim=True) + 1e-6)
         return self.gamma * (x * stand_div_norm) + self.beta + x
-
 
 class SDCascadeAttnBlock(nn.Module):
     def __init__(self, c, c_cond, nhead, self_attn=True, dropout=0.0):
@@ -109,7 +90,6 @@ class SDCascadeAttnBlock(nn.Module):
         x = x + self.attention(norm_x, encoder_hidden_states=kv)
         return x
 
-
 class UpDownBlock2d(nn.Module):
     def __init__(self, in_channels, out_channels, mode, enabled=True):
         super().__init__()
@@ -128,11 +108,9 @@ class UpDownBlock2d(nn.Module):
             x = block(x)
         return x
 
-
 @dataclass
 class StableCascadeUNetOutput(BaseOutput):
     sample: torch.Tensor = None
-
 
 class StableCascadeUNet(ModelMixin, ConfigMixin, FromOriginalModelMixin):
     _supports_gradient_checkpointing = True
@@ -170,59 +148,142 @@ class StableCascadeUNet(ModelMixin, ConfigMixin, FromOriginalModelMixin):
         timestep_conditioning_type: Tuple[str, ...] = ("sca", "crp"),
         switch_level: Optional[Tuple[bool]] = None,
     ):
-        """
+        class SDCascadeLayerNorm(nn.LayerNorm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-        Parameters:
-            in_channels (`int`, defaults to 16):
-                Number of channels in the input sample.
-            out_channels (`int`, defaults to 16):
-                Number of channels in the output sample.
-            timestep_ratio_embedding_dim (`int`, defaults to 64):
-                Dimension of the projected time embedding.
-            patch_size (`int`, defaults to 1):
-                Patch size to use for pixel unshuffling layer
-            conditioning_dim (`int`, defaults to 2048):
-                Dimension of the image and text conditional embedding.
-            block_out_channels (Tuple[int], defaults to (2048, 2048)):
-                Tuple of output channels for each block.
-            num_attention_heads (Tuple[int], defaults to (32, 32)):
-                Number of attention heads in each attention block. Set to -1 to if block types in a layer do not have
-                attention.
-            down_num_layers_per_block (Tuple[int], defaults to [8, 24]):
-                Number of layers in each down block.
-            up_num_layers_per_block (Tuple[int], defaults to [24, 8]):
-                Number of layers in each up block.
-            down_blocks_repeat_mappers (Tuple[int], optional, defaults to [1, 1]):
-                Number of 1x1 Convolutional layers to repeat in each down block.
-            up_blocks_repeat_mappers (Tuple[int], optional, defaults to [1, 1]):
-                Number of 1x1 Convolutional layers to repeat in each up block.
-            block_types_per_layer (Tuple[Tuple[str]], optional,
-                defaults to (
-                    ("SDCascadeResBlock", "SDCascadeTimestepBlock", "SDCascadeAttnBlock"), ("SDCascadeResBlock",
-                    "SDCascadeTimestepBlock", "SDCascadeAttnBlock")
-                ): Block types used in each layer of the up/down blocks.
-            clip_text_in_channels (`int`, *optional*, defaults to `None`):
-                Number of input channels for CLIP based text conditioning.
-            clip_text_pooled_in_channels (`int`, *optional*, defaults to 1280):
-                Number of input channels for pooled CLIP text embeddings.
-            clip_image_in_channels (`int`, *optional*):
-                Number of input channels for CLIP based image conditioning.
-            clip_seq (`int`, *optional*, defaults to 4):
-            effnet_in_channels (`int`, *optional*, defaults to `None`):
-                Number of input channels for effnet conditioning.
-            pixel_mapper_in_channels (`int`, defaults to `None`):
-                Number of input channels for pixel mapper conditioning.
-            kernel_size (`int`, *optional*, defaults to 3):
-                Kernel size to use in the block convolutional layers.
-            dropout (Tuple[float], *optional*, defaults to (0.1, 0.1)):
-                Dropout to use per block.
-            self_attn (Union[bool, Tuple[bool]]):
-                Tuple of booleans that determine whether to use self attention in a block or not.
-            timestep_conditioning_type (Tuple[str], defaults to ("sca", "crp")):
-                Timestep conditioning type.
-            switch_level (Optional[Tuple[bool]], *optional*, defaults to `None`):
-                Tuple that indicates whether upsampling or downsampling should be applied in a block
-        """
+    def forward(self, x):
+        x = x.permute(0, 2, 3, 1)
+        x = super().forward(x)
+        return x.permute(0, 3, 1, 2)
+
+class SDCascadeTimestepBlock(nn.Module):
+    def __init__(self, c, c_timestep, conds=[]):
+        super().__init__()
+
+        self.mapper = nn.Linear(c_timestep, c * 2)
+        self.conds = conds
+        for cname in conds:
+            setattr(self, f"mapper_{cname}", nn.Linear(c_timestep, c * 2))
+
+    def forward(self, x, t):
+        t = t.chunk(len(self.conds) + 1, dim=1)
+        a, b = self.mapper(t[0])[:, :, None, None].chunk(2, dim=1)
+        for i, c in enumerate(self.conds):
+            ac, bc = getattr(self, f"mapper_{c}")(t[i + 1])[:, :, None, None].chunk(2, dim=1)
+            a, b = a + ac, b + bc
+        return x * (1 + a) + b
+
+class SDCascadeResBlock(nn.Module):
+    def __init__(self, c, c_skip=0, kernel_size=3, dropout=0.0):
+        super().__init__()
+        self.depthwise = nn.Conv2d(c, c, kernel_size=kernel_size, padding=kernel_size // 2, groups=c)
+        self.norm = SDCascadeLayerNorm(c, elementwise_affine=False, eps=1e-6)
+        self.channelwise = nn.Sequential(
+            nn.Linear(c + c_skip, c * 4),
+            nn.GELU(),
+            GlobalResponseNorm(c * 4),
+            nn.Dropout(dropout),
+            nn.Linear(c * 4, c),
+        )
+
+    def forward(self, x, x_skip=None):
+        x_res = x
+        x = self.norm(self.depthwise(x))
+        if x_skip is not None:
+            x = torch.cat([x, x_skip], dim=1)
+        x = self.channelwise(x.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        return x + x_res
+
+# from https://github.com/facebookresearch/ConvNeX...
+class GlobalResponseNorm(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.gamma = nn.Parameter(torch.zeros(1, 1, 1, dim))
+        self.beta = nn.Parameter(torch.zeros(1, 1, 1, dim))
+
+    def forward(self, x):
+        agg_norm = torch.norm(x, p=2, dim=(1, 2), keepdim=True)
+        stand_div_norm = agg_norm / (agg_norm.mean(dim=-1, keepdim=True) + 1e-6)
+        return self.gamma * (x * stand_div_norm) + self.beta + x
+
+class SDCascadeAttnBlock(nn.Module):
+    def __init__(self, c, c_cond, nhead, self_attn=True, dropout=0.0):
+        super().__init__()
+
+        self.self_attn = self_attn
+        self.norm = SDCascadeLayerNorm(c, elementwise_affine=False, eps=1e-6)
+        self.attention = Attention(query_dim=c, heads=nhead, dim_head=c // nhead, dropout=dropout, bias=True)
+        self.kv_mapper = nn.Sequential(nn.SiLU(), nn.Linear(c_cond, c))
+
+    def forward(self, x, kv):
+        kv = self.kv_mapper(kv)
+        norm_x = self.norm(x)
+        if self.self_attn:
+            batch_size, channel, _, _ = x.shape
+            kv = torch.cat([norm_x.view(batch_size, channel, -1).transpose(1, 2), kv], dim=1)
+        x = x + self.attention(norm_x, encoder_hidden_states=kv)
+        return x
+
+class UpDownBlock2d(nn.Module):
+    def __init__(self, in_channels, out_channels, mode, enabled=True):
+        super().__init__()
+        if mode not in ["up", "down"]:
+            raise ValueError(f"{mode} not supported")
+        interpolation = (
+            nn.Upsample(scale_factor=2 if mode == "up" else 0.5, mode="bilinear", align_corners=True)
+            if enabled
+            else nn.Identity()
+        )
+        mapping = nn.Conv2d(in_channels, out_channels, kernel_size=1)
+        self.blocks = nn.ModuleList([interpolation, mapping] if mode == "up" else [mapping, interpolation])
+
+    def forward(self, x):
+        for block in self.blocks:
+            x = block(x)
+        return x
+
+@dataclass
+class StableCascadeUNetOutput(BaseOutput):
+    sample: torch.Tensor = None
+
+class StableCascadeUNet(ModelMixin, ConfigMixin, FromOriginalModelMixin):
+    _supports_gradient_checkpointing = True
+
+    @register_to_config
+    def __init__(
+        self,
+        in_channels: int = 16,
+        out_channels: int = 16,
+        timestep_ratio_embedding_dim: int = 64,
+        patch_size: int = 1,
+        conditioning_dim: int = 2048,
+        block_out_channels: Tuple[int, ...] = (2048, 2048),
+        num_attention_heads: Tuple[int, ...] = (32, 32),
+        down_num_layers_per_block: Tuple[int, ...] = (8, 24),
+        up_num_layers_per_block: Tuple[int, ...] = (24, 8),
+        down_blocks_repeat_mappers: Optional[Tuple[int]] = (
+            1,
+            1,
+        ),
+        up_blocks_repeat_mappers: Optional[Tuple[int]] = (1, 1),
+        block_types_per_layer: Tuple[Tuple[str]] = (
+            ("SDCascadeResBlock", "SDCascadeTimestepBlock", "SDCascadeAttnBlock"),
+            ("SDCascadeResBlock", "SDCascadeTimestepBlock", "SDCascadeAttnBlock"),
+        ),
+        clip_text_in_channels: Optional[int] = None,
+        clip_text_pooled_in_channels=1280,
+        clip_image_in_channels: Optional[int] = None,
+        clip_seq=4,
+        effnet_in_channels: Optional[int] = None,
+        pixel_mapper_in_channels: Optional[int] = None,
+        kernel_size=3,
+        dropout: Union[float, Tuple[float]] = (0.1, 0.1),
+        self_attn: Union[bool, Tuple[bool]] = True,
+        timestep_conditioning_type: Tuple[str, ...] = ("sca", "crp"),
+        switch_level: Optional[Tuple[bool]] = None,
+    ):
+
 
         super().__init__()
 

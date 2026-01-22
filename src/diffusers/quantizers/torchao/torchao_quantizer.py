@@ -1,21 +1,5 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-"""
 Adapted from
 https://github.com/huggingface/transformers/blob/3a8eb74668e9c2cc563b2f5c62fac174797063e0/src/transformers/quantizers/quantizer_torchao.py
-"""
 
 import importlib
 import re
@@ -35,13 +19,10 @@ from ...utils import (
 )
 from ..base import DiffusersQuantizer
 
-
 logger = logging.get_logger(__name__)
-
 
 if TYPE_CHECKING:
     from ...models.modeling_utils import ModelMixin
-
 
 if is_torch_available():
     import torch
@@ -72,7 +53,6 @@ if is_torch_available():
 
 if is_torchao_available():
     from torchao.quantization import quantize_
-
 
 def _update_torch_safe_globals():
     safe_globals = [
@@ -109,7 +89,6 @@ def _update_torch_safe_globals():
     finally:
         torch.serialization.add_safe_globals(safe_globals=safe_globals)
 
-
 if (
     is_torch_available()
     and is_torch_version(">=", "2.6.0")
@@ -118,12 +97,8 @@ if (
 ):
     _update_torch_safe_globals()
 
-
 def fuzzy_match_size(config_name: str) -> Optional[str]:
-    """
-    Extract the size digit from strings like "4weight", "8weight". Returns the digit as an integer if found, otherwise
-    None.
-    """
+
     config_name = config_name.lower()
 
     str_match = re.search(r"(\d)weight", config_name)
@@ -132,7 +107,6 @@ def fuzzy_match_size(config_name: str) -> Optional[str]:
         return str_match.group(1)
 
     return None
-
 
 def _quantization_type(weight):
     from torchao.dtypes import AffineQuantizedTensor
@@ -144,7 +118,6 @@ def _quantization_type(weight):
     if isinstance(weight, LinearActivationQuantizedTensor):
         return f"{weight.__class__.__name__}(activation={weight.input_quant_func}, weight={_quantization_type(weight.original_weight_tensor)})"
 
-
 def _linear_extra_repr(self):
     weight = _quantization_type(self.weight)
     if weight is None:
@@ -152,11 +125,10 @@ def _linear_extra_repr(self):
     else:
         return f"in_features={self.weight.shape[1]}, out_features={self.weight.shape[0]}, weight={weight}"
 
-
 class TorchAoHfQuantizer(DiffusersQuantizer):
-    r"""
-    Diffusers Quantizer for TorchAO: https://github.com/pytorch/ao/.
-    """
+    
+    class TorchAoHfQuantizer(DiffusersQuantizer):
+
 
     requires_calibration = False
     required_packages = ["torchao"]
@@ -208,7 +180,7 @@ class TorchAoHfQuantizer(DiffusersQuantizer):
                 )
 
         if torch_dtype is None:
-            # We need to set the torch_dtype, otherwise we have dtype mismatch when performing the quantized linear op
+            # We need to set the torch_dtype, othe...
             logger.warning(
                 "Overriding `torch_dtype` with `torch_dtype=torch.bfloat16` due to requirements of `torchao` "
                 "to enable model loading in different precisions. Pass your own `torch_dtype` to specify the "
@@ -224,7 +196,7 @@ class TorchAoHfQuantizer(DiffusersQuantizer):
 
         if isinstance(quant_type, str):
             if quant_type.startswith("int8"):
-                # Note that int4 weights are created by packing into torch.int8, but since there is no torch.int4, we use torch.int8
+                # Note that int4 weights are creat...
                 return torch.int8
             elif quant_type.startswith("int4"):
                 return CustomDtype.INT4
@@ -305,38 +277,194 @@ class TorchAoHfQuantizer(DiffusersQuantizer):
         unexpected_keys: List[str],
         **kwargs,
     ):
-        r"""
-        Each nn.Linear layer that needs to be quantized is processed here. First, we set the value the weight tensor,
-        then we move it to the target device. Finally, we quantize the module.
-        """
+        class name
+                config_name = quant_type.__class__.__name__
+                size_digit = fuzzy_match_size(config_name)
+
+                # Map the extracted digit to appropriate dtype
+                if size_digit == "4":
+                    return CustomDtype.INT4
+                else:
+                    # Default to int8
+                    return torch.int8
+
+        if isinstance(target_dtype, SUPPORTED_TORCH_DTYPES_FOR_QUANTIZATION):
+            return target_dtype
+
+        # We need one of the supported dtypes to be selected in order for accelerate to determine
+        # the total size of modules/parameters for auto device placement.
+        possible_device_maps = ["auto", "balanced", "balanced_low_0", "sequential"]
+        raise ValueError(
+            f"You have set `device_map` as one of {possible_device_maps} on a TorchAO quantized model but a suitable target dtype "
+            f"could not be inferred. The supported target_dtypes are: {SUPPORTED_TORCH_DTYPES_FOR_QUANTIZATION}. If you think the "
+            f"dtype you are using should be supported, please open an issue at https://github.com/huggingface/diffusers/issues."
+        )
+
+    def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
+        max_memory = {key: val * 0.9 for key, val in max_memory.items()}
+        return max_memory
+
+    def check_if_quantized_param(
+        self,
+        model: "ModelMixin",
+        param_value: "torch.Tensor",
+        param_name: str,
+        state_dict: Dict[str, Any],
+        **kwargs,
+    ) -> bool:
+        param_device = kwargs.pop("param_device", None)
+        # Check if the param_name is not in self.modules_to_not_convert
+        if any((key + "." in param_name) or (key == param_name) for key in self.modules_to_not_convert):
+            return False
+        elif param_device == "cpu" and self.offload:
+            # We don't quantize weights that we offload
+            return False
+        else:
+            # We only quantize the weight of nn.Linear
+            module, tensor_name = get_module_from_name(model, param_name)
+            return isinstance(module, torch.nn.Linear) and (tensor_name == "weight")
+
+    def create_quantized_param(
+        self,
+        model: "ModelMixin",
+        param_value: "torch.Tensor",
+        param_name: str,
+        target_device: "torch.device",
+        state_dict: Dict[str, Any],
+        unexpected_keys: List[str],
+        **kwargs,
+    ):
+        
+        class name
+                config_name = quant_type.__class__.__name__
+                size_digit = fuzzy_match_size(config_name)
+
+                # Map the extracted digit to appropriate dtype
+                if size_digit == "4":
+                    return CustomDtype.INT4
+                else:
+                    # Default to int8
+                    return torch.int8
+
+        if isinstance(target_dtype, SUPPORTED_TORCH_DTYPES_FOR_QUANTIZATION):
+            return target_dtype
+
+        # We need one of the supported dtypes to be selected in order for accelerate to determine
+        # the total size of modules/parameters for auto device placement.
+        possible_device_maps = ["auto", "balanced", "balanced_low_0", "sequential"]
+        raise ValueError(
+            f"You have set `device_map` as one of {possible_device_maps} on a TorchAO quantized model but a suitable target dtype "
+            f"could not be inferred. The supported target_dtypes are: {SUPPORTED_TORCH_DTYPES_FOR_QUANTIZATION}. If you think the "
+            f"dtype you are using should be supported, please open an issue at https://github.com/huggingface/diffusers/issues."
+        )
+
+    def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
+        max_memory = {key: val * 0.9 for key, val in max_memory.items()}
+        return max_memory
+
+    def check_if_quantized_param(
+        self,
+        model: "ModelMixin",
+        param_value: "torch.Tensor",
+        param_name: str,
+        state_dict: Dict[str, Any],
+        **kwargs,
+    ) -> bool:
+        param_device = kwargs.pop("param_device", None)
+        # Check if the param_name is not in self.modules_to_not_convert
+        if any((key + "." in param_name) or (key == param_name) for key in self.modules_to_not_convert):
+            return False
+        elif param_device == "cpu" and self.offload:
+            # We don't quantize weights that we offload
+            return False
+        else:
+            # We only quantize the weight of nn.Linear
+            module, tensor_name = get_module_from_name(model, param_name)
+            return isinstance(module, torch.nn.Linear) and (tensor_name == "weight")
+
+    def create_quantized_param(
+        self,
+        model: "ModelMixin",
+        param_value: "torch.Tensor",
+        param_name: str,
+        target_device: "torch.device",
+        state_dict: Dict[str, Any],
+        unexpected_keys: List[str],
+        **kwargs,
+    ):
+        class name
+                config_name = quant_type.__class__.__name__
+                size_digit = fuzzy_match_size(config_name)
+
+                # Map the extracted digit to appropriate dtype
+                if size_digit == "4":
+                    return CustomDtype.INT4
+                else:
+                    # Default to int8
+                    return torch.int8
+
+        if isinstance(target_dtype, SUPPORTED_TORCH_DTYPES_FOR_QUANTIZATION):
+            return target_dtype
+
+        # We need one of the supported dtypes to be selected in order for accelerate to determine
+        # the total size of modules/parameters for auto device placement.
+        possible_device_maps = ["auto", "balanced", "balanced_low_0", "sequential"]
+        raise ValueError(
+            f"You have set `device_map` as one of {possible_device_maps} on a TorchAO quantized model but a suitable target dtype "
+            f"could not be inferred. The supported target_dtypes are: {SUPPORTED_TORCH_DTYPES_FOR_QUANTIZATION}. If you think the "
+            f"dtype you are using should be supported, please open an issue at https://github.com/huggingface/diffusers/issues."
+        )
+
+    def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
+        max_memory = {key: val * 0.9 for key, val in max_memory.items()}
+        return max_memory
+
+    def check_if_quantized_param(
+        self,
+        model: "ModelMixin",
+        param_value: "torch.Tensor",
+        param_name: str,
+        state_dict: Dict[str, Any],
+        **kwargs,
+    ) -> bool:
+        param_device = kwargs.pop("param_device", None)
+        # Check if the param_name is not in self.modules_to_not_convert
+        if any((key + "." in param_name) or (key == param_name) for key in self.modules_to_not_convert):
+            return False
+        elif param_device == "cpu" and self.offload:
+            # We don't quantize weights that we offload
+            return False
+        else:
+            # We only quantize the weight of nn.Linear
+            module, tensor_name = get_module_from_name(model, param_name)
+            return isinstance(module, torch.nn.Linear) and (tensor_name == "weight")
+
+    def create_quantized_param(
+        self,
+        model: "ModelMixin",
+        param_value: "torch.Tensor",
+        param_name: str,
+        target_device: "torch.device",
+        state_dict: Dict[str, Any],
+        unexpected_keys: List[str],
+        **kwargs,
+    ):
+
         module, tensor_name = get_module_from_name(model, param_name)
 
         if self.pre_quantized:
-            # If we're loading pre-quantized weights, replace the repr of linear layers for pretty printing info
+            # If we're loading pre-quantized weigh...
             # about AffineQuantizedTensor
             module._parameters[tensor_name] = torch.nn.Parameter(param_value.to(device=target_device))
             if isinstance(module, nn.Linear):
                 module.extra_repr = types.MethodType(_linear_extra_repr, module)
         else:
-            # As we perform quantization here, the repr of linear layers is that of AQT, so we don't have to do it ourselves
+            # As we perform quantization here, the...
             module._parameters[tensor_name] = torch.nn.Parameter(param_value).to(device=target_device)
             quantize_(module, self.quantization_config.get_apply_tensor_subclass())
 
     def get_cuda_warm_up_factor(self):
-        """
-        This factor is used in caching_allocator_warmup to determine how many bytes to pre-allocate for CUDA warmup.
-        - A factor of 2 means we pre-allocate the full memory footprint of the model.
-        - A factor of 4 means we pre-allocate half of that, and so on
 
-        However, when using TorchAO, calculating memory usage with param.numel() * param.element_size() doesn't give
-        the correct size for quantized weights (like int4 or int8) That's because TorchAO internally represents
-        quantized tensors using subtensors and metadata, and the reported element_size() still corresponds to the
-        torch_dtype not the actual bit-width of the quantized data.
-
-        To correct for this:
-        - Use a division factor of 8 for int4 weights
-        - Use a division factor of 4 for int8 weights
-        """
         # Original mapping for non-AOBaseConfig types
         # For the uint types, this is a best guess. Once these types become more used
         # we can look into their nuances.
@@ -344,7 +472,7 @@ class TorchAoHfQuantizer(DiffusersQuantizer):
             from torchao.core.config import AOBaseConfig
 
             quant_type = self.quantization_config.quant_type
-            # For autoquant case, it will be treated in the string implementation below in map_to_target_dtype
+            # For autoquant case, it will be treat...
             if isinstance(quant_type, AOBaseConfig):
                 # Extract size digit using fuzzy match on the class name
                 config_name = quant_type.__class__.__name__
@@ -376,7 +504,7 @@ class TorchAoHfQuantizer(DiffusersQuantizer):
 
         self.modules_to_not_convert.extend(keep_in_fp32_modules)
 
-        # Extend `self.modules_to_not_convert` to keys that are supposed to be offloaded to `cpu` or `disk`
+        # Extend `self.modules_to_not_convert` to...
         if isinstance(device_map, dict) and len(device_map.keys()) > 1:
             keys_on_cpu = [key for key, value in device_map.items() if value in ["disk", "cpu"]]
             self.modules_to_not_convert.extend(keys_on_cpu)

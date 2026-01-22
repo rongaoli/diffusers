@@ -12,10 +12,8 @@ from ...utils import (
 )
 from ..base import DiffusersQuantizer
 
-
 if TYPE_CHECKING:
     from ...models.modeling_utils import ModelMixin
-
 
 if is_torch_available():
     import torch
@@ -28,11 +26,10 @@ if is_optimum_quanto_available():
 
 logger = logging.get_logger(__name__)
 
-
 class QuantoQuantizer(DiffusersQuantizer):
-    r"""
-    Diffusers Quantizer for Optimum Quanto
-    """
+    
+    class QuantoQuantizer(DiffusersQuantizer):
+
 
     use_keep_in_fp32_modules = True
     requires_calibration = False
@@ -92,9 +89,7 @@ class QuantoQuantizer(DiffusersQuantizer):
         *args,
         **kwargs,
     ):
-        """
-        Create the quantized parameter by calling .freeze() after setting it to the module.
-        """
+
 
         dtype = kwargs.get("dtype", torch.float32)
         module, tensor_name = get_module_from_name(model, param_name)

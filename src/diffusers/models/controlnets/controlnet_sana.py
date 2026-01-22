@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Union
 
@@ -29,14 +15,11 @@ from ..normalization import AdaLayerNormSingle, RMSNorm
 from ..transformers.sana_transformer import SanaTransformerBlock
 from .controlnet import zero_module
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 @dataclass
 class SanaControlNetOutput(BaseOutput):
     controlnet_block_samples: Tuple[torch.Tensor]
-
 
 class SanaControlNetModel(ModelMixin, AttentionMixin, ConfigMixin, PeftAdapterMixin):
     _supports_gradient_checkpointing = True
@@ -145,13 +128,13 @@ class SanaControlNetModel(ModelMixin, AttentionMixin, ConfigMixin, PeftAdapterMi
                 )
 
         # ensure attention_mask is a bias, and give it a singleton query_tokens dimension.
-        #   we may have done this conversion already, e.g. if we came here via UNet2DConditionModel#forward.
+        #   we may have done this conversion alrea...
         #   we can tell by counting dims; if ndim == 2: it's a mask rather than a bias.
         # expects mask of shape:
         #   [batch, key_tokens]
         # adds singleton query_tokens dimension:
         #   [batch,                    1, key_tokens]
-        # this helps to broadcast it as a bias over attention scores, which will be in one of the following shapes:
+        # this helps to broadcast it as a bias ove...
         #   [batch,  heads, query_tokens, key_tokens] (e.g. torch sdp attn)
         #   [batch * heads, query_tokens, key_tokens] (e.g. xformers or classic attn)
         if attention_mask is not None and attention_mask.ndim == 2:

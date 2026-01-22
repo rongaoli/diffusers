@@ -1,17 +1,3 @@
-# Copyright 2025 ParaDiGMS authors and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import inspect
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -36,72 +22,10 @@ from ...pipeline_utils import DiffusionPipeline, StableDiffusionMixin
 from ...stable_diffusion.pipeline_output import StableDiffusionPipelineOutput
 from ...stable_diffusion.safety_checker import StableDiffusionSafetyChecker
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 EXAMPLE_DOC_STRING = """
-    Examples:
-        ```py
-        >>> import torch
-        >>> from diffusers import DDPMParallelScheduler
-        >>> from diffusers import StableDiffusionParadigmsPipeline
-
-        >>> scheduler = DDPMParallelScheduler.from_pretrained(
-        ...     "stable-diffusion-v1-5/stable-diffusion-v1-5", subfolder="scheduler"
-        ... )
-
-        >>> pipe = StableDiffusionParadigmsPipeline.from_pretrained(
-        ...     "stable-diffusion-v1-5/stable-diffusion-v1-5", scheduler=scheduler, torch_dtype=torch.float16
-        ... )
-        >>> pipe = pipe.to("cuda")
-
-        >>> ngpu, batch_per_device = torch.cuda.device_count(), 5
-        >>> pipe.wrapped_unet = torch.nn.DataParallel(pipe.unet, device_ids=[d for d in range(ngpu)])
-
-        >>> prompt = "a photo of an astronaut riding a horse on mars"
-        >>> image = pipe(prompt, parallel=ngpu * batch_per_device, num_inference_steps=1000).images[0]
-        ```
-"""
-
-
-class StableDiffusionParadigmsPipeline(
-    DiffusionPipeline,
-    StableDiffusionMixin,
-    TextualInversionLoaderMixin,
-    StableDiffusionLoraLoaderMixin,
-    FromSingleFileMixin,
-):
-    r"""
-    Pipeline for text-to-image generation using a parallelized version of Stable Diffusion.
-
-    This model inherits from [`DiffusionPipeline`]. Check the superclass documentation for the generic methods
-    implemented for all pipelines (downloading, saving, running on a particular device, etc.).
-
-    The pipeline also inherits the following loading methods:
-        - [`~loaders.TextualInversionLoaderMixin.load_textual_inversion`] for loading textual inversion embeddings
-        - [`~loaders.StableDiffusionLoraLoaderMixin.load_lora_weights`] for loading LoRA weights
-        - [`~loaders.StableDiffusionLoraLoaderMixin.save_lora_weights`] for saving LoRA weights
-        - [`~loaders.FromSingleFileMixin.from_single_file`] for loading `.ckpt` files
-
-    Args:
-        vae ([`AutoencoderKL`]):
-            Variational Auto-Encoder (VAE) model to encode and decode images to and from latent representations.
-        text_encoder ([`~transformers.CLIPTextModel`]):
-            Frozen text-encoder ([clip-vit-large-patch14](https://huggingface.co/openai/clip-vit-large-patch14)).
-        tokenizer ([`~transformers.CLIPTokenizer`]):
-            A `CLIPTokenizer` to tokenize text.
-        unet ([`UNet2DConditionModel`]):
-            A `UNet2DConditionModel` to denoise the encoded image latents.
-        scheduler ([`SchedulerMixin`]):
-            A scheduler to be used in combination with `unet` to denoise the encoded image latents. Can be one of
-            [`DDIMScheduler`], [`LMSDiscreteScheduler`], or [`PNDMScheduler`].
-        safety_checker ([`StableDiffusionSafetyChecker`]):
-            Classification module that estimates whether generated images could be considered offensive or harmful.
-            Please refer to the [model card](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5) for
-            more details about a model's potential harms.
-        feature_extractor ([`~transformers.CLIPImageProcessor`]):
-            A `CLIPImageProcessor` to extract features from generated images; used as inputs to the `safety_checker`.
-    """
+        使用示例见文档
 
     model_cpu_offload_seq = "text_encoder->unet->vae"
     _optional_components = ["safety_checker", "feature_extractor"]
@@ -149,10 +73,10 @@ class StableDiffusionParadigmsPipeline(
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
         self.register_to_config(requires_safety_checker=requires_safety_checker)
 
-        # attribute to wrap the unet with torch.nn.DataParallel when running multiple denoising steps on multiple GPUs
+        # attribute to wrap the unet with torch.nn...
         self.wrapped_unet = self.unet
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline._encode_prompt
+    # Copied from diffusers.pipelines.stable_diffu...
     def _encode_prompt(
         self,
         prompt,
@@ -185,7 +109,7 @@ class StableDiffusionParadigmsPipeline(
 
         return prompt_embeds
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.encode_prompt
+    # Copied from diffusers.pipelines.stable_diffu...
     def encode_prompt(
         self,
         prompt,
@@ -198,35 +122,8 @@ class StableDiffusionParadigmsPipeline(
         lora_scale: Optional[float] = None,
         clip_skip: Optional[int] = None,
     ):
-        r"""
-        Encodes the prompt into text encoder hidden states.
-
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                prompt to be encoded
-            device: (`torch.device`):
-                torch device
-            num_images_per_prompt (`int`):
-                number of images that should be generated per prompt
-            do_classifier_free_guidance (`bool`):
-                whether to use classifier free guidance or not
-            negative_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts not to guide the image generation. If not defined, one has to pass
-                `negative_prompt_embeds` instead. Ignored when not using guidance (i.e., ignored if `guidance_scale` is
-                less than `1`).
-            prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt weighting. If not
-                provided, text embeddings will be generated from `prompt` input argument.
-            negative_prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated negative text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt
-                weighting. If not provided, negative_prompt_embeds will be generated from `negative_prompt` input
-                argument.
-            lora_scale (`float`, *optional*):
-                A LoRA scale that will be applied to all LoRA layers of the text encoder if LoRA layers are loaded.
-            clip_skip (`int`, *optional*):
-                Number of layers to be skipped from CLIP while computing the prompt embeddings. A value of 1 means that
-                the output of the pre-final layer will be used for computing the prompt embeddings.
-        """
+        
+        """r"""
         # set lora scale so that monkey patched LoRA
         # function of text encoder can correctly access it
         if lora_scale is not None and isinstance(self, StableDiffusionLoraLoaderMixin):
@@ -353,7 +250,7 @@ class StableDiffusionParadigmsPipeline(
             negative_prompt_embeds = negative_prompt_embeds[0]
 
         if do_classifier_free_guidance:
-            # duplicate unconditional embeddings for each generation per prompt, using mps friendly method
+            # duplicate unconditional embeddings f...
             seq_len = negative_prompt_embeds.shape[1]
 
             negative_prompt_embeds = negative_prompt_embeds.to(dtype=prompt_embeds_dtype, device=device)
@@ -368,7 +265,7 @@ class StableDiffusionParadigmsPipeline(
 
         return prompt_embeds, negative_prompt_embeds
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.run_safety_checker
+    # Copied from diffusers.pipelines.stable_diffu...
     def run_safety_checker(self, image, device, dtype):
         if self.safety_checker is None:
             has_nsfw_concept = None
@@ -383,9 +280,9 @@ class StableDiffusionParadigmsPipeline(
             )
         return image, has_nsfw_concept
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_extra_step_kwargs
+    # Copied from diffusers.pipelines.stable_diffu...
     def prepare_extra_step_kwargs(self, generator, eta):
-        # prepare extra kwargs for the scheduler step, since not all schedulers have the same signature
+        # prepare extra kwargs for the scheduler s...
         # eta (η) is only used with the DDIMScheduler, it will be ignored for other schedulers.
         # eta corresponds to η in DDIM paper: https://huggingface.co/papers/2010.02502
         # and should be between [0, 1]
@@ -453,7 +350,7 @@ class StableDiffusionParadigmsPipeline(
                     f" {negative_prompt_embeds.shape}."
                 )
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_latents
+    # Copied from diffusers.pipelines.stable_diffu...
     def prepare_latents(self, batch_size, num_channels_latents, height, width, dtype, device, generator, latents=None):
         shape = (
             batch_size,
@@ -495,10 +392,10 @@ class StableDiffusionParadigmsPipeline(
         parallel: int = 10,
         tolerance: float = 0.1,
         guidance_scale: float = 7.5,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        negative_prompt: Optional[str] = None,
         num_images_per_prompt: Optional[int] = 1,
         eta: float = 0.0,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+        generator: Optional[torch.Generator] = None,
         latents: Optional[torch.Tensor] = None,
         prompt_embeds: Optional[torch.Tensor] = None,
         negative_prompt_embeds: Optional[torch.Tensor] = None,
@@ -510,28 +407,8 @@ class StableDiffusionParadigmsPipeline(
         debug: bool = False,
         clip_skip: int = None,
     ):
-        r"""
-        The call function to the pipeline for generation.
 
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to guide image generation. If not defined, you need to pass `prompt_embeds`.
-            height (`int`, *optional*, defaults to `self.unet.config.sample_size * self.vae_scale_factor`):
-                The height in pixels of the generated image.
-            width (`int`, *optional*, defaults to `self.unet.config.sample_size * self.vae_scale_factor`):
-                The width in pixels of the generated image.
-            num_inference_steps (`int`, *optional*, defaults to 50):
-                The number of denoising steps. More denoising steps usually lead to a higher quality image at the
-                expense of slower inference.
-            parallel (`int`, *optional*, defaults to 10):
-                The batch size to use when doing parallel sampling. More parallelism may lead to faster inference but
-                requires higher memory usage and can also require more total FLOPs.
-            tolerance (`float`, *optional*, defaults to 0.1):
-                The error tolerance for determining when to slide the batch window forward for parallel sampling. Lower
-                tolerance usually leads to less or no degradation. Higher tolerance is faster but can risk degradation
-                of sample quality. The tolerance is specified as a ratio of the scheduler's noise magnitude.
-            guidance_scale (`float`, *optional*, defaults to 7.5):
-                A higher guidance scale value encourages the model to generate images closely linked to the text
+        The call function to the pipeline for generation.
                 `prompt` at the expense of lower image quality. Guidance scale is enabled when `guidance_scale > 1`.
             negative_prompt (`str` or `List[str]`, *optional*):
                 The prompt or prompts to guide what to not include in image generation. If not defined, you need to
@@ -574,225 +451,3 @@ class StableDiffusionParadigmsPipeline(
                 Number of layers to be skipped from CLIP while computing the prompt embeddings. A value of 1 means that
                 the output of the pre-final layer will be used for computing the prompt embeddings.
         Examples:
-
-        Returns:
-            [`~pipelines.stable_diffusion.StableDiffusionPipelineOutput`] or `tuple`:
-                If `return_dict` is `True`, [`~pipelines.stable_diffusion.StableDiffusionPipelineOutput`] is returned,
-                otherwise a `tuple` is returned where the first element is a list with the generated images and the
-                second element is a list of `bool`s indicating whether the corresponding generated image contains
-                "not-safe-for-work" (nsfw) content.
-        """
-        # 0. Default height and width to unet
-        height = height or self.unet.config.sample_size * self.vae_scale_factor
-        width = width or self.unet.config.sample_size * self.vae_scale_factor
-
-        # 1. Check inputs. Raise error if not correct
-        self.check_inputs(
-            prompt, height, width, callback_steps, negative_prompt, prompt_embeds, negative_prompt_embeds
-        )
-
-        # 2. Define call parameters
-        if prompt is not None and isinstance(prompt, str):
-            batch_size = 1
-        elif prompt is not None and isinstance(prompt, list):
-            batch_size = len(prompt)
-        else:
-            batch_size = prompt_embeds.shape[0]
-
-        device = self._execution_device
-        # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
-        # of the Imagen paper: https://huggingface.co/papers/2205.11487 . `guidance_scale = 1`
-        # corresponds to doing no classifier free guidance.
-        do_classifier_free_guidance = guidance_scale > 1.0
-
-        # 3. Encode input prompt
-        prompt_embeds, negative_prompt_embeds = self.encode_prompt(
-            prompt,
-            device,
-            num_images_per_prompt,
-            do_classifier_free_guidance,
-            negative_prompt,
-            prompt_embeds=prompt_embeds,
-            negative_prompt_embeds=negative_prompt_embeds,
-            clip_skip=clip_skip,
-        )
-        # For classifier free guidance, we need to do two forward passes.
-        # Here we concatenate the unconditional and text embeddings into a single batch
-        # to avoid doing two forward passes
-        if do_classifier_free_guidance:
-            prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
-
-        # 4. Prepare timesteps
-        self.scheduler.set_timesteps(num_inference_steps, device=device)
-
-        # 5. Prepare latent variables
-        num_channels_latents = self.unet.config.in_channels
-        latents = self.prepare_latents(
-            batch_size * num_images_per_prompt,
-            num_channels_latents,
-            height,
-            width,
-            prompt_embeds.dtype,
-            device,
-            generator,
-            latents,
-        )
-
-        # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
-        extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
-        extra_step_kwargs.pop("generator", None)
-
-        # # 7. Denoising loop
-        scheduler = self.scheduler
-        parallel = min(parallel, len(scheduler.timesteps))
-
-        begin_idx = 0
-        end_idx = parallel
-        latents_time_evolution_buffer = torch.stack([latents] * (len(scheduler.timesteps) + 1))
-
-        # We must make sure the noise of stochastic schedulers such as DDPM is sampled only once per timestep.
-        # Sampling inside the parallel denoising loop will mess this up, so we pre-sample the noise vectors outside the denoising loop.
-        noise_array = torch.zeros_like(latents_time_evolution_buffer)
-        for j in range(len(scheduler.timesteps)):
-            base_noise = randn_tensor(
-                shape=latents.shape, generator=generator, device=latents.device, dtype=prompt_embeds.dtype
-            )
-            noise = (self.scheduler._get_variance(scheduler.timesteps[j]) ** 0.5) * base_noise
-            noise_array[j] = noise.clone()
-
-        # We specify the error tolerance as a ratio of the scheduler's noise magnitude. We similarly compute the error tolerance
-        # outside of the denoising loop to avoid recomputing it at every step.
-        # We will be dividing the norm of the noise, so we store its inverse here to avoid a division at every step.
-        inverse_variance_norm = 1.0 / torch.tensor(
-            [scheduler._get_variance(scheduler.timesteps[j]) for j in range(len(scheduler.timesteps))] + [0]
-        ).to(noise_array.device)
-        latent_dim = noise_array[0, 0].numel()
-        inverse_variance_norm = inverse_variance_norm[:, None] / latent_dim
-
-        scaled_tolerance = tolerance**2
-
-        with self.progress_bar(total=num_inference_steps) as progress_bar:
-            steps = 0
-            while begin_idx < len(scheduler.timesteps):
-                # these have shape (parallel_dim, 2*batch_size, ...)
-                # parallel_len is at most parallel, but could be less if we are at the end of the timesteps
-                # we are processing batch window of timesteps spanning [begin_idx, end_idx)
-                parallel_len = end_idx - begin_idx
-
-                block_prompt_embeds = torch.stack([prompt_embeds] * parallel_len)
-                block_latents = latents_time_evolution_buffer[begin_idx:end_idx]
-                block_t = scheduler.timesteps[begin_idx:end_idx, None].repeat(1, batch_size * num_images_per_prompt)
-                t_vec = block_t
-                if do_classifier_free_guidance:
-                    t_vec = t_vec.repeat(1, 2)
-
-                # expand the latents if we are doing classifier free guidance
-                latent_model_input = (
-                    torch.cat([block_latents] * 2, dim=1) if do_classifier_free_guidance else block_latents
-                )
-                latent_model_input = self.scheduler.scale_model_input(latent_model_input, t_vec)
-
-                # if parallel_len is small, no need to use multiple GPUs
-                net = self.wrapped_unet if parallel_len > 3 else self.unet
-                # predict the noise residual, shape is now [parallel_len * 2 * batch_size * num_images_per_prompt, ...]
-                model_output = net(
-                    latent_model_input.flatten(0, 1),
-                    t_vec.flatten(0, 1),
-                    encoder_hidden_states=block_prompt_embeds.flatten(0, 1),
-                    cross_attention_kwargs=cross_attention_kwargs,
-                    return_dict=False,
-                )[0]
-
-                per_latent_shape = model_output.shape[1:]
-                if do_classifier_free_guidance:
-                    model_output = model_output.reshape(
-                        parallel_len, 2, batch_size * num_images_per_prompt, *per_latent_shape
-                    )
-                    noise_pred_uncond, noise_pred_text = model_output[:, 0], model_output[:, 1]
-                    model_output = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
-                model_output = model_output.reshape(
-                    parallel_len * batch_size * num_images_per_prompt, *per_latent_shape
-                )
-
-                block_latents_denoise = scheduler.batch_step_no_noise(
-                    model_output=model_output,
-                    timesteps=block_t.flatten(0, 1),
-                    sample=block_latents.flatten(0, 1),
-                    **extra_step_kwargs,
-                ).reshape(block_latents.shape)
-
-                # back to shape (parallel_dim, batch_size, ...)
-                # now we want to add the pre-sampled noise
-                # parallel sampling algorithm requires computing the cumulative drift from the beginning
-                # of the window, so we need to compute cumulative sum of the deltas and the pre-sampled noises.
-                delta = block_latents_denoise - block_latents
-                cumulative_delta = self._cumsum(delta, dim=0, debug=debug)
-                cumulative_noise = self._cumsum(noise_array[begin_idx:end_idx], dim=0, debug=debug)
-
-                # if we are using an ODE-like scheduler (like DDIM), we don't want to add noise
-                if scheduler._is_ode_scheduler:
-                    cumulative_noise = 0
-
-                block_latents_new = (
-                    latents_time_evolution_buffer[begin_idx][None,] + cumulative_delta + cumulative_noise
-                )
-                cur_error = torch.linalg.norm(
-                    (block_latents_new - latents_time_evolution_buffer[begin_idx + 1 : end_idx + 1]).reshape(
-                        parallel_len, batch_size * num_images_per_prompt, -1
-                    ),
-                    dim=-1,
-                ).pow(2)
-                error_ratio = cur_error * inverse_variance_norm[begin_idx + 1 : end_idx + 1]
-
-                # find the first index of the vector error_ratio that is greater than error tolerance
-                # we can shift the window for the next iteration up to this index
-                error_ratio = torch.nn.functional.pad(
-                    error_ratio, (0, 0, 0, 1), value=1e9
-                )  # handle the case when everything is below ratio, by padding the end of parallel_len dimension
-                any_error_at_time = torch.max(error_ratio > scaled_tolerance, dim=1).values.int()
-                ind = torch.argmax(any_error_at_time).item()
-
-                # compute the new begin and end idxs for the window
-                new_begin_idx = begin_idx + min(1 + ind, parallel)
-                new_end_idx = min(new_begin_idx + parallel, len(scheduler.timesteps))
-
-                # store the computed latents for the current window in the global buffer
-                latents_time_evolution_buffer[begin_idx + 1 : end_idx + 1] = block_latents_new
-                # initialize the new sliding window latents with the end of the current window,
-                # should be better than random initialization
-                latents_time_evolution_buffer[end_idx : new_end_idx + 1] = latents_time_evolution_buffer[end_idx][
-                    None,
-                ]
-
-                steps += 1
-
-                progress_bar.update(new_begin_idx - begin_idx)
-                if callback is not None and steps % callback_steps == 0:
-                    callback(begin_idx, block_t[begin_idx], latents_time_evolution_buffer[begin_idx])
-
-                begin_idx = new_begin_idx
-                end_idx = new_end_idx
-
-        latents = latents_time_evolution_buffer[-1]
-
-        if not output_type == "latent":
-            image = self.vae.decode(latents / self.vae.config.scaling_factor, return_dict=False)[0]
-            image, has_nsfw_concept = self.run_safety_checker(image, device, prompt_embeds.dtype)
-        else:
-            image = latents
-            has_nsfw_concept = None
-
-        if has_nsfw_concept is None:
-            do_denormalize = [True] * image.shape[0]
-        else:
-            do_denormalize = [not has_nsfw for has_nsfw in has_nsfw_concept]
-
-        image = self.image_processor.postprocess(image, output_type=output_type, do_denormalize=do_denormalize)
-
-        # Offload all models
-        self.maybe_free_model_hooks()
-
-        if not return_dict:
-            return (image, has_nsfw_concept)
-
-        return StableDiffusionPipelineOutput(images=image, nsfw_content_detected=has_nsfw_concept)

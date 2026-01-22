@@ -1,17 +1,3 @@
-# Copyright 2025 ConsisID Authors and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import math
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -29,9 +15,7 @@ from ..modeling_outputs import Transformer2DModelOutput
 from ..modeling_utils import ModelMixin
 from ..normalization import AdaLayerNorm, CogVideoXLayerNormZero
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 class PerceiverAttention(nn.Module):
     def __init__(self, dim: int, dim_head: int = 64, heads: int = 8, kv_dim: Optional[int] = None):
@@ -76,7 +60,6 @@ class PerceiverAttention(nn.Module):
         output = output.permute(0, 2, 1, 3).reshape(batch_size, seq_len, -1)
 
         return self.to_out(output)
-
 
 class LocalFacialExtractor(nn.Module):
     def __init__(
@@ -179,6 +162,199 @@ class LocalFacialExtractor(nn.Module):
         latents = latents @ self.proj_out
         return latents
 
+class PerceiverCrossAttention(nn.Module):
+    def __init__(self, dim: int = 3072, dim_head: int = 128, heads: int = 16, kv_dim: int = 2048):
+        super().__init__()
+
+        self.scale = dim_head**-0.5
+        self.dim_head = dim_head
+        self.heads = heads
+        inner_dim = dim_head * heads
+
+        # Layer normalization to stabilize training
+        self.norm1 = nn.LayerNorm(dim if kv_dim is None else kv_dim)
+        self.norm2 = nn.LayerNorm(dim)
+
+        # Linear transformations to produce queries, keys, and values
+        self.to_q = nn.Linear(dim, inner_dim, bias=False)
+        self.to_kv = nn.Linear(dim if kv_dim is None else kv_dim, inner_dim * 2, bias=False)
+        self.to_out = nn.Linear(inner_dim, dim, bias=False)
+
+    def forward(self, image_embeds: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
+        # Apply layer normalization to the input image and latent features
+        image_embeds = self.norm1(image_embeds)
+        hidden_states = self.norm2(hidden_states)
+
+        batch_size, seq_len, _ = hidden_states.shape
+
+        # Compute queries, keys, and values
+        query = self.to_q(hidden_states)
+        key, value = self.to_kv(image_embeds).chunk(2, dim=-1)
+
+        # Reshape tensors to split into attention heads
+        query = query.reshape(query.size(0), -1, self.heads, self.dim_head).transpose(1, 2)
+        key = key.reshape(key.size(0), -1, self.heads, self.dim_head).transpose(1, 2)
+        value = value.reshape(value.size(0), -1, self.heads, self.dim_head).transpose(1, 2)
+
+        # Compute attention weights
+        scale = 1 / math.sqrt(math.sqrt(self.dim_head))
+        weight = (query * scale) @ (key * scale).transpose(-2, -1)  # More stable scaling than post-division
+        weight = torch.softmax(weight.float(), dim=-1).type(weight.dtype)
+
+        # Compute the output via weighted combination of values
+        out = weight @ value
+
+        # Reshape and permute to prepare for final linear transformation
+        out = out.permute(0, 2, 1, 3).reshape(batch_size, seq_len, -1)
+
+        return self.to_out(out)
+
+@maybe_allow_in_graph
+class ConsisIDBlock(nn.Module):
+    class PerceiverAttention(nn.Module):
+    def __init__(self, dim: int, dim_head: int = 64, heads: int = 8, kv_dim: Optional[int] = None):
+        super().__init__()
+
+        self.scale = dim_head**-0.5
+        self.dim_head = dim_head
+        self.heads = heads
+        inner_dim = dim_head * heads
+
+        self.norm1 = nn.LayerNorm(dim if kv_dim is None else kv_dim)
+        self.norm2 = nn.LayerNorm(dim)
+
+        self.to_q = nn.Linear(dim, inner_dim, bias=False)
+        self.to_kv = nn.Linear(dim if kv_dim is None else kv_dim, inner_dim * 2, bias=False)
+        self.to_out = nn.Linear(inner_dim, dim, bias=False)
+
+    def forward(self, image_embeds: torch.Tensor, latents: torch.Tensor) -> torch.Tensor:
+        # Apply normalization
+        image_embeds = self.norm1(image_embeds)
+        latents = self.norm2(latents)
+
+        batch_size, seq_len, _ = latents.shape  # Get batch size and sequence length
+
+        # Compute query, key, and value matrices
+        query = self.to_q(latents)
+        kv_input = torch.cat((image_embeds, latents), dim=-2)
+        key, value = self.to_kv(kv_input).chunk(2, dim=-1)
+
+        # Reshape the tensors for multi-head attention
+        query = query.reshape(query.size(0), -1, self.heads, self.dim_head).transpose(1, 2)
+        key = key.reshape(key.size(0), -1, self.heads, self.dim_head).transpose(1, 2)
+        value = value.reshape(value.size(0), -1, self.heads, self.dim_head).transpose(1, 2)
+
+        # attention
+        scale = 1 / math.sqrt(math.sqrt(self.dim_head))
+        weight = (query * scale) @ (key * scale).transpose(-2, -1)  # More stable with f16 than dividing afterwards
+        weight = torch.softmax(weight.float(), dim=-1).type(weight.dtype)
+        output = weight @ value
+
+        # Reshape and return the final output
+        output = output.permute(0, 2, 1, 3).reshape(batch_size, seq_len, -1)
+
+        return self.to_out(output)
+
+class LocalFacialExtractor(nn.Module):
+    def __init__(
+        self,
+        id_dim: int = 1280,
+        vit_dim: int = 1024,
+        depth: int = 10,
+        dim_head: int = 64,
+        heads: int = 16,
+        num_id_token: int = 5,
+        num_queries: int = 32,
+        output_dim: int = 2048,
+        ff_mult: int = 4,
+        num_scale: int = 5,
+    ):
+        super().__init__()
+
+        # Storing identity token and query information
+        self.num_id_token = num_id_token
+        self.vit_dim = vit_dim
+        self.num_queries = num_queries
+        assert depth % num_scale == 0
+        self.depth = depth // num_scale
+        self.num_scale = num_scale
+        scale = vit_dim**-0.5
+
+        # Learnable latent query embeddings
+        self.latents = nn.Parameter(torch.randn(1, num_queries, vit_dim) * scale)
+        # Projection layer to map the latent output to the desired dimension
+        self.proj_out = nn.Parameter(scale * torch.randn(vit_dim, output_dim))
+
+        # Attention and ConsisIDFeedForward layer stack
+        self.layers = nn.ModuleList([])
+        for _ in range(depth):
+            self.layers.append(
+                nn.ModuleList(
+                    [
+                        PerceiverAttention(dim=vit_dim, dim_head=dim_head, heads=heads),  # Perceiver Attention layer
+                        nn.Sequential(
+                            nn.LayerNorm(vit_dim),
+                            nn.Linear(vit_dim, vit_dim * ff_mult, bias=False),
+                            nn.GELU(),
+                            nn.Linear(vit_dim * ff_mult, vit_dim, bias=False),
+                        ),  # ConsisIDFeedForward layer
+                    ]
+                )
+            )
+
+        # Mappings for each of the 5 different ViT features
+        for i in range(num_scale):
+            setattr(
+                self,
+                f"mapping_{i}",
+                nn.Sequential(
+                    nn.Linear(vit_dim, vit_dim),
+                    nn.LayerNorm(vit_dim),
+                    nn.LeakyReLU(),
+                    nn.Linear(vit_dim, vit_dim),
+                    nn.LayerNorm(vit_dim),
+                    nn.LeakyReLU(),
+                    nn.Linear(vit_dim, vit_dim),
+                ),
+            )
+
+        # Mapping for identity embedding vectors
+        self.id_embedding_mapping = nn.Sequential(
+            nn.Linear(id_dim, vit_dim),
+            nn.LayerNorm(vit_dim),
+            nn.LeakyReLU(),
+            nn.Linear(vit_dim, vit_dim),
+            nn.LayerNorm(vit_dim),
+            nn.LeakyReLU(),
+            nn.Linear(vit_dim, vit_dim * num_id_token),
+        )
+
+    def forward(self, id_embeds: torch.Tensor, vit_hidden_states: List[torch.Tensor]) -> torch.Tensor:
+        # Repeat latent queries for the batch size
+        latents = self.latents.repeat(id_embeds.size(0), 1, 1)
+
+        # Map the identity embedding to tokens
+        id_embeds = self.id_embedding_mapping(id_embeds)
+        id_embeds = id_embeds.reshape(-1, self.num_id_token, self.vit_dim)
+
+        # Concatenate identity tokens with the latent queries
+        latents = torch.cat((latents, id_embeds), dim=1)
+
+        # Process each of the num_scale visual feature inputs
+        for i in range(self.num_scale):
+            vit_feature = getattr(self, f"mapping_{i}")(vit_hidden_states[i])
+            ctx_feature = torch.cat((id_embeds, vit_feature), dim=1)
+
+            # Pass through the PerceiverAttention and ConsisIDFeedForward layers
+            for attn, ff in self.layers[i * self.depth : (i + 1) * self.depth]:
+                latents = attn(ctx_feature, latents) + latents
+                latents = ff(latents) + latents
+
+        # Retain only the query latents
+        latents = latents[:, : self.num_queries]
+        # Project the latents to the output dimension
+        latents = latents @ self.proj_out
+        return latents
 
 class PerceiverCrossAttention(nn.Module):
     def __init__(self, dim: int = 3072, dim_head: int = 128, heads: int = 16, kv_dim: int = 2048):
@@ -227,42 +403,9 @@ class PerceiverCrossAttention(nn.Module):
 
         return self.to_out(out)
 
-
 @maybe_allow_in_graph
 class ConsisIDBlock(nn.Module):
-    r"""
-    Transformer block used in [ConsisID](https://github.com/PKU-YuanGroup/ConsisID) model.
 
-    Parameters:
-        dim (`int`):
-            The number of channels in the input and output.
-        num_attention_heads (`int`):
-            The number of heads to use for multi-head attention.
-        attention_head_dim (`int`):
-            The number of channels in each head.
-        time_embed_dim (`int`):
-            The number of channels in timestep embedding.
-        dropout (`float`, defaults to `0.0`):
-            The dropout probability to use.
-        activation_fn (`str`, defaults to `"gelu-approximate"`):
-            Activation function to be used in feed-forward.
-        attention_bias (`bool`, defaults to `False`):
-            Whether or not to use bias in attention projection layers.
-        qk_norm (`bool`, defaults to `True`):
-            Whether or not to use normalization after query and key projections in Attention.
-        norm_elementwise_affine (`bool`, defaults to `True`):
-            Whether to use learnable elementwise affine parameters for normalization.
-        norm_eps (`float`, defaults to `1e-5`):
-            Epsilon value for normalization layers.
-        final_dropout (`bool` defaults to `False`):
-            Whether to apply a final dropout after the last feed-forward layer.
-        ff_inner_dim (`int`, *optional*, defaults to `None`):
-            Custom hidden dimension of Feed-forward layer. If not provided, `4 * dim` is used.
-        ff_bias (`bool`, defaults to `True`):
-            Whether or not to use bias in Feed-forward layer.
-        attention_out_bias (`bool`, defaults to `True`):
-            Whether or not to use bias in Attention output projection layer.
-    """
 
     def __init__(
         self,
@@ -347,115 +490,8 @@ class ConsisIDBlock(nn.Module):
 
         return hidden_states, encoder_hidden_states
 
-
 class ConsisIDTransformer3DModel(ModelMixin, AttentionMixin, ConfigMixin, PeftAdapterMixin):
-    """
-    A Transformer model for video-like data in [ConsisID](https://github.com/PKU-YuanGroup/ConsisID).
 
-    Parameters:
-        num_attention_heads (`int`, defaults to `30`):
-            The number of heads to use for multi-head attention.
-        attention_head_dim (`int`, defaults to `64`):
-            The number of channels in each head.
-        in_channels (`int`, defaults to `16`):
-            The number of channels in the input.
-        out_channels (`int`, *optional*, defaults to `16`):
-            The number of channels in the output.
-        flip_sin_to_cos (`bool`, defaults to `True`):
-            Whether to flip the sin to cos in the time embedding.
-        time_embed_dim (`int`, defaults to `512`):
-            Output dimension of timestep embeddings.
-        text_embed_dim (`int`, defaults to `4096`):
-            Input dimension of text embeddings from the text encoder.
-        num_layers (`int`, defaults to `30`):
-            The number of layers of Transformer blocks to use.
-        dropout (`float`, defaults to `0.0`):
-            The dropout probability to use.
-        attention_bias (`bool`, defaults to `True`):
-            Whether to use bias in the attention projection layers.
-        sample_width (`int`, defaults to `90`):
-            The width of the input latents.
-        sample_height (`int`, defaults to `60`):
-            The height of the input latents.
-        sample_frames (`int`, defaults to `49`):
-            The number of frames in the input latents. Note that this parameter was incorrectly initialized to 49
-            instead of 13 because ConsisID processed 13 latent frames at once in its default and recommended settings,
-            but cannot be changed to the correct value to ensure backwards compatibility. To create a transformer with
-            K latent frames, the correct value to pass here would be: ((K - 1) * temporal_compression_ratio + 1).
-        patch_size (`int`, defaults to `2`):
-            The size of the patches to use in the patch embedding layer.
-        temporal_compression_ratio (`int`, defaults to `4`):
-            The compression ratio across the temporal dimension. See documentation for `sample_frames`.
-        max_text_seq_length (`int`, defaults to `226`):
-            The maximum sequence length of the input text embeddings.
-        activation_fn (`str`, defaults to `"gelu-approximate"`):
-            Activation function to use in feed-forward.
-        timestep_activation_fn (`str`, defaults to `"silu"`):
-            Activation function to use when generating the timestep embeddings.
-        norm_elementwise_affine (`bool`, defaults to `True`):
-            Whether to use elementwise affine in normalization layers.
-        norm_eps (`float`, defaults to `1e-5`):
-            The epsilon value to use in normalization layers.
-        spatial_interpolation_scale (`float`, defaults to `1.875`):
-            Scaling factor to apply in 3D positional embeddings across spatial dimensions.
-        temporal_interpolation_scale (`float`, defaults to `1.0`):
-            Scaling factor to apply in 3D positional embeddings across temporal dimensions.
-        is_train_face (`bool`, defaults to `False`):
-            Whether to use enable the identity-preserving module during the training process. When set to `True`, the
-            model will focus on identity-preserving tasks.
-        is_kps (`bool`, defaults to `False`):
-            Whether to enable keypoint for global facial extractor. If `True`, keypoints will be in the model.
-        cross_attn_interval (`int`, defaults to `2`):
-            The interval between cross-attention layers in the Transformer architecture. A larger value may reduce the
-            frequency of cross-attention computations, which can help reduce computational overhead.
-        cross_attn_dim_head (`int`, optional, defaults to `128`):
-            The dimensionality of each attention head in the cross-attention layers of the Transformer architecture. A
-            larger value increases the capacity to attend to more complex patterns, but also increases memory and
-            computation costs.
-        cross_attn_num_heads (`int`, optional, defaults to `16`):
-            The number of attention heads in the cross-attention layers. More heads allow for more parallel attention
-            mechanisms, capturing diverse relationships between different components of the input, but can also
-            increase computational requirements.
-        LFE_id_dim (`int`, optional, defaults to `1280`):
-            The dimensionality of the identity vector used in the Local Facial Extractor (LFE). This vector represents
-            the identity features of a face, which are important for tasks like face recognition and identity
-            preservation across different frames.
-        LFE_vit_dim (`int`, optional, defaults to `1024`):
-            The dimension of the vision transformer (ViT) output used in the Local Facial Extractor (LFE). This value
-            dictates the size of the transformer-generated feature vectors that will be processed for facial feature
-            extraction.
-        LFE_depth (`int`, optional, defaults to `10`):
-            The number of layers in the Local Facial Extractor (LFE). Increasing the depth allows the model to capture
-            more complex representations of facial features, but also increases the computational load.
-        LFE_dim_head (`int`, optional, defaults to `64`):
-            The dimensionality of each attention head in the Local Facial Extractor (LFE). This parameter affects how
-            finely the model can process and focus on different parts of the facial features during the extraction
-            process.
-        LFE_num_heads (`int`, optional, defaults to `16`):
-            The number of attention heads in the Local Facial Extractor (LFE). More heads can improve the model's
-            ability to capture diverse facial features, but at the cost of increased computational complexity.
-        LFE_num_id_token (`int`, optional, defaults to `5`):
-            The number of identity tokens used in the Local Facial Extractor (LFE). This defines how many
-            identity-related tokens the model will process to ensure face identity preservation during feature
-            extraction.
-        LFE_num_querie (`int`, optional, defaults to `32`):
-            The number of query tokens used in the Local Facial Extractor (LFE). These tokens are used to capture
-            high-frequency face-related information that aids in accurate facial feature extraction.
-        LFE_output_dim (`int`, optional, defaults to `2048`):
-            The output dimension of the Local Facial Extractor (LFE). This dimension determines the size of the feature
-            vectors produced by the LFE module, which will be used for subsequent tasks such as face recognition or
-            tracking.
-        LFE_ff_mult (`int`, optional, defaults to `4`):
-            The multiplication factor applied to the feed-forward network's hidden layer size in the Local Facial
-            Extractor (LFE). A higher value increases the model's capacity to learn more complex facial feature
-            transformations, but also increases the computation and memory requirements.
-        LFE_num_scale (`int`, optional, defaults to `5`):
-            The number of different scales visual feature. A higher value increases the model's capacity to learn more
-            complex facial feature transformations, but also increases the computation and memory requirements.
-        local_face_scale (`float`, defaults to `1.0`):
-            A scaling factor used to adjust the importance of local facial features in the model. This can influence
-            how strongly the model focuses on high frequency face-related content.
-    """
 
     _supports_gradient_checkpointing = True
 
@@ -715,7 +751,7 @@ class ConsisIDTransformer3DModel(ModelMixin, AttentionMixin, ConfigMixin, PeftAd
 
         # 5. Unpatchify
         # Note: we use `-1` instead of `channels`:
-        #   - It is okay to `channels` use for ConsisID (number of input channels is equal to output channels)
+        #   - It is okay to `channels` use for Con...
         p = self.config.patch_size
         output = hidden_states.reshape(batch_size, num_frames, height // p, width // p, -1, p, p)
         output = output.permute(0, 1, 4, 2, 5, 3, 6).flatten(5, 6).flatten(3, 4)

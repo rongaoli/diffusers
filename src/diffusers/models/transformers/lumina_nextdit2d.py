@@ -1,17 +1,3 @@
-# Copyright 2025 Alpha-VLLM Authors and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
@@ -29,26 +15,10 @@ from ..modeling_outputs import Transformer2DModelOutput
 from ..modeling_utils import ModelMixin
 from ..normalization import LuminaLayerNormContinuous, LuminaRMSNormZero, RMSNorm
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 class LuminaNextDiTBlock(nn.Module):
-    """
-    A LuminaNextDiTBlock for LuminaNextDiT2DModel.
 
-    Parameters:
-        dim (`int`): Embedding dimension of the input features.
-        num_attention_heads (`int`): Number of attention heads.
-        num_kv_heads (`int`):
-            Number of attention heads in key and value features (if using GQA), or set to None for the same as query.
-        multiple_of (`int`): The number of multiple of ffn layer.
-        ffn_dim_multiplier (`float`): The multiplier factor of ffn layer dimension.
-        norm_eps (`float`): The eps for norm layer.
-        qk_norm (`bool`): normalization for query and key.
-        cross_attention_dim (`int`): Cross attention embedding dimension of the input text prompt hidden_states.
-        norm_elementwise_affine (`bool`, *optional*, defaults to True),
-    """
 
     def __init__(
         self,
@@ -125,18 +95,7 @@ class LuminaNextDiTBlock(nn.Module):
         temb: torch.Tensor,
         cross_attention_kwargs: Optional[Dict[str, Any]] = None,
     ) -> torch.Tensor:
-        """
-        Perform a forward pass through the LuminaNextDiTBlock.
 
-        Parameters:
-            hidden_states (`torch.Tensor`): The input of hidden_states for LuminaNextDiTBlock.
-            attention_mask (`torch.Tensor): The input of hidden_states corresponse attention mask.
-            image_rotary_emb (`torch.Tensor`): Precomputed cosine and sine frequencies.
-            encoder_hidden_states: (`torch.Tensor`): The hidden_states of text prompt are processed by Gemma encoder.
-            encoder_mask (`torch.Tensor`): The hidden_states of text prompt attention mask.
-            temb (`torch.Tensor`): Timestep embedding with text prompt embedding.
-            cross_attention_kwargs (`Dict[str, Any]`): kwargs for cross attention.
-        """
         residual = hidden_states
 
         # Self-attention
@@ -174,52 +133,8 @@ class LuminaNextDiTBlock(nn.Module):
 
         return hidden_states
 
-
 class LuminaNextDiT2DModel(ModelMixin, ConfigMixin):
-    """
-    LuminaNextDiT: Diffusion model with a Transformer backbone.
 
-    Inherit ModelMixin and ConfigMixin to be compatible with the sampler StableDiffusionPipeline of diffusers.
-
-    Parameters:
-        sample_size (`int`): The width of the latent images. This is fixed during training since
-            it is used to learn a number of position embeddings.
-        patch_size (`int`, *optional*, (`int`, *optional*, defaults to 2):
-            The size of each patch in the image. This parameter defines the resolution of patches fed into the model.
-        in_channels (`int`, *optional*, defaults to 4):
-            The number of input channels for the model. Typically, this matches the number of channels in the input
-            images.
-        hidden_size (`int`, *optional*, defaults to 4096):
-            The dimensionality of the hidden layers in the model. This parameter determines the width of the model's
-            hidden representations.
-        num_layers (`int`, *optional*, default to 32):
-            The number of layers in the model. This defines the depth of the neural network.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            The number of attention heads in each attention layer. This parameter specifies how many separate attention
-            mechanisms are used.
-        num_kv_heads (`int`, *optional*, defaults to 8):
-            The number of key-value heads in the attention mechanism, if different from the number of attention heads.
-            If None, it defaults to num_attention_heads.
-        multiple_of (`int`, *optional*, defaults to 256):
-            A factor that the hidden size should be a multiple of. This can help optimize certain hardware
-            configurations.
-        ffn_dim_multiplier (`float`, *optional*):
-            A multiplier for the dimensionality of the feed-forward network. If None, it uses a default value based on
-            the model configuration.
-        norm_eps (`float`, *optional*, defaults to 1e-5):
-            A small value added to the denominator for numerical stability in normalization layers.
-        learn_sigma (`bool`, *optional*, defaults to True):
-            Whether the model should learn the sigma parameter, which might be related to uncertainty or variance in
-            predictions.
-        qk_norm (`bool`, *optional*, defaults to True):
-            Indicates if the queries and keys in the attention mechanism should be normalized.
-        cross_attention_dim (`int`, *optional*, defaults to 2048):
-            The dimensionality of the text embeddings. This parameter defines the size of the text representations used
-            in the model.
-        scaling_factor (`float`, *optional*, defaults to 1.0):
-            A scaling factor applied to certain parameters or layers in the model. This can be used for adjusting the
-            overall scale of the model's operations.
-    """
 
     _skip_layerwise_casting_patterns = ["patch_embedder", "norm", "ffn_norm"]
 
@@ -298,15 +213,7 @@ class LuminaNextDiT2DModel(ModelMixin, ConfigMixin):
         cross_attention_kwargs: Dict[str, Any] = None,
         return_dict=True,
     ) -> Union[Tuple[torch.Tensor], Transformer2DModelOutput]:
-        """
-        Forward pass of LuminaNextDiT.
 
-        Parameters:
-            hidden_states (torch.Tensor): Input tensor of shape (N, C, H, W).
-            timestep (torch.Tensor): Tensor of diffusion timesteps of shape (N,).
-            encoder_hidden_states (torch.Tensor): Tensor of caption features of shape (N, D).
-            encoder_mask (torch.Tensor): Tensor of caption masks of shape (N, L).
-        """
         hidden_states, mask, img_size, image_rotary_emb = self.patch_embedder(hidden_states, image_rotary_emb)
         image_rotary_emb = image_rotary_emb.to(hidden_states.device)
 

@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import math
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
@@ -22,68 +8,13 @@ from ..hooks import HookRegistry, LayerSkipConfig
 from ..hooks.layer_skip import _apply_layer_skip_hook
 from .guider_utils import BaseGuidance, GuiderOutput, rescale_noise_cfg
 
-
 if TYPE_CHECKING:
     from ..modular_pipelines.modular_pipeline import BlockState
 
-
 class SkipLayerGuidance(BaseGuidance):
-    """
-    Skip Layer Guidance (SLG): https://github.com/Stability-AI/sd3.5
+    
+    class SkipLayerGuidance(BaseGuidance):
 
-    Spatio-Temporal Guidance (STG): https://huggingface.co/papers/2411.18664
-
-    SLG was introduced by StabilityAI for improving structure and anotomy coherence in generated images. It works by
-    skipping the forward pass of specified transformer blocks during the denoising process on an additional conditional
-    batch of data, apart from the conditional and unconditional batches already used in CFG
-    ([~guiders.classifier_free_guidance.ClassifierFreeGuidance]), and then scaling and shifting the CFG predictions
-    based on the difference between conditional without skipping and conditional with skipping predictions.
-
-    The intution behind SLG can be thought of as moving the CFG predicted distribution estimates further away from
-    worse versions of the conditional distribution estimates (because skipping layers is equivalent to using a worse
-    version of the model for the conditional prediction).
-
-    STG is an improvement and follow-up work combining ideas from SLG, PAG and similar techniques for improving
-    generation quality in video diffusion models.
-
-    Additional reading:
-    - [Guiding a Diffusion Model with a Bad Version of Itself](https://huggingface.co/papers/2406.02507)
-
-    The values for `skip_layer_guidance_scale`, `skip_layer_guidance_start`, and `skip_layer_guidance_stop` are
-    defaulted to the recommendations by StabilityAI for Stable Diffusion 3.5 Medium.
-
-    Args:
-        guidance_scale (`float`, defaults to `7.5`):
-            The scale parameter for classifier-free guidance. Higher values result in stronger conditioning on the text
-            prompt, while lower values allow for more freedom in generation. Higher values may lead to saturation and
-            deterioration of image quality.
-        skip_layer_guidance_scale (`float`, defaults to `2.8`):
-            The scale parameter for skip layer guidance. Anatomy and structure coherence may improve with higher
-            values, but it may also lead to overexposure and saturation.
-        skip_layer_guidance_start (`float`, defaults to `0.01`):
-            The fraction of the total number of denoising steps after which skip layer guidance starts.
-        skip_layer_guidance_stop (`float`, defaults to `0.2`):
-            The fraction of the total number of denoising steps after which skip layer guidance stops.
-        skip_layer_guidance_layers (`int` or `List[int]`, *optional*):
-            The layer indices to apply skip layer guidance to. Can be a single integer or a list of integers. If not
-            provided, `skip_layer_config` must be provided. The recommended values are `[7, 8, 9]` for Stable Diffusion
-            3.5 Medium.
-        skip_layer_config (`LayerSkipConfig` or `List[LayerSkipConfig]`, *optional*):
-            The configuration for the skip layer guidance. Can be a single `LayerSkipConfig` or a list of
-            `LayerSkipConfig`. If not provided, `skip_layer_guidance_layers` must be provided.
-        guidance_rescale (`float`, defaults to `0.0`):
-            The rescale factor applied to the noise predictions. This is used to improve image quality and fix
-            overexposure. Based on Section 3.4 from [Common Diffusion Noise Schedules and Sample Steps are
-            Flawed](https://huggingface.co/papers/2305.08891).
-        use_original_formulation (`bool`, defaults to `False`):
-            Whether to use the original formulation of classifier-free guidance as proposed in the paper. By default,
-            we use the diffusers-native implementation that has been in the codebase for a long time. See
-            [~guiders.classifier_free_guidance.ClassifierFreeGuidance] for more details.
-        start (`float`, defaults to `0.01`):
-            The fraction of the total number of denoising steps after which guidance starts.
-        stop (`float`, defaults to `0.2`):
-            The fraction of the total number of denoising steps after which guidance stops.
-    """
 
     _input_predictions = ["pred_cond", "pred_uncond", "pred_cond_skip"]
 
@@ -94,7 +25,7 @@ class SkipLayerGuidance(BaseGuidance):
         skip_layer_guidance_scale: float = 2.8,
         skip_layer_guidance_start: float = 0.01,
         skip_layer_guidance_stop: float = 0.2,
-        skip_layer_guidance_layers: Optional[Union[int, List[int]]] = None,
+        skip_layer_guidance_layers: Optional[int] = None,
         skip_layer_config: Union[LayerSkipConfig, List[LayerSkipConfig], Dict[str, Any]] = None,
         guidance_rescale: float = 0.0,
         use_original_formulation: bool = False,

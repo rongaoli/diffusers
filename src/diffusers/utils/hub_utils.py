@@ -1,19 +1,4 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-
 import json
 import os
 import re
@@ -35,7 +20,6 @@ from huggingface_hub import (
     upload_folder,
 )
 from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY, HF_HUB_OFFLINE
-from huggingface_hub.file_download import REGEX_COMMIT_HASH
 from huggingface_hub.utils import (
     EntryNotFoundError,
     HfHubHTTPError,
@@ -65,17 +49,13 @@ from .import_utils import (
 )
 from .logging import get_logger
 
-
 logger = get_logger(__name__)
 
 MODEL_CARD_TEMPLATE_PATH = Path(__file__).parent / "model_card_template.md"
 SESSION_ID = uuid4().hex
 
-
 def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
-    """
-    Formats a user-agent string with basic info about a request.
-    """
+
     ua = f"diffusers/{__version__}; python/{sys.version.split()[0]}; session_id/{SESSION_ID}"
     if HF_HUB_DISABLE_TELEMETRY or HF_HUB_OFFLINE:
         return ua + "; telemetry/off"
@@ -95,7 +75,6 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
         ua += "; " + user_agent
     return ua
 
-
 def load_or_create_model_card(
     repo_id_or_path: str = None,
     token: Optional[str] = None,
@@ -108,30 +87,7 @@ def load_or_create_model_card(
     widget: Optional[List[dict]] = None,
     inference: Optional[bool] = None,
 ) -> ModelCard:
-    """
-    Loads or creates a model card.
 
-    Args:
-        repo_id_or_path (`str`):
-            The repo id (e.g., "stable-diffusion-v1-5/stable-diffusion-v1-5") or local path where to look for the model
-            card.
-        token (`str`, *optional*):
-            Authentication token. Will default to the stored token. See https://huggingface.co/settings/token for more
-            details.
-        is_pipeline (`bool`):
-            Boolean to indicate if we're adding tag to a [`DiffusionPipeline`].
-        from_training: (`bool`): Boolean flag to denote if the model card is being created from a training script.
-        model_description (`str`, *optional*): Model description to add to the model card. Helpful when using
-            `load_or_create_model_card` from a training script.
-        base_model (`str`): Base model identifier (e.g., "stabilityai/stable-diffusion-xl-base-1.0"). Useful
-            for DreamBooth-like training.
-        prompt (`str`, *optional*): Prompt used for training. Useful for DreamBooth-like training.
-        license: (`str`, *optional*): License of the output artifact. Helpful when using
-            `load_or_create_model_card` from a training script.
-        widget (`List[dict]`, *optional*): Widget to accompany a gallery template.
-        inference: (`bool`, optional): Whether to turn on inference widget. Helpful when using
-            `load_or_create_model_card` from a training script.
-    """
     if not is_jinja_available():
         raise ValueError(
             "Modelcard rendering is based on Jinja templates."
@@ -166,9 +122,8 @@ def load_or_create_model_card(
 
     return model_card
 
-
 def populate_model_card(model_card: ModelCard, tags: Union[str, List[str]] = None) -> ModelCard:
-    """Populates the `model_card` with library name and optional tags."""
+
     if model_card.data.library_name is None:
         model_card.data.library_name = "diffusers"
 
@@ -182,11 +137,8 @@ def populate_model_card(model_card: ModelCard, tags: Union[str, List[str]] = Non
 
     return model_card
 
-
 def extract_commit_hash(resolved_file: Optional[str], commit_hash: Optional[str] = None):
-    """
-    Extracts the commit hash from a resolved filename toward a cache file.
-    """
+
     if resolved_file is None or commit_hash is not None:
         return commit_hash
     resolved_file = str(Path(resolved_file).as_posix())
@@ -196,7 +148,6 @@ def extract_commit_hash(resolved_file: Optional[str], commit_hash: Optional[str]
     commit_hash = search.groups()[0]
     return commit_hash if REGEX_COMMIT_HASH.match(commit_hash) else None
 
-
 def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
     if variant is not None:
         splits = weights_name.split(".")
@@ -204,7 +155,6 @@ def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
         weights_name = ".".join(splits)
 
     return weights_name
-
 
 @validate_hf_hub_args
 def _get_model_file(
@@ -337,7 +287,6 @@ def _get_model_file(
                 f"containing a file named {weights_name}"
             ) from e
 
-
 def _get_checkpoint_shard_files(
     pretrained_model_name_or_path,
     index_filename,
@@ -350,16 +299,7 @@ def _get_checkpoint_shard_files(
     subfolder="",
     dduf_entries: Optional[Dict[str, DDUFEntry]] = None,
 ):
-    """
-    For a given model:
 
-    - download and cache all the shards of a sharded checkpoint if `pretrained_model_name_or_path` is a model ID on the
-      Hub
-    - returns the list of paths to all the shards, as well as some metadata.
-
-    For the description of each arg, see [`PreTrainedModel.from_pretrained`]. `index_filename` is the full path to the
-    index (downloaded and cached if `pretrained_model_name_or_path` is a model ID on the Hub).
-    """
     if dduf_entries:
         if index_filename not in dduf_entries:
             raise ValueError(f"Can't find a checkpoint index ({index_filename}) in {pretrained_model_name_or_path}.")
@@ -404,7 +344,7 @@ def _get_checkpoint_shard_files(
 
     ignore_patterns = ["*.json", "*.md"]
 
-    # If the repo doesn't have the required shards, error out early even before downloading anything.
+    # If the repo doesn't have the required shards...
     if not local_files_only:
         model_files_info = model_info(pretrained_model_name_or_path, revision=revision, token=token)
         for shard_file in original_shard_filenames:
@@ -431,7 +371,7 @@ def _get_checkpoint_shard_files(
         if subfolder is not None:
             cached_folder = os.path.join(cached_folder, subfolder)
 
-    # We have already dealt with RepositoryNotFoundError and RevisionNotFoundError when getting the index, so
+    # We have already dealt with RepositoryNotFoun...
     # we don't have to catch them here. We have also dealt with EntryNotFoundError.
     except HfHubHTTPError as e:
         raise EnvironmentError(
@@ -448,7 +388,6 @@ def _get_checkpoint_shard_files(
 
     return cached_filenames, sharded_metadata
 
-
 def _check_legacy_sharding_variant_format(folder: str = None, filenames: List[str] = None, variant: str = None):
     if filenames and folder:
         raise ValueError("Both `filenames` and `folder` cannot be provided.")
@@ -461,11 +400,10 @@ def _check_legacy_sharding_variant_format(folder: str = None, filenames: List[st
     variant_file_re = re.compile(rf".*-{transformers_index_format}\.{variant}\.[a-z]+$")
     return any(variant_file_re.match(f) is not None for f in filenames)
 
-
 class PushToHubMixin:
-    """
-    A Mixin to push a model, scheduler, or pipeline to the Hugging Face Hub.
-    """
+    
+    class PushToHubMixin:
+
 
     def _upload_folder(
         self,
@@ -476,9 +414,7 @@ class PushToHubMixin:
         create_pr: bool = False,
         subfolder: Optional[str] = None,
     ):
-        """
-        Uploads all files in `working_dir` to `repo_id`.
-        """
+
         if commit_message is None:
             if "Model" in self.__class__.__name__:
                 commit_message = "Upload model"
@@ -508,43 +444,7 @@ class PushToHubMixin:
         variant: Optional[str] = None,
         subfolder: Optional[str] = None,
     ) -> str:
-        """
-        Upload model, scheduler, or pipeline files to the 🤗 Hugging Face Hub.
 
-        Parameters:
-            repo_id (`str`):
-                The name of the repository you want to push your model, scheduler, or pipeline files to. It should
-                contain your organization name when pushing to an organization. `repo_id` can also be a path to a local
-                directory.
-            commit_message (`str`, *optional*):
-                Message to commit while pushing. Default to `"Upload {object}"`.
-            private (`bool`, *optional*):
-                Whether to make the repo private. If `None` (default), the repo will be public unless the
-                organization's default is private. This value is ignored if the repo already exists.
-            token (`str`, *optional*):
-                The token to use as HTTP bearer authorization for remote files. The token generated when running `hf
-                auth login` (stored in `~/.huggingface`).
-            create_pr (`bool`, *optional*, defaults to `False`):
-                Whether or not to create a PR with the uploaded files or directly commit.
-            safe_serialization (`bool`, *optional*, defaults to `True`):
-                Whether or not to convert the model weights to the `safetensors` format.
-            variant (`str`, *optional*):
-                If specified, weights are saved in the format `pytorch_model.<variant>.bin`.
-
-        Examples:
-
-        ```python
-        from diffusers import UNet2DConditionModel
-
-        unet = UNet2DConditionModel.from_pretrained("stabilityai/stable-diffusion-2", subfolder="unet")
-
-        # Push the `unet` to your namespace with the name "my-finetuned-unet".
-        unet.push_to_hub("my-finetuned-unet")
-
-        # Push the `unet` to an organization with the name "my-finetuned-unet".
-        unet.push_to_hub("your-org/my-finetuned-unet")
-        ```
-        """
         repo_id = create_repo(repo_id, private=private, token=token, exist_ok=True).repo_id
 
         # Create a new empty model card and eventually tag it

@@ -7,7 +7,6 @@ from PIL import Image
 
 from ...utils import OptionalDependencyNotAvailable, is_torch_available, is_transformers_available
 
-
 try:
     if not (is_transformers_available() and is_torch_available()):
         raise OptionalDependencyNotAvailable()

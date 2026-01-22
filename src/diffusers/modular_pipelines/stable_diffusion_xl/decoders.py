@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import Any, List, Tuple, Union
 
 import numpy as np
@@ -28,9 +14,7 @@ from ..modular_pipeline import (
 )
 from ..modular_pipeline_utils import ComponentSpec, InputParam, OutputParam
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 class StableDiffusionXLDecodeStep(ModularPipelineBlocks):
     model_name = "stable-diffusion-xl"
@@ -74,7 +58,7 @@ class StableDiffusionXLDecodeStep(ModularPipelineBlocks):
         ]
 
     @staticmethod
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_upscale.StableDiffusionUpscalePipeline.upcast_vae with self->components
+    # Copied from diffusers.pipelines.stable_diffu...
     def upcast_vae(components):
         deprecate(
             "upcast_vae",
@@ -97,7 +81,7 @@ class StableDiffusionXLDecodeStep(ModularPipelineBlocks):
                 latents = latents.to(next(iter(components.vae.post_quant_conv.parameters())).dtype)
             elif latents.dtype != components.vae.dtype:
                 if torch.backends.mps.is_available():
-                    # some platforms (eg. apple mps) misbehave due to a pytorch bug: https://github.com/pytorch/pytorch/pull/99272
+                    # some platforms (eg. apple mp...
                     components.vae = components.vae.to(latents.dtype)
 
             # unscale/denormalize the latents
@@ -140,7 +124,6 @@ class StableDiffusionXLDecodeStep(ModularPipelineBlocks):
         self.set_block_state(state, block_state)
 
         return components, state
-
 
 class StableDiffusionXLInpaintOverlayMaskStep(ModularPipelineBlocks):
     model_name = "stable-diffusion-xl"

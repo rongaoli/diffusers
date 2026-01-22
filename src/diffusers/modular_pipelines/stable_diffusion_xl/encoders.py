@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import List, Optional, Tuple
 
 import torch
@@ -39,11 +25,9 @@ from ..modular_pipeline import ModularPipelineBlocks, PipelineState
 from ..modular_pipeline_utils import ComponentSpec, ConfigSpec, InputParam, OutputParam
 from .modular_pipeline import StableDiffusionXLModularPipeline
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
-# Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img.retrieve_latents
+# Copied from diffusers.pipelines.stable_diffusion...
 def retrieve_latents(
     encoder_output: torch.Tensor, generator: Optional[torch.Generator] = None, sample_mode: str = "sample"
 ):
@@ -55,7 +39,6 @@ def retrieve_latents(
         return encoder_output.latents
     else:
         raise AttributeError("Could not access latents of provided encoder_output")
-
 
 class StableDiffusionXLIPAdapterStep(ModularPipelineBlocks):
     model_name = "stable-diffusion-xl"
@@ -112,7 +95,7 @@ class StableDiffusionXLIPAdapterStep(ModularPipelineBlocks):
         ]
 
     @staticmethod
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.encode_image with self->components
+    # Copied from diffusers.pipelines.stable_diffu...
     def encode_image(components, image, device, num_images_per_prompt, output_hidden_states=None):
         dtype = next(components.image_encoder.parameters()).dtype
 
@@ -137,7 +120,7 @@ class StableDiffusionXLIPAdapterStep(ModularPipelineBlocks):
 
             return image_embeds, uncond_image_embeds
 
-    # modified from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_ip_adapter_image_embeds
+    # modified from diffusers.pipelines.stable_dif...
     def prepare_ip_adapter_image_embeds(
         self,
         components,
@@ -213,7 +196,6 @@ class StableDiffusionXLIPAdapterStep(ModularPipelineBlocks):
 
         self.set_block_state(state, block_state)
         return components, state
-
 
 class StableDiffusionXLTextEncoderStep(ModularPipelineBlocks):
     model_name = "stable-diffusion-xl"
@@ -309,48 +291,258 @@ class StableDiffusionXLTextEncoderStep(ModularPipelineBlocks):
         lora_scale: Optional[float] = None,
         clip_skip: Optional[int] = None,
     ):
-        r"""
-        Encodes the prompt into text encoder hidden states.
+        class StableDiffusionXLIPAdapterStep(ModularPipelineBlocks):
+    model_name = "stable-diffusion-xl"
 
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                prompt to be encoded
-            prompt_2 (`str` or `List[str]`, *optional*):
-                The prompt or prompts to be sent to the `tokenizer_2` and `text_encoder_2`. If not defined, `prompt` is
-                used in both text-encoders
-            device: (`torch.device`):
-                torch device
-            num_images_per_prompt (`int`):
-                number of images that should be generated per prompt
-            prepare_unconditional_embeds (`bool`):
-                whether to use prepare unconditional embeddings or not
-            negative_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts not to guide the image generation. If not defined, one has to pass
-                `negative_prompt_embeds` instead. Ignored when not using guidance (i.e., ignored if `guidance_scale` is
-                less than `1`).
-            negative_prompt_2 (`str` or `List[str]`, *optional*):
-                The prompt or prompts not to guide the image generation to be sent to `tokenizer_2` and
-                `text_encoder_2`. If not defined, `negative_prompt` is used in both text-encoders
-            prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt weighting. If not
-                provided, text embeddings will be generated from `prompt` input argument.
-            negative_prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated negative text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt
-                weighting. If not provided, negative_prompt_embeds will be generated from `negative_prompt` input
-                argument.
-            pooled_prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated pooled text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt weighting.
-                If not provided, pooled text embeddings will be generated from `prompt` input argument.
-            negative_pooled_prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated negative pooled text embeddings. Can be used to easily tweak text inputs, *e.g.* prompt
-                weighting. If not provided, pooled negative_prompt_embeds will be generated from `negative_prompt`
-                input argument.
-            lora_scale (`float`, *optional*):
-                A lora scale that will be applied to all LoRA layers of the text encoder if LoRA layers are loaded.
-            clip_skip (`int`, *optional*):
-                Number of layers to be skipped from CLIP while computing the prompt embeddings. A value of 1 means that
-                the output of the pre-final layer will be used for computing the prompt embeddings.
-        """
+    @property
+    def description(self) -> str:
+        return (
+            "IP Adapter step that prepares ip adapter image embeddings.\n"
+            "Note that this step only prepares the embeddings - in order for it to work correctly, "
+            "you need to load ip adapter weights into unet via ModularPipeline.load_ip_adapter() and pipeline.set_ip_adapter_scale().\n"
+            "See [ModularIPAdapterMixin](https://huggingface.co/docs/diffusers/api/loaders/ip_adapter#diffusers.loaders.ModularIPAdapterMixin)"
+            " for more details"
+        )
+
+    @property
+    def expected_components(self) -> List[ComponentSpec]:
+        return [
+            ComponentSpec("image_encoder", CLIPVisionModelWithProjection),
+            ComponentSpec(
+                "feature_extractor",
+                CLIPImageProcessor,
+                config=FrozenDict({"size": 224, "crop_size": 224}),
+                default_creation_method="from_config",
+            ),
+            ComponentSpec("unet", UNet2DConditionModel),
+            ComponentSpec(
+                "guider",
+                ClassifierFreeGuidance,
+                config=FrozenDict({"guidance_scale": 7.5}),
+                default_creation_method="from_config",
+            ),
+        ]
+
+    @property
+    def inputs(self) -> List[InputParam]:
+        return [
+            InputParam(
+                "ip_adapter_image",
+                PipelineImageInput,
+                required=True,
+                description="The image(s) to be used as ip adapter",
+            )
+        ]
+
+    @property
+    def intermediate_outputs(self) -> List[OutputParam]:
+        return [
+            OutputParam("ip_adapter_embeds", type_hint=torch.Tensor, description="IP adapter image embeddings"),
+            OutputParam(
+                "negative_ip_adapter_embeds",
+                type_hint=torch.Tensor,
+                description="Negative IP adapter image embeddings",
+            ),
+        ]
+
+    @staticmethod
+    # Copied from diffusers.pipelines.stable_diffu...
+    def encode_image(components, image, device, num_images_per_prompt, output_hidden_states=None):
+        dtype = next(components.image_encoder.parameters()).dtype
+
+        if not isinstance(image, torch.Tensor):
+            image = components.feature_extractor(image, return_tensors="pt").pixel_values
+
+        image = image.to(device=device, dtype=dtype)
+        if output_hidden_states:
+            image_enc_hidden_states = components.image_encoder(image, output_hidden_states=True).hidden_states[-2]
+            image_enc_hidden_states = image_enc_hidden_states.repeat_interleave(num_images_per_prompt, dim=0)
+            uncond_image_enc_hidden_states = components.image_encoder(
+                torch.zeros_like(image), output_hidden_states=True
+            ).hidden_states[-2]
+            uncond_image_enc_hidden_states = uncond_image_enc_hidden_states.repeat_interleave(
+                num_images_per_prompt, dim=0
+            )
+            return image_enc_hidden_states, uncond_image_enc_hidden_states
+        else:
+            image_embeds = components.image_encoder(image).image_embeds
+            image_embeds = image_embeds.repeat_interleave(num_images_per_prompt, dim=0)
+            uncond_image_embeds = torch.zeros_like(image_embeds)
+
+            return image_embeds, uncond_image_embeds
+
+    # modified from diffusers.pipelines.stable_dif...
+    def prepare_ip_adapter_image_embeds(
+        self,
+        components,
+        ip_adapter_image,
+        ip_adapter_image_embeds,
+        device,
+        num_images_per_prompt,
+        prepare_unconditional_embeds,
+    ):
+        image_embeds = []
+        if prepare_unconditional_embeds:
+            negative_image_embeds = []
+        if ip_adapter_image_embeds is None:
+            if not isinstance(ip_adapter_image, list):
+                ip_adapter_image = [ip_adapter_image]
+
+            if len(ip_adapter_image) != len(components.unet.encoder_hid_proj.image_projection_layers):
+                raise ValueError(
+                    f"`ip_adapter_image` must have same length as the number of IP Adapters. Got {len(ip_adapter_image)} images and {len(components.unet.encoder_hid_proj.image_projection_layers)} IP Adapters."
+                )
+
+            for single_ip_adapter_image, image_proj_layer in zip(
+                ip_adapter_image, components.unet.encoder_hid_proj.image_projection_layers
+            ):
+                output_hidden_state = not isinstance(image_proj_layer, ImageProjection)
+                single_image_embeds, single_negative_image_embeds = self.encode_image(
+                    components, single_ip_adapter_image, device, 1, output_hidden_state
+                )
+
+                image_embeds.append(single_image_embeds[None, :])
+                if prepare_unconditional_embeds:
+                    negative_image_embeds.append(single_negative_image_embeds[None, :])
+        else:
+            for single_image_embeds in ip_adapter_image_embeds:
+                if prepare_unconditional_embeds:
+                    single_negative_image_embeds, single_image_embeds = single_image_embeds.chunk(2)
+                    negative_image_embeds.append(single_negative_image_embeds)
+                image_embeds.append(single_image_embeds)
+
+        ip_adapter_image_embeds = []
+        for i, single_image_embeds in enumerate(image_embeds):
+            single_image_embeds = torch.cat([single_image_embeds] * num_images_per_prompt, dim=0)
+            if prepare_unconditional_embeds:
+                single_negative_image_embeds = torch.cat([negative_image_embeds[i]] * num_images_per_prompt, dim=0)
+                single_image_embeds = torch.cat([single_negative_image_embeds, single_image_embeds], dim=0)
+
+            single_image_embeds = single_image_embeds.to(device=device)
+            ip_adapter_image_embeds.append(single_image_embeds)
+
+        return ip_adapter_image_embeds
+
+    @torch.no_grad()
+    def __call__(self, components: StableDiffusionXLModularPipeline, state: PipelineState) -> PipelineState:
+        block_state = self.get_block_state(state)
+
+        block_state.prepare_unconditional_embeds = components.guider.num_conditions > 1
+        block_state.device = components._execution_device
+
+        block_state.ip_adapter_embeds = self.prepare_ip_adapter_image_embeds(
+            components,
+            ip_adapter_image=block_state.ip_adapter_image,
+            ip_adapter_image_embeds=None,
+            device=block_state.device,
+            num_images_per_prompt=1,
+            prepare_unconditional_embeds=block_state.prepare_unconditional_embeds,
+        )
+        if block_state.prepare_unconditional_embeds:
+            block_state.negative_ip_adapter_embeds = []
+            for i, image_embeds in enumerate(block_state.ip_adapter_embeds):
+                negative_image_embeds, image_embeds = image_embeds.chunk(2)
+                block_state.negative_ip_adapter_embeds.append(negative_image_embeds)
+                block_state.ip_adapter_embeds[i] = image_embeds
+
+        self.set_block_state(state, block_state)
+        return components, state
+
+class StableDiffusionXLTextEncoderStep(ModularPipelineBlocks):
+    model_name = "stable-diffusion-xl"
+
+    @property
+    def description(self) -> str:
+        return "Text Encoder step that generate text_embeddings to guide the image generation"
+
+    @property
+    def expected_components(self) -> List[ComponentSpec]:
+        return [
+            ComponentSpec("text_encoder", CLIPTextModel),
+            ComponentSpec("text_encoder_2", CLIPTextModelWithProjection),
+            ComponentSpec("tokenizer", CLIPTokenizer),
+            ComponentSpec("tokenizer_2", CLIPTokenizer),
+            ComponentSpec(
+                "guider",
+                ClassifierFreeGuidance,
+                config=FrozenDict({"guidance_scale": 7.5}),
+                default_creation_method="from_config",
+            ),
+        ]
+
+    @property
+    def expected_configs(self) -> List[ConfigSpec]:
+        return [ConfigSpec("force_zeros_for_empty_prompt", True)]
+
+    @property
+    def inputs(self) -> List[InputParam]:
+        return [
+            InputParam("prompt"),
+            InputParam("prompt_2"),
+            InputParam("negative_prompt"),
+            InputParam("negative_prompt_2"),
+            InputParam("cross_attention_kwargs"),
+            InputParam("clip_skip"),
+        ]
+
+    @property
+    def intermediate_outputs(self) -> List[OutputParam]:
+        return [
+            OutputParam(
+                "prompt_embeds",
+                type_hint=torch.Tensor,
+                kwargs_type="denoiser_input_fields",
+                description="text embeddings used to guide the image generation",
+            ),
+            OutputParam(
+                "negative_prompt_embeds",
+                type_hint=torch.Tensor,
+                kwargs_type="denoiser_input_fields",
+                description="negative text embeddings used to guide the image generation",
+            ),
+            OutputParam(
+                "pooled_prompt_embeds",
+                type_hint=torch.Tensor,
+                kwargs_type="denoiser_input_fields",
+                description="pooled text embeddings used to guide the image generation",
+            ),
+            OutputParam(
+                "negative_pooled_prompt_embeds",
+                type_hint=torch.Tensor,
+                kwargs_type="denoiser_input_fields",
+                description="negative pooled text embeddings used to guide the image generation",
+            ),
+        ]
+
+    @staticmethod
+    def check_inputs(block_state):
+        if block_state.prompt is not None and (
+            not isinstance(block_state.prompt, str) and not isinstance(block_state.prompt, list)
+        ):
+            raise ValueError(f"`prompt` has to be of type `str` or `list` but is {type(block_state.prompt)}")
+        elif block_state.prompt_2 is not None and (
+            not isinstance(block_state.prompt_2, str) and not isinstance(block_state.prompt_2, list)
+        ):
+            raise ValueError(f"`prompt_2` has to be of type `str` or `list` but is {type(block_state.prompt_2)}")
+
+    @staticmethod
+    def encode_prompt(
+        components,
+        prompt: str,
+        prompt_2: Optional[str] = None,
+        device: Optional[torch.device] = None,
+        num_images_per_prompt: int = 1,
+        prepare_unconditional_embeds: bool = True,
+        negative_prompt: Optional[str] = None,
+        negative_prompt_2: Optional[str] = None,
+        prompt_embeds: Optional[torch.Tensor] = None,
+        negative_prompt_embeds: Optional[torch.Tensor] = None,
+        pooled_prompt_embeds: Optional[torch.Tensor] = None,
+        negative_pooled_prompt_embeds: Optional[torch.Tensor] = None,
+        lora_scale: Optional[float] = None,
+        clip_skip: Optional[int] = None,
+    ):
+
         device = device or components._execution_device
 
         # set lora scale so that monkey patched LoRA
@@ -502,7 +694,7 @@ class StableDiffusionXLTextEncoderStep(ModularPipelineBlocks):
         prompt_embeds = prompt_embeds.view(bs_embed * num_images_per_prompt, seq_len, -1)
 
         if prepare_unconditional_embeds:
-            # duplicate unconditional embeddings for each generation per prompt, using mps friendly method
+            # duplicate unconditional embeddings f...
             seq_len = negative_prompt_embeds.shape[1]
 
             if components.text_encoder_2 is not None:
@@ -575,7 +767,6 @@ class StableDiffusionXLTextEncoderStep(ModularPipelineBlocks):
         self.set_block_state(state, block_state)
         return components, state
 
-
 class StableDiffusionXLVaeEncoderStep(ModularPipelineBlocks):
     model_name = "stable-diffusion-xl"
 
@@ -620,7 +811,7 @@ class StableDiffusionXLVaeEncoderStep(ModularPipelineBlocks):
             )
         ]
 
-    # Modified from diffusers.pipelines.stable_diffusion_xl.pipeline_stable_diffusion_xl_inpaint.StableDiffusionXLInpaintPipeline._encode_vae_image with self -> components
+    # Modified from diffusers.pipelines.stable_dif...
     # YiYi TODO: update the _encode_vae_image so that we can use #Coped from
     def _encode_vae_image(self, components, image: torch.Tensor, generator: torch.Generator):
         latents_mean = latents_std = None
@@ -669,7 +860,7 @@ class StableDiffusionXLVaeEncoderStep(ModularPipelineBlocks):
         image = image.to(device=block_state.device, dtype=block_state.dtype)
         block_state.batch_size = image.shape[0]
 
-        # if generator is a list, make sure the length of it matches the length of images (both should be batch_size)
+        # if generator is a list, make sure the le...
         if isinstance(block_state.generator, list) and len(block_state.generator) != block_state.batch_size:
             raise ValueError(
                 f"You have passed a list of generators of length {len(block_state.generator)}, but requested an effective batch"
@@ -681,7 +872,6 @@ class StableDiffusionXLVaeEncoderStep(ModularPipelineBlocks):
         self.set_block_state(state, block_state)
 
         return components, state
-
 
 class StableDiffusionXLInpaintVaeEncoderStep(ModularPipelineBlocks):
     model_name = "stable-diffusion-xl"
@@ -741,7 +931,7 @@ class StableDiffusionXLInpaintVaeEncoderStep(ModularPipelineBlocks):
             ),
         ]
 
-    # Modified from diffusers.pipelines.stable_diffusion_xl.pipeline_stable_diffusion_xl_inpaint.StableDiffusionXLInpaintPipeline._encode_vae_image with self -> components
+    # Modified from diffusers.pipelines.stable_dif...
     # YiYi TODO: update the _encode_vae_image so that we can use #Coped from
     def _encode_vae_image(self, components, image: torch.Tensor, generator: torch.Generator):
         latents_mean = latents_std = None
@@ -777,7 +967,7 @@ class StableDiffusionXLInpaintVaeEncoderStep(ModularPipelineBlocks):
 
         return image_latents
 
-    # modified from diffusers.pipelines.stable_diffusion_xl.pipeline_stable_diffusion_xl_inpaint.StableDiffusionXLInpaintPipeline.prepare_mask_latents
+    # modified from diffusers.pipelines.stable_dif...
     # do not accept do_classifier_free_guidance
     def prepare_mask_latents(
         self, components, mask, masked_image, batch_size, height, width, dtype, device, generator
@@ -790,7 +980,7 @@ class StableDiffusionXLInpaintVaeEncoderStep(ModularPipelineBlocks):
         )
         mask = mask.to(device=device, dtype=dtype)
 
-        # duplicate mask and masked_image_latents for each generation per prompt, using mps friendly method
+        # duplicate mask and masked_image_latents...
         if mask.shape[0] < batch_size:
             if not batch_size % mask.shape[0] == 0:
                 raise ValueError(

@@ -98,9 +98,8 @@ Here are examples of rewrites for different types of prompts: # Examples (Few-Sh
     forests, winding paths, and quiet pools, creating a serene and distant atmosphere. The overall picture uses a
     realistic style with rich details and natural light and shadow effects, highlighting the cultural heritage of the
     stone tablet and the classical beauty of the garden.
-# Output Format Please directly output the rewritten and optimized Prompt content. Do not include any explanatory
+# Output Format Please directly output the rewritt...
 language or JSON formatting, and do not add opening or closing quotes yourself."""
-
 
 SYSTEM_PROMPT_ZH = """
 你是一名文生图模型的prompt
@@ -139,4 +138,3 @@ engineering专家。由于文生图模型对用户prompt的理解能力有限，
   7. 用户输入：石碑上刻着“关关雎鸠，在河之洲”，自然光照，背景是中式园林
     改写输出：一块古老的石碑上刻着“关关雎鸠，在河之洲”，石碑表面布满岁月的痕迹，字迹清晰而深刻。自然光线从上方洒下，柔和地照亮石碑的每一个细节，增强了其历史感。背景是一座典雅的中式园林，园林中有翠绿的竹林、蜿蜒的小径和静谧的水池，营造出一种宁静而悠远的氛围。整体画面采用写实风格，细节丰富，光影效果自然，突出了石碑的文化底蕴和园林的古典美。
 # 输出格式 请直接输出改写优化后的 Prompt 内容，不要包含任何解释性语言或 JSON 格式，不要自行添加开头或结尾的引号。
-"""

@@ -1,17 +1,3 @@
-# Copyright 2025 The Framepack Team, The Hunyuan Team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -34,9 +20,7 @@ from .transformer_hunyuan_video import (
     HunyuanVideoTransformerBlock,
 )
 
-
 logger = get_logger(__name__)  # pylint: disable=invalid-name
-
 
 class HunyuanVideoFramepackRotaryPosEmbed(nn.Module):
     def __init__(self, patch_size: int, patch_size_t: int, rope_dim: List[int], theta: float = 256.0) -> None:
@@ -68,7 +52,6 @@ class HunyuanVideoFramepackRotaryPosEmbed(nn.Module):
 
         return freqs_cos, freqs_sin
 
-
 class FramepackClipVisionProjection(nn.Module):
     def __init__(self, in_channels: int, out_channels: int):
         super().__init__()
@@ -80,7 +63,6 @@ class FramepackClipVisionProjection(nn.Module):
         hidden_states = F.silu(hidden_states)
         hidden_states = self.down(hidden_states)
         return hidden_states
-
 
 class HunyuanVideoHistoryPatchEmbed(nn.Module):
     def __init__(self, in_channels: int, inner_dim: int):
@@ -107,7 +89,6 @@ class HunyuanVideoHistoryPatchEmbed(nn.Module):
             latents_clean_4x = self.proj_4x(latents_clean_4x)
             latents_clean_4x = latents_clean_4x.flatten(2).transpose(1, 2)
         return latents_clean, latents_clean_2x, latents_clean_4x
-
 
 class HunyuanVideoFramepackTransformer3DModel(
     ModelMixin, ConfigMixin, PeftAdapterMixin, FromOriginalModelMixin, CacheMixin
@@ -398,7 +379,6 @@ class HunyuanVideoFramepackTransformer3DModel(
         freqs_sin = freqs_sin.flatten(2).permute(0, 2, 1).squeeze(0)
         return freqs_cos, freqs_sin
 
-
 def _pad_for_3d_conv(x, kernel_size):
     if isinstance(x, (tuple, list)):
         return tuple(_pad_for_3d_conv(i, kernel_size) for i in x)
@@ -408,7 +388,6 @@ def _pad_for_3d_conv(x, kernel_size):
     pad_h = (ph - (h % ph)) % ph
     pad_w = (pw - (w % pw)) % pw
     return torch.nn.functional.pad(x, (0, pad_w, 0, pad_h, 0, pad_t), mode="replicate")
-
 
 def _center_down_sample_3d(x, kernel_size):
     if isinstance(x, (tuple, list)):

@@ -1,16 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 import itertools
 from typing import Optional, Tuple, Union
 
@@ -25,7 +12,6 @@ from ..modeling_outputs import AutoencoderKLOutput
 from ..modeling_utils import ModelMixin
 from ..unets.unet_3d_blocks import MidBlockTemporalDecoder, UpBlockTemporalDecoder
 from .vae import AutoencoderMixin, DecoderOutput, DiagonalGaussianDistribution, Encoder
-
 
 class TemporalDecoder(nn.Module):
     def __init__(
@@ -91,7 +77,71 @@ class TemporalDecoder(nn.Module):
         image_only_indicator: torch.Tensor,
         num_frames: int = 1,
     ) -> torch.Tensor:
-        r"""The forward method of the `Decoder` class."""
+        class TemporalDecoder(nn.Module):
+    def __init__(
+        self,
+        in_channels: int = 4,
+        out_channels: int = 3,
+        block_out_channels: Tuple[int, ...] = (128, 256, 512, 512),
+        layers_per_block: int = 2,
+    ):
+        super().__init__()
+        self.layers_per_block = layers_per_block
+
+        self.conv_in = nn.Conv2d(in_channels, block_out_channels[-1], kernel_size=3, stride=1, padding=1)
+        self.mid_block = MidBlockTemporalDecoder(
+            num_layers=self.layers_per_block,
+            in_channels=block_out_channels[-1],
+            out_channels=block_out_channels[-1],
+            attention_head_dim=block_out_channels[-1],
+        )
+
+        # up
+        self.up_blocks = nn.ModuleList([])
+        reversed_block_out_channels = list(reversed(block_out_channels))
+        output_channel = reversed_block_out_channels[0]
+        for i in range(len(block_out_channels)):
+            prev_output_channel = output_channel
+            output_channel = reversed_block_out_channels[i]
+
+            is_final_block = i == len(block_out_channels) - 1
+            up_block = UpBlockTemporalDecoder(
+                num_layers=self.layers_per_block + 1,
+                in_channels=prev_output_channel,
+                out_channels=output_channel,
+                add_upsample=not is_final_block,
+            )
+            self.up_blocks.append(up_block)
+            prev_output_channel = output_channel
+
+        self.conv_norm_out = nn.GroupNorm(num_channels=block_out_channels[0], num_groups=32, eps=1e-6)
+
+        self.conv_act = nn.SiLU()
+        self.conv_out = torch.nn.Conv2d(
+            in_channels=block_out_channels[0],
+            out_channels=out_channels,
+            kernel_size=3,
+            padding=1,
+        )
+
+        conv_out_kernel_size = (3, 1, 1)
+        padding = [int(k // 2) for k in conv_out_kernel_size]
+        self.time_conv_out = torch.nn.Conv3d(
+            in_channels=out_channels,
+            out_channels=out_channels,
+            kernel_size=conv_out_kernel_size,
+            padding=padding,
+        )
+
+        self.gradient_checkpointing = False
+
+    def forward(
+        self,
+        sample: torch.Tensor,
+        image_only_indicator: torch.Tensor,
+        num_frames: int = 1,
+    ) -> torch.Tensor:
+
 
         sample = self.conv_in(sample)
 
@@ -135,36 +185,8 @@ class TemporalDecoder(nn.Module):
 
         return sample
 
-
 class AutoencoderKLTemporalDecoder(ModelMixin, AttentionMixin, AutoencoderMixin, ConfigMixin):
-    r"""
-    A VAE model with KL loss for encoding images into latents and decoding latent representations into images.
 
-    This model inherits from [`ModelMixin`]. Check the superclass documentation for it's generic methods implemented
-    for all models (such as downloading or saving).
-
-    Parameters:
-        in_channels (int, *optional*, defaults to 3): Number of channels in the input image.
-        out_channels (int,  *optional*, defaults to 3): Number of channels in the output.
-        down_block_types (`Tuple[str]`, *optional*, defaults to `("DownEncoderBlock2D",)`):
-            Tuple of downsample block types.
-        block_out_channels (`Tuple[int]`, *optional*, defaults to `(64,)`):
-            Tuple of block output channels.
-        layers_per_block: (`int`, *optional*, defaults to 1): Number of layers per block.
-        latent_channels (`int`, *optional*, defaults to 4): Number of channels in the latent space.
-        sample_size (`int`, *optional*, defaults to `32`): Sample input size.
-        scaling_factor (`float`, *optional*, defaults to 0.18215):
-            The component-wise standard deviation of the trained latent space computed using the first batch of the
-            training set. This is used to scale the latent space to have unit variance when training the diffusion
-            model. The latents are scaled with the formula `z = z * scaling_factor` before being passed to the
-            diffusion model. When decoding, the latents are scaled back to the original scale with the formula: `z = 1
-            / scaling_factor * z`. For more details, refer to sections 4.3.2 and D.1 of the [High-Resolution Image
-            Synthesis with Latent Diffusion Models](https://huggingface.co/papers/2112.10752) paper.
-        force_upcast (`bool`, *optional*, default to `True`):
-            If enabled it will force the VAE to run in float32 for high image resolution pipelines, such as SD-XL. VAE
-            can be fine-tuned / trained to a lower range without losing too much precision in which case `force_upcast`
-            can be set to `False` - see: https://huggingface.co/madebyollin/sdxl-vae-fp16-fix
-    """
 
     _supports_gradient_checkpointing = True
 
@@ -204,9 +226,7 @@ class AutoencoderKLTemporalDecoder(ModelMixin, AttentionMixin, AutoencoderMixin,
         self.quant_conv = nn.Conv2d(2 * latent_channels, 2 * latent_channels, 1)
 
     def set_default_attn_processor(self):
-        """
-        Disables custom attention processors and sets the default attention implementation.
-        """
+
         if all(proc.__class__ in CROSS_ATTENTION_PROCESSORS for proc in self.attn_processors.values()):
             processor = AttnProcessor()
         else:
@@ -220,20 +240,7 @@ class AutoencoderKLTemporalDecoder(ModelMixin, AttentionMixin, AutoencoderMixin,
     def encode(
         self, x: torch.Tensor, return_dict: bool = True
     ) -> Union[AutoencoderKLOutput, Tuple[DiagonalGaussianDistribution]]:
-        """
-        Encode a batch of images into latents.
 
-        Args:
-            x (`torch.Tensor`): Input batch of images.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether to return a [`~models.autoencoders.autoencoder_kl.AutoencoderKLOutput`] instead of a plain
-                tuple.
-
-        Returns:
-                The latent representations of the encoded images. If `return_dict` is True, a
-                [`~models.autoencoders.autoencoder_kl.AutoencoderKLOutput`] is returned, otherwise a plain `tuple` is
-                returned.
-        """
         h = self.encoder(x)
         moments = self.quant_conv(h)
         posterior = DiagonalGaussianDistribution(moments)
@@ -250,20 +257,7 @@ class AutoencoderKLTemporalDecoder(ModelMixin, AttentionMixin, AutoencoderMixin,
         num_frames: int,
         return_dict: bool = True,
     ) -> Union[DecoderOutput, torch.Tensor]:
-        """
-        Decode a batch of images.
 
-        Args:
-            z (`torch.Tensor`): Input batch of latent vectors.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether to return a [`~models.vae.DecoderOutput`] instead of a plain tuple.
-
-        Returns:
-            [`~models.vae.DecoderOutput`] or `tuple`:
-                If return_dict is True, a [`~models.vae.DecoderOutput`] is returned, otherwise a plain `tuple` is
-                returned.
-
-        """
         batch_size = z.shape[0] // num_frames
         image_only_indicator = torch.zeros(batch_size, num_frames, dtype=z.dtype, device=z.device)
         decoded = self.decoder(z, num_frames=num_frames, image_only_indicator=image_only_indicator)
@@ -281,14 +275,8 @@ class AutoencoderKLTemporalDecoder(ModelMixin, AttentionMixin, AutoencoderMixin,
         generator: Optional[torch.Generator] = None,
         num_frames: int = 1,
     ) -> Union[DecoderOutput, torch.Tensor]:
-        r"""
-        Args:
-            sample (`torch.Tensor`): Input sample.
-            sample_posterior (`bool`, *optional*, defaults to `False`):
-                Whether to sample from the posterior.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether or not to return a [`DecoderOutput`] instead of a plain tuple.
-        """
+        
+        """r"""
         x = sample
         posterior = self.encode(x).latent_dist
         if sample_posterior:

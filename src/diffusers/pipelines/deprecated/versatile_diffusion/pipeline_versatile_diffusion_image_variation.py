@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import inspect
 from typing import Callable, List, Optional, Union
 
@@ -27,30 +13,10 @@ from ....utils import deprecate, logging
 from ....utils.torch_utils import randn_tensor
 from ...pipeline_utils import DiffusionPipeline, ImagePipelineOutput
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 class VersatileDiffusionImageVariationPipeline(DiffusionPipeline):
-    r"""
-    Pipeline for image variation using Versatile Diffusion.
 
-    This model inherits from [`DiffusionPipeline`]. Check the superclass documentation for the generic methods
-    implemented for all pipelines (downloading, saving, running on a particular device, etc.).
-
-    Parameters:
-        vqvae ([`VQModel`]):
-            Vector-quantized (VQ) model to encode and decode images to and from latent representations.
-        bert ([`LDMBertModel`]):
-            Text-encoder model based on [`~transformers.BERT`].
-        tokenizer ([`~transformers.BertTokenizer`]):
-            A `BertTokenizer` to tokenize text.
-        unet ([`UNet2DConditionModel`]):
-            A `UNet2DConditionModel` to denoise the encoded image latents.
-        scheduler ([`SchedulerMixin`]):
-            A scheduler to be used in combination with `unet` to denoise the encoded image latents. Can be one of
-            [`DDIMScheduler`], [`LMSDiscreteScheduler`], or [`PNDMScheduler`].
-    """
 
     model_cpu_offload_seq = "bert->unet->vqvae"
 
@@ -80,22 +46,8 @@ class VersatileDiffusionImageVariationPipeline(DiffusionPipeline):
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
 
     def _encode_prompt(self, prompt, device, num_images_per_prompt, do_classifier_free_guidance, negative_prompt):
-        r"""
-        Encodes the prompt into text encoder hidden states.
-
-        Args:
-            prompt (`str` or `List[str]`):
-                prompt to be encoded
-            device: (`torch.device`):
-                torch device
-            num_images_per_prompt (`int`):
-                number of images that should be generated per prompt
-            do_classifier_free_guidance (`bool`):
-                whether to use classifier free guidance or not
-            negative_prompt (`str` or `List[str]`):
-                The prompt or prompts not to guide the image generation. Ignored when not using guidance (i.e., ignored
-                if `guidance_scale` is less than `1`).
-        """
+        
+        """r"""
 
         def normalize_embeddings(encoder_output):
             embeds = self.image_encoder.vision_model.post_layernorm(encoder_output.last_hidden_state)
@@ -146,7 +98,7 @@ class VersatileDiffusionImageVariationPipeline(DiffusionPipeline):
             negative_prompt_embeds = self.image_encoder(pixel_values)
             negative_prompt_embeds = normalize_embeddings(negative_prompt_embeds)
 
-            # duplicate unconditional embeddings for each generation per prompt, using mps friendly method
+            # duplicate unconditional embeddings f...
             seq_len = negative_prompt_embeds.shape[1]
             negative_prompt_embeds = negative_prompt_embeds.repeat(1, num_images_per_prompt, 1)
             negative_prompt_embeds = negative_prompt_embeds.view(batch_size * num_images_per_prompt, seq_len, -1)
@@ -158,7 +110,7 @@ class VersatileDiffusionImageVariationPipeline(DiffusionPipeline):
 
         return image_embeddings
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.decode_latents
+    # Copied from diffusers.pipelines.stable_diffu...
     def decode_latents(self, latents):
         deprecation_message = "The decode_latents method is deprecated and will be removed in 1.0.0. Please use VaeImageProcessor.postprocess(...) instead"
         deprecate("decode_latents", "1.0.0", deprecation_message, standard_warn=False)
@@ -166,13 +118,13 @@ class VersatileDiffusionImageVariationPipeline(DiffusionPipeline):
         latents = 1 / self.vae.config.scaling_factor * latents
         image = self.vae.decode(latents, return_dict=False)[0]
         image = (image / 2 + 0.5).clamp(0, 1)
-        # we always cast to float32 as this does not cause significant overhead and is compatible with bfloat16
+        # we always cast to float32 as this does n...
         image = image.cpu().permute(0, 2, 3, 1).float().numpy()
         return image
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_extra_step_kwargs
+    # Copied from diffusers.pipelines.stable_diffu...
     def prepare_extra_step_kwargs(self, generator, eta):
-        # prepare extra kwargs for the scheduler step, since not all schedulers have the same signature
+        # prepare extra kwargs for the scheduler s...
         # eta (η) is only used with the DDIMScheduler, it will be ignored for other schedulers.
         # eta corresponds to η in DDIM paper: https://huggingface.co/papers/2010.02502
         # and should be between [0, 1]
@@ -188,7 +140,7 @@ class VersatileDiffusionImageVariationPipeline(DiffusionPipeline):
             extra_step_kwargs["generator"] = generator
         return extra_step_kwargs
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_image_variation.StableDiffusionImageVariationPipeline.check_inputs
+    # Copied from diffusers.pipelines.stable_diffu...
     def check_inputs(self, image, height, width, callback_steps):
         if (
             not isinstance(image, torch.Tensor)
@@ -211,7 +163,7 @@ class VersatileDiffusionImageVariationPipeline(DiffusionPipeline):
                 f" {type(callback_steps)}."
             )
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_latents
+    # Copied from diffusers.pipelines.stable_diffu...
     def prepare_latents(self, batch_size, num_channels_latents, height, width, dtype, device, generator, latents=None):
         shape = (
             batch_size,
@@ -242,10 +194,10 @@ class VersatileDiffusionImageVariationPipeline(DiffusionPipeline):
         width: Optional[int] = None,
         num_inference_steps: int = 50,
         guidance_scale: float = 7.5,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        negative_prompt: Optional[str] = None,
         num_images_per_prompt: Optional[int] = 1,
         eta: float = 0.0,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+        generator: Optional[torch.Generator] = None,
         latents: Optional[torch.Tensor] = None,
         output_type: Optional[str] = "pil",
         return_dict: bool = True,
@@ -253,21 +205,8 @@ class VersatileDiffusionImageVariationPipeline(DiffusionPipeline):
         callback_steps: int = 1,
         **kwargs,
     ):
-        r"""
-        The call function to the pipeline for generation.
 
-        Args:
-            image (`PIL.Image.Image`, `List[PIL.Image.Image]` or `torch.Tensor`):
-                The image prompt or prompts to guide the image generation.
-            height (`int`, *optional*, defaults to `self.image_unet.config.sample_size * self.vae_scale_factor`):
-                The height in pixels of the generated image.
-            width (`int`, *optional*, defaults to `self.image_unet.config.sample_size * self.vae_scale_factor`):
-                The width in pixels of the generated image.
-            num_inference_steps (`int`, *optional*, defaults to 50):
-                The number of denoising steps. More denoising steps usually lead to a higher quality image at the
-                expense of slower inference.
-            guidance_scale (`float`, *optional*, defaults to 7.5):
-                A higher guidance scale value encourages the model to generate images closely linked to the text
+        The call function to the pipeline for generation.
                 `prompt` at the expense of lower image quality. Guidance scale is enabled when `guidance_scale > 1`.
             negative_prompt (`str` or `List[str]`, *optional*):
                 The prompt or prompts to guide what to not include in image generation. If not defined, you need to
@@ -295,107 +234,4 @@ class VersatileDiffusionImageVariationPipeline(DiffusionPipeline):
             callback_steps (`int`, *optional*, defaults to 1):
                 The frequency at which the `callback` function is called. If not specified, the callback is called at
                 every step.
-
-        Examples:
-
-        ```py
-        >>> from diffusers import VersatileDiffusionImageVariationPipeline
-        >>> import torch
-        >>> import requests
-        >>> from io import BytesIO
-        >>> from PIL import Image
-
-        >>> # let's download an initial image
-        >>> url = "https://huggingface.co/datasets/diffusers/images/resolve/main/benz.jpg"
-
-        >>> response = requests.get(url)
-        >>> image = Image.open(BytesIO(response.content)).convert("RGB")
-
-        >>> pipe = VersatileDiffusionImageVariationPipeline.from_pretrained(
-        ...     "shi-labs/versatile-diffusion", torch_dtype=torch.float16
-        ... )
-        >>> pipe = pipe.to("cuda")
-
-        >>> generator = torch.Generator(device="cuda").manual_seed(0)
-        >>> image = pipe(image, generator=generator).images[0]
-        >>> image.save("./car_variation.png")
-        ```
-
-        Returns:
-            [`~pipelines.stable_diffusion.StableDiffusionPipelineOutput`] or `tuple`:
-                If `return_dict` is `True`, [`~pipelines.stable_diffusion.StableDiffusionPipelineOutput`] is returned,
-                otherwise a `tuple` is returned where the first element is a list with the generated images.
-        """
-        # 0. Default height and width to unet
-        height = height or self.image_unet.config.sample_size * self.vae_scale_factor
-        width = width or self.image_unet.config.sample_size * self.vae_scale_factor
-
-        # 1. Check inputs. Raise error if not correct
-        self.check_inputs(image, height, width, callback_steps)
-
-        # 2. Define call parameters
-        batch_size = 1 if isinstance(image, PIL.Image.Image) else len(image)
-        device = self._execution_device
-        # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
-        # of the Imagen paper: https://huggingface.co/papers/2205.11487 . `guidance_scale = 1`
-        # corresponds to doing no classifier free guidance.
-        do_classifier_free_guidance = guidance_scale > 1.0
-
-        # 3. Encode input prompt
-        image_embeddings = self._encode_prompt(
-            image, device, num_images_per_prompt, do_classifier_free_guidance, negative_prompt
-        )
-
-        # 4. Prepare timesteps
-        self.scheduler.set_timesteps(num_inference_steps, device=device)
-        timesteps = self.scheduler.timesteps
-
-        # 5. Prepare latent variables
-        num_channels_latents = self.image_unet.config.in_channels
-        latents = self.prepare_latents(
-            batch_size * num_images_per_prompt,
-            num_channels_latents,
-            height,
-            width,
-            image_embeddings.dtype,
-            device,
-            generator,
-            latents,
-        )
-
-        # 6. Prepare extra step kwargs.
-        extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
-
-        # 7. Denoising loop
-        for i, t in enumerate(self.progress_bar(timesteps)):
-            # expand the latents if we are doing classifier free guidance
-            latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
-            latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
-
-            # predict the noise residual
-            noise_pred = self.image_unet(latent_model_input, t, encoder_hidden_states=image_embeddings).sample
-
-            # perform guidance
-            if do_classifier_free_guidance:
-                noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
-
-            # compute the previous noisy sample x_t -> x_t-1
-            latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
-
-            # call the callback, if provided
-            if callback is not None and i % callback_steps == 0:
-                step_idx = i // getattr(self.scheduler, "order", 1)
-                callback(step_idx, t, latents)
-
-        if not output_type == "latent":
-            image = self.vae.decode(latents / self.vae.config.scaling_factor, return_dict=False)[0]
-        else:
-            image = latents
-
-        image = self.image_processor.postprocess(image, output_type=output_type)
-
-        if not return_dict:
-            return (image,)
-
-        return ImagePipelineOutput(images=image)
+        使用示例见文档

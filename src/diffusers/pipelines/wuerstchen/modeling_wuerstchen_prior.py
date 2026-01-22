@@ -1,18 +1,3 @@
-# Copyright (c) 2023 Dominic Rampas MIT License
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import math
 
 import torch
@@ -29,7 +14,6 @@ from ...models.attention_processor import (
 )
 from ...models.modeling_utils import ModelMixin
 from .modeling_wuerstchen_common import AttnBlock, ResBlock, TimestepBlock, WuerstchenLayerNorm
-
 
 class WuerstchenPrior(ModelMixin, AttentionMixin, ConfigMixin, UNet2DConditionLoadersMixin, PeftAdapterMixin):
     unet_name = "prior"
@@ -60,11 +44,40 @@ class WuerstchenPrior(ModelMixin, AttentionMixin, ConfigMixin, UNet2DConditionLo
         self.gradient_checkpointing = False
         self.set_default_attn_processor()
 
-    # Copied from diffusers.models.unets.unet_2d_condition.UNet2DConditionModel.set_default_attn_processor
+    # Copied from diffusers.models.unets.unet_2d_c...
     def set_default_attn_processor(self):
-        """
-        Disables custom attention processors and sets the default attention implementation.
-        """
+        class WuerstchenPrior(ModelMixin, AttentionMixin, ConfigMixin, UNet2DConditionLoadersMixin, PeftAdapterMixin):
+    unet_name = "prior"
+    _supports_gradient_checkpointing = True
+
+    @register_to_config
+    def __init__(self, c_in=16, c=1280, c_cond=1024, c_r=64, depth=16, nhead=16, dropout=0.1):
+        super().__init__()
+
+        self.c_r = c_r
+        self.projection = nn.Conv2d(c_in, c, kernel_size=1)
+        self.cond_mapper = nn.Sequential(
+            nn.Linear(c_cond, c),
+            nn.LeakyReLU(0.2),
+            nn.Linear(c, c),
+        )
+
+        self.blocks = nn.ModuleList()
+        for _ in range(depth):
+            self.blocks.append(ResBlock(c, dropout=dropout))
+            self.blocks.append(TimestepBlock(c, c_r))
+            self.blocks.append(AttnBlock(c, c, nhead, self_attn=True, dropout=dropout))
+        self.out = nn.Sequential(
+            WuerstchenLayerNorm(c, elementwise_affine=False, eps=1e-6),
+            nn.Conv2d(c, c_in * 2, kernel_size=1),
+        )
+
+        self.gradient_checkpointing = False
+        self.set_default_attn_processor()
+
+    # Copied from diffusers.models.unets.unet_2d_c...
+    def set_default_attn_processor(self):
+
         if all(proc.__class__ in ADDED_KV_ATTENTION_PROCESSORS for proc in self.attn_processors.values()):
             processor = AttnAddedKVProcessor()
         elif all(proc.__class__ in CROSS_ATTENTION_PROCESSORS for proc in self.attn_processors.values()):

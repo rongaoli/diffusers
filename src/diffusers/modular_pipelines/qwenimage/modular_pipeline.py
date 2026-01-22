@@ -1,27 +1,9 @@
-# Copyright 2025 Qwen-Image Team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-
 from ...configuration_utils import ConfigMixin, register_to_config
 from ...loaders import QwenImageLoraLoaderMixin
 from ..modular_pipeline import ModularPipeline
 
-
 class QwenImagePachifier(ConfigMixin):
-    """
-    A class to pack and unpack latents for QwenImage.
-    """
+
 
     config_name = "config.json"
 
@@ -89,13 +71,8 @@ class QwenImagePachifier(ConfigMixin):
 
         return latents
 
-
 class QwenImageLayeredPachifier(ConfigMixin):
-    """
-    A class to pack and unpack latents for QwenImage Layered.
 
-    Unlike QwenImagePachifier, this handles 5D latents with shape (B, layers+1, C, H, W).
-    """
 
     config_name = "config.json"
 
@@ -104,9 +81,7 @@ class QwenImageLayeredPachifier(ConfigMixin):
         super().__init__()
 
     def pack_latents(self, latents):
-        """
-        Pack latents from (B, layers, C, H, W) to (B, layers * H/2 * W/2, C*4).
-        """
+
 
         if latents.ndim != 5:
             raise ValueError(f"Latents must have 5 dimensions (B, layers, C, H, W), but got {latents.ndim}")
@@ -137,9 +112,7 @@ class QwenImageLayeredPachifier(ConfigMixin):
         return latents
 
     def unpack_latents(self, latents, height, width, layers, vae_scale_factor=8):
-        """
-        Unpack latents from (B, seq, C*4) to (B, C, layers+1, H, W).
-        """
+
 
         if latents.ndim != 3:
             raise ValueError(f"Latents must have 3 dimensions, but got {latents.ndim}")
@@ -171,13 +144,8 @@ class QwenImageLayeredPachifier(ConfigMixin):
 
         return latents
 
-
 class QwenImageModularPipeline(ModularPipeline, QwenImageLoraLoaderMixin):
-    """
-    A ModularPipeline for QwenImage.
 
-    > [!WARNING] > This is an experimental feature and is likely to change in the future.
-    """
 
     default_blocks_name = "QwenImageAutoBlocks"
 
@@ -223,13 +191,8 @@ class QwenImageModularPipeline(ModularPipeline, QwenImageLoraLoaderMixin):
 
         return requires_unconditional_embeds
 
-
 class QwenImageEditModularPipeline(ModularPipeline, QwenImageLoraLoaderMixin):
-    """
-    A ModularPipeline for QwenImage-Edit.
 
-    > [!WARNING] > This is an experimental feature and is likely to change in the future.
-    """
 
     default_blocks_name = "QwenImageEditAutoBlocks"
 
@@ -276,22 +239,12 @@ class QwenImageEditModularPipeline(ModularPipeline, QwenImageLoraLoaderMixin):
 
         return requires_unconditional_embeds
 
-
 class QwenImageEditPlusModularPipeline(QwenImageEditModularPipeline):
-    """
-    A ModularPipeline for QwenImage-Edit Plus.
 
-    > [!WARNING] > This is an experimental feature and is likely to change in the future.
-    """
 
     default_blocks_name = "QwenImageEditPlusAutoBlocks"
 
-
 class QwenImageLayeredModularPipeline(QwenImageModularPipeline):
-    """
-    A ModularPipeline for QwenImage-Layered.
 
-    > [!WARNING] > This is an experimental feature and is likely to change in the future.
-    """
 
     default_blocks_name = "QwenImageLayeredAutoBlocks"

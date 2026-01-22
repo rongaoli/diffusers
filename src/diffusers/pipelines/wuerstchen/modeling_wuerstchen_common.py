@@ -3,7 +3,6 @@ import torch.nn as nn
 
 from ...models.attention_processor import Attention
 
-
 class WuerstchenLayerNorm(nn.LayerNorm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -12,7 +11,6 @@ class WuerstchenLayerNorm(nn.LayerNorm):
         x = x.permute(0, 2, 3, 1)
         x = super().forward(x)
         return x.permute(0, 3, 1, 2)
-
 
 class TimestepBlock(nn.Module):
     def __init__(self, c, c_timestep):
@@ -23,7 +21,6 @@ class TimestepBlock(nn.Module):
     def forward(self, x, t):
         a, b = self.mapper(t)[:, :, None, None].chunk(2, dim=1)
         return x * (1 + a) + b
-
 
 class ResBlock(nn.Module):
     def __init__(self, c, c_skip=0, kernel_size=3, dropout=0.0):
@@ -43,8 +40,7 @@ class ResBlock(nn.Module):
         x = self.channelwise(x).permute(0, 3, 1, 2)
         return x + x_res
 
-
-# from https://github.com/facebookresearch/ConvNeXt-V2/blob/3608f67cc1dae164790c5d0aead7bf2d73d9719b/models/utils.py#L105
+# from https://github.com/facebookresearch/ConvNeX...
 class GlobalResponseNorm(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -55,7 +51,6 @@ class GlobalResponseNorm(nn.Module):
         agg_norm = torch.norm(x, p=2, dim=(1, 2), keepdim=True)
         stand_div_norm = agg_norm / (agg_norm.mean(dim=-1, keepdim=True) + 1e-6)
         return self.gamma * (x * stand_div_norm) + self.beta + x
-
 
 class AttnBlock(nn.Module):
     def __init__(self, c, c_cond, nhead, self_attn=True, dropout=0.0):

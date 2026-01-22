@@ -9,7 +9,6 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
 
@@ -34,7 +33,6 @@ if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     else:
         from .scheduling_karras_ve import KarrasVeScheduler
         from .scheduling_sde_vp import ScoreSdeVpScheduler
-
 
 else:
     import sys

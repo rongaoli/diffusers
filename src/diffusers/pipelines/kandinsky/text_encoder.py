@@ -1,7 +1,6 @@
 import torch
 from transformers import PreTrainedModel, XLMRobertaConfig, XLMRobertaModel
 
-
 class MCLIPConfig(XLMRobertaConfig):
     model_type = "M-CLIP"
 
@@ -9,7 +8,6 @@ class MCLIPConfig(XLMRobertaConfig):
         self.transformerDimensions = transformerDimSize
         self.numDims = imageDimSize
         super().__init__(**kwargs)
-
 
 class MultilingualCLIP(PreTrainedModel):
     config_class = MCLIPConfig

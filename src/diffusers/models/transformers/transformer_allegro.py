@@ -1,18 +1,3 @@
-# Copyright 2025 The RhymesAI and The HuggingFace Team.
-# All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import Optional, Tuple
 
 import torch
@@ -30,38 +15,11 @@ from ..modeling_outputs import Transformer2DModelOutput
 from ..modeling_utils import ModelMixin
 from ..normalization import AdaLayerNormSingle
 
-
 logger = logging.get_logger(__name__)
-
 
 @maybe_allow_in_graph
 class AllegroTransformerBlock(nn.Module):
-    r"""
-    Transformer block used in [Allegro](https://github.com/rhymes-ai/Allegro) model.
 
-    Args:
-        dim (`int`):
-            The number of channels in the input and output.
-        num_attention_heads (`int`):
-            The number of heads to use for multi-head attention.
-        attention_head_dim (`int`):
-            The number of channels in each head.
-        dropout (`float`, defaults to `0.0`):
-            The dropout probability to use.
-        cross_attention_dim (`int`, defaults to `2304`):
-            The dimension of the cross attention features.
-        activation_fn (`str`, defaults to `"gelu-approximate"`):
-            Activation function to be used in feed-forward.
-        attention_bias (`bool`, defaults to `False`):
-            Whether or not to use bias in attention projection layers.
-        only_cross_attention (`bool`, defaults to `False`):
-        norm_elementwise_affine (`bool`, defaults to `True`):
-            Whether to use learnable elementwise affine parameters for normalization.
-        norm_eps (`float`, defaults to `1e-5`):
-            Epsilon value for normalization layers.
-        final_dropout (`bool` defaults to `False`):
-            Whether to apply a final dropout after the last feed-forward layer.
-    """
 
     def __init__(
         self,
@@ -172,55 +130,9 @@ class AllegroTransformerBlock(nn.Module):
 
         return hidden_states
 
-
 class AllegroTransformer3DModel(ModelMixin, ConfigMixin, CacheMixin):
     _supports_gradient_checkpointing = True
 
-    """
-    A 3D Transformer model for video-like data.
-
-    Args:
-        patch_size (`int`, defaults to `2`):
-            The size of spatial patches to use in the patch embedding layer.
-        patch_size_t (`int`, defaults to `1`):
-            The size of temporal patches to use in the patch embedding layer.
-        num_attention_heads (`int`, defaults to `24`):
-            The number of heads to use for multi-head attention.
-        attention_head_dim (`int`, defaults to `96`):
-            The number of channels in each head.
-        in_channels (`int`, defaults to `4`):
-            The number of channels in the input.
-        out_channels (`int`, *optional*, defaults to `4`):
-            The number of channels in the output.
-        num_layers (`int`, defaults to `32`):
-            The number of layers of Transformer blocks to use.
-        dropout (`float`, defaults to `0.0`):
-            The dropout probability to use.
-        cross_attention_dim (`int`, defaults to `2304`):
-            The dimension of the cross attention features.
-        attention_bias (`bool`, defaults to `True`):
-            Whether or not to use bias in the attention projection layers.
-        sample_height (`int`, defaults to `90`):
-            The height of the input latents.
-        sample_width (`int`, defaults to `160`):
-            The width of the input latents.
-        sample_frames (`int`, defaults to `22`):
-            The number of frames in the input latents.
-        activation_fn (`str`, defaults to `"gelu-approximate"`):
-            Activation function to use in feed-forward.
-        norm_elementwise_affine (`bool`, defaults to `False`):
-            Whether or not to use elementwise affine in normalization layers.
-        norm_eps (`float`, defaults to `1e-6`):
-            The epsilon value to use in normalization layers.
-        caption_channels (`int`, defaults to `4096`):
-            Number of channels to use for projecting the caption embeddings.
-        interpolation_scale_h (`float`, defaults to `2.0`):
-            Scaling factor to apply in 3D positional embeddings across height dimension.
-        interpolation_scale_w (`float`, defaults to `2.0`):
-            Scaling factor to apply in 3D positional embeddings across width dimension.
-        interpolation_scale_t (`float`, defaults to `2.2`):
-            Scaling factor to apply in 3D positional embeddings across time dimension.
-    """
 
     _supports_gradient_checkpointing = True
     _skip_layerwise_casting_patterns = ["pos_embed", "norm", "adaln_single"]
@@ -323,15 +235,15 @@ class AllegroTransformer3DModel(ModelMixin, ConfigMixin, CacheMixin):
         post_patch_width = width // p
 
         # ensure attention_mask is a bias, and give it a singleton query_tokens dimension.
-        #   we may have done this conversion already, e.g. if we came here via UNet2DConditionModel#forward.
+        #   we may have done this conversion alrea...
         #   we can tell by counting dims; if ndim == 2: it's a mask rather than a bias.
         # expects mask of shape:
         #   [batch, key_tokens]
         # adds singleton query_tokens dimension:
         #   [batch,                    1, key_tokens]
-        # this helps to broadcast it as a bias over attention scores, which will be in one of the following shapes:
+        # this helps to broadcast it as a bias ove...
         #   [batch,  heads, query_tokens, key_tokens] (e.g. torch sdp attn)
-        #   [batch * heads, query_tokens, key_tokens] (e.g. xformers or classic attn)        attention_mask_vid, attention_mask_img = None, None
+        #   [batch * heads, query_tokens, key_toke...
         if attention_mask is not None and attention_mask.ndim == 4:
             # assume that mask is expressed as:
             #   (1 = keep,      0 = discard)

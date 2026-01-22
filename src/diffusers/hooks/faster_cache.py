@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import re
 from dataclasses import dataclass
 from typing import Any, Callable, List, Optional, Tuple
@@ -24,9 +10,7 @@ from ..utils import logging
 from ._common import _ATTENTION_CLASSES
 from .hooks import HookRegistry, ModelHook
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 _FASTER_CACHE_DENOISER_HOOK = "faster_cache_denoiser"
 _FASTER_CACHE_BLOCK_HOOK = "faster_cache_block"
@@ -45,92 +29,13 @@ _UNCOND_COND_INPUT_KWARGS_IDENTIFIERS = (
     "encoder_attention_mask",
 )
 
-
 @dataclass
 class FasterCacheConfig:
-    r"""
-    Configuration for [FasterCache](https://huggingface.co/papers/2410.19355).
+    
+    class FasterCacheConfig:
 
-    Attributes:
-        spatial_attention_block_skip_range (`int`, defaults to `2`):
-            Calculate the attention states every `N` iterations. If this is set to `N`, the attention computation will
-            be skipped `N - 1` times (i.e., cached attention states will be reused) before computing the new attention
-            states again.
-        temporal_attention_block_skip_range (`int`, *optional*, defaults to `None`):
-            Calculate the attention states every `N` iterations. If this is set to `N`, the attention computation will
-            be skipped `N - 1` times (i.e., cached attention states will be reused) before computing the new attention
-            states again.
-        spatial_attention_timestep_skip_range (`Tuple[float, float]`, defaults to `(-1, 681)`):
-            The timestep range within which the spatial attention computation can be skipped without a significant loss
-            in quality. This is to be determined by the user based on the underlying model. The first value in the
-            tuple is the lower bound and the second value is the upper bound. Typically, diffusion timesteps for
-            denoising are in the reversed range of 0 to 1000 (i.e. denoising starts at timestep 1000 and ends at
-            timestep 0). For the default values, this would mean that the spatial attention computation skipping will
-            be applicable only after denoising timestep 681 is reached, and continue until the end of the denoising
-            process.
-        temporal_attention_timestep_skip_range (`Tuple[float, float]`, *optional*, defaults to `None`):
-            The timestep range within which the temporal attention computation can be skipped without a significant
-            loss in quality. This is to be determined by the user based on the underlying model. The first value in the
-            tuple is the lower bound and the second value is the upper bound. Typically, diffusion timesteps for
-            denoising are in the reversed range of 0 to 1000 (i.e. denoising starts at timestep 1000 and ends at
-            timestep 0).
-        low_frequency_weight_update_timestep_range (`Tuple[int, int]`, defaults to `(99, 901)`):
-            The timestep range within which the low frequency weight scaling update is applied. The first value in the
-            tuple is the lower bound and the second value is the upper bound of the timestep range. The callback
-            function for the update is called only within this range.
-        high_frequency_weight_update_timestep_range (`Tuple[int, int]`, defaults to `(-1, 301)`):
-            The timestep range within which the high frequency weight scaling update is applied. The first value in the
-            tuple is the lower bound and the second value is the upper bound of the timestep range. The callback
-            function for the update is called only within this range.
-        alpha_low_frequency (`float`, defaults to `1.1`):
-            The weight to scale the low frequency updates by. This is used to approximate the unconditional branch from
-            the conditional branch outputs.
-        alpha_high_frequency (`float`, defaults to `1.1`):
-            The weight to scale the high frequency updates by. This is used to approximate the unconditional branch
-            from the conditional branch outputs.
-        unconditional_batch_skip_range (`int`, defaults to `5`):
-            Process the unconditional branch every `N` iterations. If this is set to `N`, the unconditional branch
-            computation will be skipped `N - 1` times (i.e., cached unconditional branch states will be reused) before
-            computing the new unconditional branch states again.
-        unconditional_batch_timestep_skip_range (`Tuple[float, float]`, defaults to `(-1, 641)`):
-            The timestep range within which the unconditional branch computation can be skipped without a significant
-            loss in quality. This is to be determined by the user based on the underlying model. The first value in the
-            tuple is the lower bound and the second value is the upper bound.
-        spatial_attention_block_identifiers (`Tuple[str, ...]`, defaults to `("blocks.*attn1", "transformer_blocks.*attn1", "single_transformer_blocks.*attn1")`):
-            The identifiers to match the spatial attention blocks in the model. If the name of the block contains any
-            of these identifiers, FasterCache will be applied to that block. This can either be the full layer names,
-            partial layer names, or regex patterns. Matching will always be done using a regex match.
-        temporal_attention_block_identifiers (`Tuple[str, ...]`, defaults to `("temporal_transformer_blocks.*attn1",)`):
-            The identifiers to match the temporal attention blocks in the model. If the name of the block contains any
-            of these identifiers, FasterCache will be applied to that block. This can either be the full layer names,
-            partial layer names, or regex patterns. Matching will always be done using a regex match.
-        attention_weight_callback (`Callable[[torch.nn.Module], float]`, defaults to `None`):
-            The callback function to determine the weight to scale the attention outputs by. This function should take
-            the attention module as input and return a float value. This is used to approximate the unconditional
-            branch from the conditional branch outputs. If not provided, the default weight is 0.5 for all timesteps.
-            Typically, as described in the paper, this weight should gradually increase from 0 to 1 as the inference
-            progresses. Users are encouraged to experiment and provide custom weight schedules that take into account
-            the number of inference steps and underlying model behaviour as denoising progresses.
-        low_frequency_weight_callback (`Callable[[torch.nn.Module], float]`, defaults to `None`):
-            The callback function to determine the weight to scale the low frequency updates by. If not provided, the
-            default weight is 1.1 for timesteps within the range specified (as described in the paper).
-        high_frequency_weight_callback (`Callable[[torch.nn.Module], float]`, defaults to `None`):
-            The callback function to determine the weight to scale the high frequency updates by. If not provided, the
-            default weight is 1.1 for timesteps within the range specified (as described in the paper).
-        tensor_format (`str`, defaults to `"BCFHW"`):
-            The format of the input tensors. This should be one of `"BCFHW"`, `"BFCHW"`, or `"BCHW"`. The format is
-            used to split individual latent frames in order for low and high frequency components to be computed.
-        is_guidance_distilled (`bool`, defaults to `False`):
-            Whether the model is guidance distilled or not. If the model is guidance distilled, FasterCache will not be
-            applied at the denoiser-level to skip the unconditional branch computation (as there is none).
-        _unconditional_conditional_input_kwargs_identifiers (`List[str]`, defaults to `("hidden_states", "encoder_hidden_states", "timestep", "attention_mask", "encoder_attention_mask")`):
-            The identifiers to match the input kwargs that contain the batchwise-concatenated unconditional and
-            conditional inputs. If the name of the input kwargs contains any of these identifiers, FasterCache will
-            split the inputs into unconditional and conditional branches. This must be a list of exact input kwargs
-            names that contain the batchwise-concatenated unconditional and conditional inputs.
-    """
 
-    # In the paper and codebase, they hardcode these values to 2. However, it can be made configurable
+    # In the paper and codebase, they hardcode the...
     # after some testing. We default to 2 if these parameters are not provided.
     spatial_attention_block_skip_range: int = 2
     temporal_attention_block_skip_range: Optional[int] = None
@@ -183,11 +88,10 @@ class FasterCacheConfig:
             f")"
         )
 
-
 class FasterCacheDenoiserState:
-    r"""
-    State for [FasterCache](https://huggingface.co/papers/2410.19355) top-level denoiser module.
-    """
+    
+    class FasterCacheDenoiserState:
+
 
     def __init__(self) -> None:
         self.iteration: int = 0
@@ -199,12 +103,10 @@ class FasterCacheDenoiserState:
         self.low_frequency_delta = None
         self.high_frequency_delta = None
 
-
 class FasterCacheBlockState:
-    r"""
-    State for [FasterCache](https://huggingface.co/papers/2410.19355). Every underlying block that FasterCache is
-    applied to will have an instance of this state.
-    """
+    
+    class FasterCacheBlockState:
+
 
     def __init__(self) -> None:
         self.iteration: int = 0
@@ -215,7 +117,6 @@ class FasterCacheBlockState:
         self.iteration = 0
         self.batch_size = None
         self.cache = None
-
 
 class FasterCacheDenoiserHook(ModelHook):
     _is_stateful = True
@@ -235,9 +136,9 @@ class FasterCacheDenoiserHook(ModelHook):
 
         self.unconditional_batch_skip_range = unconditional_batch_skip_range
         self.unconditional_batch_timestep_skip_range = unconditional_batch_timestep_skip_range
-        # We can't easily detect what args are to be split in unconditional and conditional branches. We
-        # can only do it for kwargs, hence they are the only ones we split. The args are passed as-is.
-        # If a model is to be made compatible with FasterCache, the user must ensure that the inputs that
+        # We can't easily detect what args are to...
+        # can only do it for kwargs, hence they ar...
+        # If a model is to be made compatible with...
         # contain batchwise-concatenated unconditional and conditional inputs are passed as kwargs.
         self.uncond_cond_input_kwargs_identifiers = uncond_cond_input_kwargs_identifiers
         self.tensor_format = tensor_format
@@ -253,21 +154,21 @@ class FasterCacheDenoiserHook(ModelHook):
 
     @staticmethod
     def _get_cond_input(input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        # Note: this method assumes that the input tensor is batchwise-concatenated with unconditional inputs
+        # Note: this method assumes that the input...
         # followed by conditional inputs.
         _, cond = input.chunk(2, dim=0)
         return cond
 
     def new_forward(self, module: torch.nn.Module, *args, **kwargs) -> Any:
-        # Split the unconditional and conditional inputs. We only want to infer the conditional branch if the
+        # Split the unconditional and conditional...
         # requirements for skipping the unconditional branch are met as described in the paper.
         # We skip the unconditional branch only if the following conditions are met:
         #   1. We have completed at least one iteration of the denoiser
-        #   2. The current timestep is within the range specified by the user. This is the optimal timestep range
-        #      where approximating the unconditional branch from the computation of the conditional branch is possible
+        #   2. The current timestep is within the...
+        #      where approximating the uncondition...
         #      without a significant loss in quality.
-        #   3. The current iteration is not a multiple of the unconditional batch skip range. This is done so that
-        #      we compute the unconditional branch at least once every few iterations to ensure minimal quality loss.
+        #   3. The current iteration is not a mult...
+        #      we compute the unconditional branch...
         is_within_timestep_range = (
             self.unconditional_batch_timestep_skip_range[0]
             < self.current_timestep_callback()
@@ -318,7 +219,7 @@ class FasterCacheDenoiserHook(ModelHook):
 
             low_freq_cond, high_freq_cond = _split_low_high_freq(hidden_states.float())
 
-            # Approximate/compute the unconditional branch outputs as described in Equation 9 and 10 of the paper
+            # Approximate/compute the unconditiona...
             low_freq_uncond = self.state.low_frequency_delta + low_freq_cond
             high_freq_uncond = self.state.high_frequency_delta + high_freq_cond
             uncond_freq = low_freq_uncond + high_freq_uncond
@@ -364,6 +265,270 @@ class FasterCacheDenoiserHook(ModelHook):
         self.state.reset()
         return module
 
+class FasterCacheBlockHook(ModelHook):
+    _is_stateful = True
+
+    def __init__(
+        self,
+        block_skip_range: int,
+        timestep_skip_range: Tuple[int, int],
+        is_guidance_distilled: bool,
+        weight_callback: Callable[[torch.nn.Module], float],
+        current_timestep_callback: Callable[[], int],
+    ) -> None:
+        super().__init__()
+
+        self.block_skip_range = block_skip_range
+        self.timestep_skip_range = timestep_skip_range
+        self.is_guidance_distilled = is_guidance_distilled
+
+        self.weight_callback = weight_callback
+        self.current_timestep_callback = current_timestep_callback
+
+    def initialize_hook(self, module):
+        self.state = FasterCacheBlockState()
+        return module
+
+    def _compute_approximated_attention_output(
+        self, t_2_output: torch.Tensor, t_output: torch.Tensor, weight: float, batch_size: int
+    ) -> torch.Tensor:
+        if t_2_output.size(0) != batch_size:
+            # The cache t_2_output contains both b...
+            # take the conditional branch outputs.
+            assert t_2_output.size(0) == 2 * batch_size
+            t_2_output = t_2_output[batch_size:]
+        if t_output.size(0) != batch_size:
+            # The cache t_output contains both bat...
+            # take the conditional branch outputs.
+            assert t_output.size(0) == 2 * batch_size
+            t_output = t_output[batch_size:]
+        return t_output + (t_output - t_2_output) * weight
+
+    def new_forward(self, module: torch.nn.Module, *args, **kwargs) -> Any:
+        batch_size = [
+            *[arg.size(0) for arg in args if torch.is_tensor(arg)],
+            *[v.size(0) for v in kwargs.values() if torch.is_tensor(v)],
+        ][0]
+        if self.state.batch_size is None:
+            # Will be updated on first forward pass through the denoiser
+            self.state.batch_size = batch_size
+
+        # If we have to skip due to the skip conditions, then let's skip as expected.
+        # But, we can't skip if the denoiser wants...
+        # is because the expected output shapes of...
+        # the cache (which only caches conditional...
+        # unconditional-conditional batch size) is...
+        # skip. Otherwise, we conditionally skip t...
+        is_within_timestep_range = (
+            self.timestep_skip_range[0] < self.current_timestep_callback() < self.timestep_skip_range[1]
+        )
+        if not is_within_timestep_range:
+            should_skip_attention = False
+        else:
+            should_compute_attention = self.state.iteration > 0 and self.state.iteration % self.block_skip_range == 0
+            should_skip_attention = not should_compute_attention
+        if should_skip_attention:
+            should_skip_attention = self.is_guidance_distilled or self.state.batch_size != batch_size
+
+        if should_skip_attention:
+            logger.debug("FasterCache - Skipping attention and using approximation")
+            if torch.is_tensor(self.state.cache[-1]):
+                t_2_output, t_output = self.state.cache
+                weight = self.weight_callback(module)
+                output = self._compute_approximated_attention_output(t_2_output, t_output, weight, batch_size)
+            else:
+                # The cache contains multiple tens...
+                # Diffusers blocks can return mult...
+                # In our cache, we would have [[A_...
+                # a forward pass of the block. We...
+                # The zip(*state.cache) operation...
+                # allows us to compute the approxi...
+                output = ()
+                for t_2_output, t_output in zip(*self.state.cache):
+                    result = self._compute_approximated_attention_output(
+                        t_2_output, t_output, self.weight_callback(module), batch_size
+                    )
+                    output += (result,)
+        else:
+            logger.debug("FasterCache - Computing attention")
+            output = self.fn_ref.original_forward(*args, **kwargs)
+
+        # Note that the following condition for ge...
+        # a single hidden_states tensor, or a tupl...
+        # both cases.
+        if torch.is_tensor(output):
+            cache_output = output
+            if not self.is_guidance_distilled and cache_output.size(0) == self.state.batch_size:
+                # The output here can be both unco...
+                # This is determined at the higher...
+                cache_output = cache_output.chunk(2, dim=0)[1]
+        else:
+            # Cache all return values and perform the same operation as above
+            cache_output = ()
+            for out in output:
+                if not self.is_guidance_distilled and out.size(0) == self.state.batch_size:
+                    out = out.chunk(2, dim=0)[1]
+                cache_output += (out,)
+
+        if self.state.cache is None:
+            self.state.cache = [cache_output, cache_output]
+        else:
+            self.state.cache = [self.state.cache[-1], cache_output]
+
+        self.state.iteration += 1
+        return output
+
+    def reset_state(self, module: torch.nn.Module) -> torch.nn.Module:
+        self.state.reset()
+        return module
+
+def apply_faster_cache(module: torch.nn.Module, config: FasterCacheConfig) -> None:
+    class FasterCacheDenoiserHook(ModelHook):
+    _is_stateful = True
+
+    def __init__(
+        self,
+        unconditional_batch_skip_range: int,
+        unconditional_batch_timestep_skip_range: Tuple[int, int],
+        tensor_format: str,
+        is_guidance_distilled: bool,
+        uncond_cond_input_kwargs_identifiers: List[str],
+        current_timestep_callback: Callable[[], int],
+        low_frequency_weight_callback: Callable[[torch.nn.Module], torch.Tensor],
+        high_frequency_weight_callback: Callable[[torch.nn.Module], torch.Tensor],
+    ) -> None:
+        super().__init__()
+
+        self.unconditional_batch_skip_range = unconditional_batch_skip_range
+        self.unconditional_batch_timestep_skip_range = unconditional_batch_timestep_skip_range
+        # We can't easily detect what args are to...
+        # can only do it for kwargs, hence they ar...
+        # If a model is to be made compatible with...
+        # contain batchwise-concatenated unconditional and conditional inputs are passed as kwargs.
+        self.uncond_cond_input_kwargs_identifiers = uncond_cond_input_kwargs_identifiers
+        self.tensor_format = tensor_format
+        self.is_guidance_distilled = is_guidance_distilled
+
+        self.current_timestep_callback = current_timestep_callback
+        self.low_frequency_weight_callback = low_frequency_weight_callback
+        self.high_frequency_weight_callback = high_frequency_weight_callback
+
+    def initialize_hook(self, module):
+        self.state = FasterCacheDenoiserState()
+        return module
+
+    @staticmethod
+    def _get_cond_input(input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        # Note: this method assumes that the input...
+        # followed by conditional inputs.
+        _, cond = input.chunk(2, dim=0)
+        return cond
+
+    def new_forward(self, module: torch.nn.Module, *args, **kwargs) -> Any:
+        # Split the unconditional and conditional...
+        # requirements for skipping the unconditional branch are met as described in the paper.
+        # We skip the unconditional branch only if the following conditions are met:
+        #   1. We have completed at least one iteration of the denoiser
+        #   2. The current timestep is within the...
+        #      where approximating the uncondition...
+        #      without a significant loss in quality.
+        #   3. The current iteration is not a mult...
+        #      we compute the unconditional branch...
+        is_within_timestep_range = (
+            self.unconditional_batch_timestep_skip_range[0]
+            < self.current_timestep_callback()
+            < self.unconditional_batch_timestep_skip_range[1]
+        )
+        should_skip_uncond = (
+            self.state.iteration > 0
+            and is_within_timestep_range
+            and self.state.iteration % self.unconditional_batch_skip_range != 0
+            and not self.is_guidance_distilled
+        )
+
+        if should_skip_uncond:
+            is_any_kwarg_uncond = any(k in self.uncond_cond_input_kwargs_identifiers for k in kwargs.keys())
+            if is_any_kwarg_uncond:
+                logger.debug("FasterCache - Skipping unconditional branch computation")
+                args = tuple([self._get_cond_input(arg) if torch.is_tensor(arg) else arg for arg in args])
+                kwargs = {
+                    k: v if k not in self.uncond_cond_input_kwargs_identifiers else self._get_cond_input(v)
+                    for k, v in kwargs.items()
+                }
+
+        output = self.fn_ref.original_forward(*args, **kwargs)
+
+        if self.is_guidance_distilled:
+            self.state.iteration += 1
+            return output
+
+        if torch.is_tensor(output):
+            hidden_states = output
+        elif isinstance(output, (tuple, Transformer2DModelOutput)):
+            hidden_states = output[0]
+
+        batch_size = hidden_states.size(0)
+
+        if should_skip_uncond:
+            self.state.low_frequency_delta = self.state.low_frequency_delta * self.low_frequency_weight_callback(
+                module
+            )
+            self.state.high_frequency_delta = self.state.high_frequency_delta * self.high_frequency_weight_callback(
+                module
+            )
+
+            if self.tensor_format == "BCFHW":
+                hidden_states = hidden_states.permute(0, 2, 1, 3, 4)
+            if self.tensor_format == "BCFHW" or self.tensor_format == "BFCHW":
+                hidden_states = hidden_states.flatten(0, 1)
+
+            low_freq_cond, high_freq_cond = _split_low_high_freq(hidden_states.float())
+
+            # Approximate/compute the unconditiona...
+            low_freq_uncond = self.state.low_frequency_delta + low_freq_cond
+            high_freq_uncond = self.state.high_frequency_delta + high_freq_cond
+            uncond_freq = low_freq_uncond + high_freq_uncond
+
+            uncond_states = torch.fft.ifftshift(uncond_freq)
+            uncond_states = torch.fft.ifft2(uncond_states).real
+
+            if self.tensor_format == "BCFHW" or self.tensor_format == "BFCHW":
+                uncond_states = uncond_states.unflatten(0, (batch_size, -1))
+                hidden_states = hidden_states.unflatten(0, (batch_size, -1))
+            if self.tensor_format == "BCFHW":
+                uncond_states = uncond_states.permute(0, 2, 1, 3, 4)
+                hidden_states = hidden_states.permute(0, 2, 1, 3, 4)
+
+            # Concatenate the approximated unconditional and predicted conditional branches
+            uncond_states = uncond_states.to(hidden_states.dtype)
+            hidden_states = torch.cat([uncond_states, hidden_states], dim=0)
+        else:
+            uncond_states, cond_states = hidden_states.chunk(2, dim=0)
+            if self.tensor_format == "BCFHW":
+                uncond_states = uncond_states.permute(0, 2, 1, 3, 4)
+                cond_states = cond_states.permute(0, 2, 1, 3, 4)
+            if self.tensor_format == "BCFHW" or self.tensor_format == "BFCHW":
+                uncond_states = uncond_states.flatten(0, 1)
+                cond_states = cond_states.flatten(0, 1)
+
+            low_freq_uncond, high_freq_uncond = _split_low_high_freq(uncond_states.float())
+            low_freq_cond, high_freq_cond = _split_low_high_freq(cond_states.float())
+            self.state.low_frequency_delta = low_freq_uncond - low_freq_cond
+            self.state.high_frequency_delta = high_freq_uncond - high_freq_cond
+
+        self.state.iteration += 1
+        if torch.is_tensor(output):
+            output = hidden_states
+        elif isinstance(output, tuple):
+            output = (hidden_states, *output[1:])
+        else:
+            output.sample = hidden_states
+
+        return output
+
+    def reset_state(self, module: torch.nn.Module) -> torch.nn.Module:
+        self.state.reset()
+        return module
 
 class FasterCacheBlockHook(ModelHook):
     _is_stateful = True
@@ -393,12 +558,12 @@ class FasterCacheBlockHook(ModelHook):
         self, t_2_output: torch.Tensor, t_output: torch.Tensor, weight: float, batch_size: int
     ) -> torch.Tensor:
         if t_2_output.size(0) != batch_size:
-            # The cache t_2_output contains both batchwise-concatenated unconditional-conditional branch outputs. Just
+            # The cache t_2_output contains both b...
             # take the conditional branch outputs.
             assert t_2_output.size(0) == 2 * batch_size
             t_2_output = t_2_output[batch_size:]
         if t_output.size(0) != batch_size:
-            # The cache t_output contains both batchwise-concatenated unconditional-conditional branch outputs. Just
+            # The cache t_output contains both bat...
             # take the conditional branch outputs.
             assert t_output.size(0) == 2 * batch_size
             t_output = t_output[batch_size:]
@@ -414,11 +579,11 @@ class FasterCacheBlockHook(ModelHook):
             self.state.batch_size = batch_size
 
         # If we have to skip due to the skip conditions, then let's skip as expected.
-        # But, we can't skip if the denoiser wants to infer both unconditional and conditional branches. This
-        # is because the expected output shapes of attention layer will not match if we only return values from
-        # the cache (which only caches conditional branch outputs). So, if state.batch_size (which is the true
-        # unconditional-conditional batch size) is same as the current batch size, we don't perform the layer
-        # skip. Otherwise, we conditionally skip the layer based on what state.skip_callback returns.
+        # But, we can't skip if the denoiser wants...
+        # is because the expected output shapes of...
+        # the cache (which only caches conditional...
+        # unconditional-conditional batch size) is...
+        # skip. Otherwise, we conditionally skip t...
         is_within_timestep_range = (
             self.timestep_skip_range[0] < self.current_timestep_callback() < self.timestep_skip_range[1]
         )
@@ -437,12 +602,12 @@ class FasterCacheBlockHook(ModelHook):
                 weight = self.weight_callback(module)
                 output = self._compute_approximated_attention_output(t_2_output, t_output, weight, batch_size)
             else:
-                # The cache contains multiple tensors from past N iterations (N=2 for FasterCache). We need to handle all of them.
-                # Diffusers blocks can return multiple tensors - let's call them [A, B, C, ...] for simplicity.
-                # In our cache, we would have [[A_1, B_1, C_1, ...], [A_2, B_2, C_2, ...], ...] where each list is the output from
-                # a forward pass of the block. We need to compute the approximated output for each of these tensors.
-                # The zip(*state.cache) operation will give us [(A_1, A_2, ...), (B_1, B_2, ...), (C_1, C_2, ...), ...] which
-                # allows us to compute the approximated attention output for each tensor in the cache.
+                # The cache contains multiple tens...
+                # Diffusers blocks can return mult...
+                # In our cache, we would have [[A_...
+                # a forward pass of the block. We...
+                # The zip(*state.cache) operation...
+                # allows us to compute the approxi...
                 output = ()
                 for t_2_output, t_output in zip(*self.state.cache):
                     result = self._compute_approximated_attention_output(
@@ -453,14 +618,14 @@ class FasterCacheBlockHook(ModelHook):
             logger.debug("FasterCache - Computing attention")
             output = self.fn_ref.original_forward(*args, **kwargs)
 
-        # Note that the following condition for getting hidden_states should suffice since Diffusers blocks either return
-        # a single hidden_states tensor, or a tuple of (hidden_states, encoder_hidden_states) tensors. We need to handle
+        # Note that the following condition for ge...
+        # a single hidden_states tensor, or a tupl...
         # both cases.
         if torch.is_tensor(output):
             cache_output = output
             if not self.is_guidance_distilled and cache_output.size(0) == self.state.batch_size:
-                # The output here can be both unconditional-conditional branch outputs or just conditional branch outputs.
-                # This is determined at the higher-level denoiser module. We only want to cache the conditional branch outputs.
+                # The output here can be both unco...
+                # This is determined at the higher...
                 cache_output = cache_output.chunk(2, dim=0)[1]
         else:
             # Cache all return values and perform the same operation as above
@@ -482,38 +647,539 @@ class FasterCacheBlockHook(ModelHook):
         self.state.reset()
         return module
 
+def apply_faster_cache(module: torch.nn.Module, config: FasterCacheConfig) -> None:
+    
+    class FasterCacheDenoiserHook(ModelHook):
+    _is_stateful = True
+
+    def __init__(
+        self,
+        unconditional_batch_skip_range: int,
+        unconditional_batch_timestep_skip_range: Tuple[int, int],
+        tensor_format: str,
+        is_guidance_distilled: bool,
+        uncond_cond_input_kwargs_identifiers: List[str],
+        current_timestep_callback: Callable[[], int],
+        low_frequency_weight_callback: Callable[[torch.nn.Module], torch.Tensor],
+        high_frequency_weight_callback: Callable[[torch.nn.Module], torch.Tensor],
+    ) -> None:
+        super().__init__()
+
+        self.unconditional_batch_skip_range = unconditional_batch_skip_range
+        self.unconditional_batch_timestep_skip_range = unconditional_batch_timestep_skip_range
+        # We can't easily detect what args are to...
+        # can only do it for kwargs, hence they ar...
+        # If a model is to be made compatible with...
+        # contain batchwise-concatenated unconditional and conditional inputs are passed as kwargs.
+        self.uncond_cond_input_kwargs_identifiers = uncond_cond_input_kwargs_identifiers
+        self.tensor_format = tensor_format
+        self.is_guidance_distilled = is_guidance_distilled
+
+        self.current_timestep_callback = current_timestep_callback
+        self.low_frequency_weight_callback = low_frequency_weight_callback
+        self.high_frequency_weight_callback = high_frequency_weight_callback
+
+    def initialize_hook(self, module):
+        self.state = FasterCacheDenoiserState()
+        return module
+
+    @staticmethod
+    def _get_cond_input(input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        # Note: this method assumes that the input...
+        # followed by conditional inputs.
+        _, cond = input.chunk(2, dim=0)
+        return cond
+
+    def new_forward(self, module: torch.nn.Module, *args, **kwargs) -> Any:
+        # Split the unconditional and conditional...
+        # requirements for skipping the unconditional branch are met as described in the paper.
+        # We skip the unconditional branch only if the following conditions are met:
+        #   1. We have completed at least one iteration of the denoiser
+        #   2. The current timestep is within the...
+        #      where approximating the uncondition...
+        #      without a significant loss in quality.
+        #   3. The current iteration is not a mult...
+        #      we compute the unconditional branch...
+        is_within_timestep_range = (
+            self.unconditional_batch_timestep_skip_range[0]
+            < self.current_timestep_callback()
+            < self.unconditional_batch_timestep_skip_range[1]
+        )
+        should_skip_uncond = (
+            self.state.iteration > 0
+            and is_within_timestep_range
+            and self.state.iteration % self.unconditional_batch_skip_range != 0
+            and not self.is_guidance_distilled
+        )
+
+        if should_skip_uncond:
+            is_any_kwarg_uncond = any(k in self.uncond_cond_input_kwargs_identifiers for k in kwargs.keys())
+            if is_any_kwarg_uncond:
+                logger.debug("FasterCache - Skipping unconditional branch computation")
+                args = tuple([self._get_cond_input(arg) if torch.is_tensor(arg) else arg for arg in args])
+                kwargs = {
+                    k: v if k not in self.uncond_cond_input_kwargs_identifiers else self._get_cond_input(v)
+                    for k, v in kwargs.items()
+                }
+
+        output = self.fn_ref.original_forward(*args, **kwargs)
+
+        if self.is_guidance_distilled:
+            self.state.iteration += 1
+            return output
+
+        if torch.is_tensor(output):
+            hidden_states = output
+        elif isinstance(output, (tuple, Transformer2DModelOutput)):
+            hidden_states = output[0]
+
+        batch_size = hidden_states.size(0)
+
+        if should_skip_uncond:
+            self.state.low_frequency_delta = self.state.low_frequency_delta * self.low_frequency_weight_callback(
+                module
+            )
+            self.state.high_frequency_delta = self.state.high_frequency_delta * self.high_frequency_weight_callback(
+                module
+            )
+
+            if self.tensor_format == "BCFHW":
+                hidden_states = hidden_states.permute(0, 2, 1, 3, 4)
+            if self.tensor_format == "BCFHW" or self.tensor_format == "BFCHW":
+                hidden_states = hidden_states.flatten(0, 1)
+
+            low_freq_cond, high_freq_cond = _split_low_high_freq(hidden_states.float())
+
+            # Approximate/compute the unconditiona...
+            low_freq_uncond = self.state.low_frequency_delta + low_freq_cond
+            high_freq_uncond = self.state.high_frequency_delta + high_freq_cond
+            uncond_freq = low_freq_uncond + high_freq_uncond
+
+            uncond_states = torch.fft.ifftshift(uncond_freq)
+            uncond_states = torch.fft.ifft2(uncond_states).real
+
+            if self.tensor_format == "BCFHW" or self.tensor_format == "BFCHW":
+                uncond_states = uncond_states.unflatten(0, (batch_size, -1))
+                hidden_states = hidden_states.unflatten(0, (batch_size, -1))
+            if self.tensor_format == "BCFHW":
+                uncond_states = uncond_states.permute(0, 2, 1, 3, 4)
+                hidden_states = hidden_states.permute(0, 2, 1, 3, 4)
+
+            # Concatenate the approximated unconditional and predicted conditional branches
+            uncond_states = uncond_states.to(hidden_states.dtype)
+            hidden_states = torch.cat([uncond_states, hidden_states], dim=0)
+        else:
+            uncond_states, cond_states = hidden_states.chunk(2, dim=0)
+            if self.tensor_format == "BCFHW":
+                uncond_states = uncond_states.permute(0, 2, 1, 3, 4)
+                cond_states = cond_states.permute(0, 2, 1, 3, 4)
+            if self.tensor_format == "BCFHW" or self.tensor_format == "BFCHW":
+                uncond_states = uncond_states.flatten(0, 1)
+                cond_states = cond_states.flatten(0, 1)
+
+            low_freq_uncond, high_freq_uncond = _split_low_high_freq(uncond_states.float())
+            low_freq_cond, high_freq_cond = _split_low_high_freq(cond_states.float())
+            self.state.low_frequency_delta = low_freq_uncond - low_freq_cond
+            self.state.high_frequency_delta = high_freq_uncond - high_freq_cond
+
+        self.state.iteration += 1
+        if torch.is_tensor(output):
+            output = hidden_states
+        elif isinstance(output, tuple):
+            output = (hidden_states, *output[1:])
+        else:
+            output.sample = hidden_states
+
+        return output
+
+    def reset_state(self, module: torch.nn.Module) -> torch.nn.Module:
+        self.state.reset()
+        return module
+
+class FasterCacheBlockHook(ModelHook):
+    _is_stateful = True
+
+    def __init__(
+        self,
+        block_skip_range: int,
+        timestep_skip_range: Tuple[int, int],
+        is_guidance_distilled: bool,
+        weight_callback: Callable[[torch.nn.Module], float],
+        current_timestep_callback: Callable[[], int],
+    ) -> None:
+        super().__init__()
+
+        self.block_skip_range = block_skip_range
+        self.timestep_skip_range = timestep_skip_range
+        self.is_guidance_distilled = is_guidance_distilled
+
+        self.weight_callback = weight_callback
+        self.current_timestep_callback = current_timestep_callback
+
+    def initialize_hook(self, module):
+        self.state = FasterCacheBlockState()
+        return module
+
+    def _compute_approximated_attention_output(
+        self, t_2_output: torch.Tensor, t_output: torch.Tensor, weight: float, batch_size: int
+    ) -> torch.Tensor:
+        if t_2_output.size(0) != batch_size:
+            # The cache t_2_output contains both b...
+            # take the conditional branch outputs.
+            assert t_2_output.size(0) == 2 * batch_size
+            t_2_output = t_2_output[batch_size:]
+        if t_output.size(0) != batch_size:
+            # The cache t_output contains both bat...
+            # take the conditional branch outputs.
+            assert t_output.size(0) == 2 * batch_size
+            t_output = t_output[batch_size:]
+        return t_output + (t_output - t_2_output) * weight
+
+    def new_forward(self, module: torch.nn.Module, *args, **kwargs) -> Any:
+        batch_size = [
+            *[arg.size(0) for arg in args if torch.is_tensor(arg)],
+            *[v.size(0) for v in kwargs.values() if torch.is_tensor(v)],
+        ][0]
+        if self.state.batch_size is None:
+            # Will be updated on first forward pass through the denoiser
+            self.state.batch_size = batch_size
+
+        # If we have to skip due to the skip conditions, then let's skip as expected.
+        # But, we can't skip if the denoiser wants...
+        # is because the expected output shapes of...
+        # the cache (which only caches conditional...
+        # unconditional-conditional batch size) is...
+        # skip. Otherwise, we conditionally skip t...
+        is_within_timestep_range = (
+            self.timestep_skip_range[0] < self.current_timestep_callback() < self.timestep_skip_range[1]
+        )
+        if not is_within_timestep_range:
+            should_skip_attention = False
+        else:
+            should_compute_attention = self.state.iteration > 0 and self.state.iteration % self.block_skip_range == 0
+            should_skip_attention = not should_compute_attention
+        if should_skip_attention:
+            should_skip_attention = self.is_guidance_distilled or self.state.batch_size != batch_size
+
+        if should_skip_attention:
+            logger.debug("FasterCache - Skipping attention and using approximation")
+            if torch.is_tensor(self.state.cache[-1]):
+                t_2_output, t_output = self.state.cache
+                weight = self.weight_callback(module)
+                output = self._compute_approximated_attention_output(t_2_output, t_output, weight, batch_size)
+            else:
+                # The cache contains multiple tens...
+                # Diffusers blocks can return mult...
+                # In our cache, we would have [[A_...
+                # a forward pass of the block. We...
+                # The zip(*state.cache) operation...
+                # allows us to compute the approxi...
+                output = ()
+                for t_2_output, t_output in zip(*self.state.cache):
+                    result = self._compute_approximated_attention_output(
+                        t_2_output, t_output, self.weight_callback(module), batch_size
+                    )
+                    output += (result,)
+        else:
+            logger.debug("FasterCache - Computing attention")
+            output = self.fn_ref.original_forward(*args, **kwargs)
+
+        # Note that the following condition for ge...
+        # a single hidden_states tensor, or a tupl...
+        # both cases.
+        if torch.is_tensor(output):
+            cache_output = output
+            if not self.is_guidance_distilled and cache_output.size(0) == self.state.batch_size:
+                # The output here can be both unco...
+                # This is determined at the higher...
+                cache_output = cache_output.chunk(2, dim=0)[1]
+        else:
+            # Cache all return values and perform the same operation as above
+            cache_output = ()
+            for out in output:
+                if not self.is_guidance_distilled and out.size(0) == self.state.batch_size:
+                    out = out.chunk(2, dim=0)[1]
+                cache_output += (out,)
+
+        if self.state.cache is None:
+            self.state.cache = [cache_output, cache_output]
+        else:
+            self.state.cache = [self.state.cache[-1], cache_output]
+
+        self.state.iteration += 1
+        return output
+
+    def reset_state(self, module: torch.nn.Module) -> torch.nn.Module:
+        self.state.reset()
+        return module
 
 def apply_faster_cache(module: torch.nn.Module, config: FasterCacheConfig) -> None:
-    r"""
-    Applies [FasterCache](https://huggingface.co/papers/2410.19355) to a given pipeline.
+    class FasterCacheDenoiserHook(ModelHook):
+    _is_stateful = True
 
-    Args:
-        module (`torch.nn.Module`):
-            The pytorch module to apply FasterCache to. Typically, this should be a transformer architecture supported
-            in Diffusers, such as `CogVideoXTransformer3DModel`, but external implementations may also work.
-        config (`FasterCacheConfig`):
-            The configuration to use for FasterCache.
+    def __init__(
+        self,
+        unconditional_batch_skip_range: int,
+        unconditional_batch_timestep_skip_range: Tuple[int, int],
+        tensor_format: str,
+        is_guidance_distilled: bool,
+        uncond_cond_input_kwargs_identifiers: List[str],
+        current_timestep_callback: Callable[[], int],
+        low_frequency_weight_callback: Callable[[torch.nn.Module], torch.Tensor],
+        high_frequency_weight_callback: Callable[[torch.nn.Module], torch.Tensor],
+    ) -> None:
+        super().__init__()
 
-    Example:
-    ```python
-    >>> import torch
-    >>> from diffusers import CogVideoXPipeline, FasterCacheConfig, apply_faster_cache
+        self.unconditional_batch_skip_range = unconditional_batch_skip_range
+        self.unconditional_batch_timestep_skip_range = unconditional_batch_timestep_skip_range
+        # We can't easily detect what args are to...
+        # can only do it for kwargs, hence they ar...
+        # If a model is to be made compatible with...
+        # contain batchwise-concatenated unconditional and conditional inputs are passed as kwargs.
+        self.uncond_cond_input_kwargs_identifiers = uncond_cond_input_kwargs_identifiers
+        self.tensor_format = tensor_format
+        self.is_guidance_distilled = is_guidance_distilled
 
-    >>> pipe = CogVideoXPipeline.from_pretrained("THUDM/CogVideoX-5b", torch_dtype=torch.bfloat16)
-    >>> pipe.to("cuda")
+        self.current_timestep_callback = current_timestep_callback
+        self.low_frequency_weight_callback = low_frequency_weight_callback
+        self.high_frequency_weight_callback = high_frequency_weight_callback
 
-    >>> config = FasterCacheConfig(
-    ...     spatial_attention_block_skip_range=2,
-    ...     spatial_attention_timestep_skip_range=(-1, 681),
-    ...     low_frequency_weight_update_timestep_range=(99, 641),
-    ...     high_frequency_weight_update_timestep_range=(-1, 301),
-    ...     spatial_attention_block_identifiers=["transformer_blocks"],
-    ...     attention_weight_callback=lambda _: 0.3,
-    ...     tensor_format="BFCHW",
-    ... )
-    >>> apply_faster_cache(pipe.transformer, config)
-    ```
-    """
+    def initialize_hook(self, module):
+        self.state = FasterCacheDenoiserState()
+        return module
+
+    @staticmethod
+    def _get_cond_input(input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        # Note: this method assumes that the input...
+        # followed by conditional inputs.
+        _, cond = input.chunk(2, dim=0)
+        return cond
+
+    def new_forward(self, module: torch.nn.Module, *args, **kwargs) -> Any:
+        # Split the unconditional and conditional...
+        # requirements for skipping the unconditional branch are met as described in the paper.
+        # We skip the unconditional branch only if the following conditions are met:
+        #   1. We have completed at least one iteration of the denoiser
+        #   2. The current timestep is within the...
+        #      where approximating the uncondition...
+        #      without a significant loss in quality.
+        #   3. The current iteration is not a mult...
+        #      we compute the unconditional branch...
+        is_within_timestep_range = (
+            self.unconditional_batch_timestep_skip_range[0]
+            < self.current_timestep_callback()
+            < self.unconditional_batch_timestep_skip_range[1]
+        )
+        should_skip_uncond = (
+            self.state.iteration > 0
+            and is_within_timestep_range
+            and self.state.iteration % self.unconditional_batch_skip_range != 0
+            and not self.is_guidance_distilled
+        )
+
+        if should_skip_uncond:
+            is_any_kwarg_uncond = any(k in self.uncond_cond_input_kwargs_identifiers for k in kwargs.keys())
+            if is_any_kwarg_uncond:
+                logger.debug("FasterCache - Skipping unconditional branch computation")
+                args = tuple([self._get_cond_input(arg) if torch.is_tensor(arg) else arg for arg in args])
+                kwargs = {
+                    k: v if k not in self.uncond_cond_input_kwargs_identifiers else self._get_cond_input(v)
+                    for k, v in kwargs.items()
+                }
+
+        output = self.fn_ref.original_forward(*args, **kwargs)
+
+        if self.is_guidance_distilled:
+            self.state.iteration += 1
+            return output
+
+        if torch.is_tensor(output):
+            hidden_states = output
+        elif isinstance(output, (tuple, Transformer2DModelOutput)):
+            hidden_states = output[0]
+
+        batch_size = hidden_states.size(0)
+
+        if should_skip_uncond:
+            self.state.low_frequency_delta = self.state.low_frequency_delta * self.low_frequency_weight_callback(
+                module
+            )
+            self.state.high_frequency_delta = self.state.high_frequency_delta * self.high_frequency_weight_callback(
+                module
+            )
+
+            if self.tensor_format == "BCFHW":
+                hidden_states = hidden_states.permute(0, 2, 1, 3, 4)
+            if self.tensor_format == "BCFHW" or self.tensor_format == "BFCHW":
+                hidden_states = hidden_states.flatten(0, 1)
+
+            low_freq_cond, high_freq_cond = _split_low_high_freq(hidden_states.float())
+
+            # Approximate/compute the unconditiona...
+            low_freq_uncond = self.state.low_frequency_delta + low_freq_cond
+            high_freq_uncond = self.state.high_frequency_delta + high_freq_cond
+            uncond_freq = low_freq_uncond + high_freq_uncond
+
+            uncond_states = torch.fft.ifftshift(uncond_freq)
+            uncond_states = torch.fft.ifft2(uncond_states).real
+
+            if self.tensor_format == "BCFHW" or self.tensor_format == "BFCHW":
+                uncond_states = uncond_states.unflatten(0, (batch_size, -1))
+                hidden_states = hidden_states.unflatten(0, (batch_size, -1))
+            if self.tensor_format == "BCFHW":
+                uncond_states = uncond_states.permute(0, 2, 1, 3, 4)
+                hidden_states = hidden_states.permute(0, 2, 1, 3, 4)
+
+            # Concatenate the approximated unconditional and predicted conditional branches
+            uncond_states = uncond_states.to(hidden_states.dtype)
+            hidden_states = torch.cat([uncond_states, hidden_states], dim=0)
+        else:
+            uncond_states, cond_states = hidden_states.chunk(2, dim=0)
+            if self.tensor_format == "BCFHW":
+                uncond_states = uncond_states.permute(0, 2, 1, 3, 4)
+                cond_states = cond_states.permute(0, 2, 1, 3, 4)
+            if self.tensor_format == "BCFHW" or self.tensor_format == "BFCHW":
+                uncond_states = uncond_states.flatten(0, 1)
+                cond_states = cond_states.flatten(0, 1)
+
+            low_freq_uncond, high_freq_uncond = _split_low_high_freq(uncond_states.float())
+            low_freq_cond, high_freq_cond = _split_low_high_freq(cond_states.float())
+            self.state.low_frequency_delta = low_freq_uncond - low_freq_cond
+            self.state.high_frequency_delta = high_freq_uncond - high_freq_cond
+
+        self.state.iteration += 1
+        if torch.is_tensor(output):
+            output = hidden_states
+        elif isinstance(output, tuple):
+            output = (hidden_states, *output[1:])
+        else:
+            output.sample = hidden_states
+
+        return output
+
+    def reset_state(self, module: torch.nn.Module) -> torch.nn.Module:
+        self.state.reset()
+        return module
+
+class FasterCacheBlockHook(ModelHook):
+    _is_stateful = True
+
+    def __init__(
+        self,
+        block_skip_range: int,
+        timestep_skip_range: Tuple[int, int],
+        is_guidance_distilled: bool,
+        weight_callback: Callable[[torch.nn.Module], float],
+        current_timestep_callback: Callable[[], int],
+    ) -> None:
+        super().__init__()
+
+        self.block_skip_range = block_skip_range
+        self.timestep_skip_range = timestep_skip_range
+        self.is_guidance_distilled = is_guidance_distilled
+
+        self.weight_callback = weight_callback
+        self.current_timestep_callback = current_timestep_callback
+
+    def initialize_hook(self, module):
+        self.state = FasterCacheBlockState()
+        return module
+
+    def _compute_approximated_attention_output(
+        self, t_2_output: torch.Tensor, t_output: torch.Tensor, weight: float, batch_size: int
+    ) -> torch.Tensor:
+        if t_2_output.size(0) != batch_size:
+            # The cache t_2_output contains both b...
+            # take the conditional branch outputs.
+            assert t_2_output.size(0) == 2 * batch_size
+            t_2_output = t_2_output[batch_size:]
+        if t_output.size(0) != batch_size:
+            # The cache t_output contains both bat...
+            # take the conditional branch outputs.
+            assert t_output.size(0) == 2 * batch_size
+            t_output = t_output[batch_size:]
+        return t_output + (t_output - t_2_output) * weight
+
+    def new_forward(self, module: torch.nn.Module, *args, **kwargs) -> Any:
+        batch_size = [
+            *[arg.size(0) for arg in args if torch.is_tensor(arg)],
+            *[v.size(0) for v in kwargs.values() if torch.is_tensor(v)],
+        ][0]
+        if self.state.batch_size is None:
+            # Will be updated on first forward pass through the denoiser
+            self.state.batch_size = batch_size
+
+        # If we have to skip due to the skip conditions, then let's skip as expected.
+        # But, we can't skip if the denoiser wants...
+        # is because the expected output shapes of...
+        # the cache (which only caches conditional...
+        # unconditional-conditional batch size) is...
+        # skip. Otherwise, we conditionally skip t...
+        is_within_timestep_range = (
+            self.timestep_skip_range[0] < self.current_timestep_callback() < self.timestep_skip_range[1]
+        )
+        if not is_within_timestep_range:
+            should_skip_attention = False
+        else:
+            should_compute_attention = self.state.iteration > 0 and self.state.iteration % self.block_skip_range == 0
+            should_skip_attention = not should_compute_attention
+        if should_skip_attention:
+            should_skip_attention = self.is_guidance_distilled or self.state.batch_size != batch_size
+
+        if should_skip_attention:
+            logger.debug("FasterCache - Skipping attention and using approximation")
+            if torch.is_tensor(self.state.cache[-1]):
+                t_2_output, t_output = self.state.cache
+                weight = self.weight_callback(module)
+                output = self._compute_approximated_attention_output(t_2_output, t_output, weight, batch_size)
+            else:
+                # The cache contains multiple tens...
+                # Diffusers blocks can return mult...
+                # In our cache, we would have [[A_...
+                # a forward pass of the block. We...
+                # The zip(*state.cache) operation...
+                # allows us to compute the approxi...
+                output = ()
+                for t_2_output, t_output in zip(*self.state.cache):
+                    result = self._compute_approximated_attention_output(
+                        t_2_output, t_output, self.weight_callback(module), batch_size
+                    )
+                    output += (result,)
+        else:
+            logger.debug("FasterCache - Computing attention")
+            output = self.fn_ref.original_forward(*args, **kwargs)
+
+        # Note that the following condition for ge...
+        # a single hidden_states tensor, or a tupl...
+        # both cases.
+        if torch.is_tensor(output):
+            cache_output = output
+            if not self.is_guidance_distilled and cache_output.size(0) == self.state.batch_size:
+                # The output here can be both unco...
+                # This is determined at the higher...
+                cache_output = cache_output.chunk(2, dim=0)[1]
+        else:
+            # Cache all return values and perform the same operation as above
+            cache_output = ()
+            for out in output:
+                if not self.is_guidance_distilled and out.size(0) == self.state.batch_size:
+                    out = out.chunk(2, dim=0)[1]
+                cache_output += (out,)
+
+        if self.state.cache is None:
+            self.state.cache = [cache_output, cache_output]
+        else:
+            self.state.cache = [self.state.cache[-1], cache_output]
+
+        self.state.iteration += 1
+        return output
+
+    def reset_state(self, module: torch.nn.Module) -> torch.nn.Module:
+        self.state.reset()
+        return module
+
+def apply_faster_cache(module: torch.nn.Module, config: FasterCacheConfig) -> None:
+
 
     logger.warning(
         "FasterCache is a purely experimental feature and may not work as expected. Not all models support FasterCache. "
@@ -523,8 +1189,8 @@ def apply_faster_cache(module: torch.nn.Module, config: FasterCacheConfig) -> No
 
     if config.attention_weight_callback is None:
         # If the user has not provided a weight callback, we default to 0.5 for all timesteps.
-        # In the paper, they recommend using a gradually increasing weight from 0 to 1 as the inference progresses, but
-        # this depends from model-to-model. It is required by the user to provide a weight callback if they want to
+        # In the paper, they recommend using a gra...
+        # this depends from model-to-model. It is...
         # use a different weight function. Defaulting to 0.5 works well in practice for most cases.
         logger.warning(
             "No `attention_weight_callback` provided when enabling FasterCache. Defaulting to using a weight of 0.5 for all timesteps."
@@ -573,7 +1239,6 @@ def apply_faster_cache(module: torch.nn.Module, config: FasterCacheConfig) -> No
         if any(re.search(identifier, name) is not None for identifier in _TRANSFORMER_BLOCK_IDENTIFIERS):
             _apply_faster_cache_on_attention_class(name, submodule, config)
 
-
 def _apply_faster_cache_on_denoiser(module: torch.nn.Module, config: FasterCacheConfig) -> None:
     hook = FasterCacheDenoiserHook(
         config.unconditional_batch_skip_range,
@@ -587,7 +1252,6 @@ def _apply_faster_cache_on_denoiser(module: torch.nn.Module, config: FasterCache
     )
     registry = HookRegistry.check_if_exists_or_initialize(module)
     registry.register_hook(hook, _FASTER_CACHE_DENOISER_HOOK)
-
 
 def _apply_faster_cache_on_attention_class(name: str, module: AttentionModuleMixin, config: FasterCacheConfig) -> None:
     is_spatial_self_attention = (
@@ -632,8 +1296,7 @@ def _apply_faster_cache_on_attention_class(name: str, module: AttentionModuleMix
     registry = HookRegistry.check_if_exists_or_initialize(module)
     registry.register_hook(hook, _FASTER_CACHE_BLOCK_HOOK)
 
-
-# Reference: https://github.com/Vchitect/FasterCache/blob/fab32c15014636dc854948319c0a9a8d92c7acb4/scripts/latte/faster_cache_sample_latte.py#L127C1-L143C39
+# Reference: https://github.com/Vchitect/FasterCac...
 @torch.no_grad()
 def _split_low_high_freq(x):
     fft = torch.fft.fft2(x)

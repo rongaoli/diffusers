@@ -1,18 +1,3 @@
-# Copyright 2025 Qwen-Image Team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-
 from typing import List
 
 import PIL.Image
@@ -46,17 +31,14 @@ from .inputs import (
     QwenImageTextInputsStep,
 )
 
-
 logger = logging.get_logger(__name__)
-
 
 # ====================
 # 1. TEXT ENCODER
 # ====================
 
-
 class QwenImageLayeredTextEncoderStep(SequentialPipelineBlocks):
-    """Text encoder that takes text prompt, will generate a prompt based on image if not provided."""
+
 
     model_name = "qwenimage-layered"
     block_classes = [
@@ -70,11 +52,9 @@ class QwenImageLayeredTextEncoderStep(SequentialPipelineBlocks):
     def description(self) -> str:
         return "QwenImage-Layered Text encoder step that encode the text prompt, will generate a prompt based on image if not provided."
 
-
 # ====================
 # 2. VAE ENCODER
 # ====================
-
 
 # Edit VAE encoder
 class QwenImageLayeredVaeEncoderStep(SequentialPipelineBlocks):
@@ -91,11 +71,9 @@ class QwenImageLayeredVaeEncoderStep(SequentialPipelineBlocks):
     def description(self) -> str:
         return "Vae encoder step that encode the image inputs into their latent representations."
 
-
 # ====================
-# 3. DENOISE (input -> prepare_latents -> set_timesteps -> prepare_rope_inputs -> denoise -> after_denoise)
+# 3. DENOISE (input -> prepare_latents -> set_time...
 # ====================
-
 
 # assemble input steps
 class QwenImageLayeredInputStep(SequentialPipelineBlocks):
@@ -113,7 +91,6 @@ class QwenImageLayeredInputStep(SequentialPipelineBlocks):
             " - make sure the text embeddings have consistent batch size as well as the additional inputs.\n"
             " - update height/width based `image_latents`, patchify `image_latents`."
         )
-
 
 # Qwen Image Layered (image2image) core denoise step
 class QwenImageLayeredCoreDenoiseStep(SequentialPipelineBlocks):
@@ -147,7 +124,6 @@ class QwenImageLayeredCoreDenoiseStep(SequentialPipelineBlocks):
             ),
         ]
 
-
 # ====================
 # 4. AUTO BLOCKS & PRESETS
 # ====================
@@ -160,7 +136,6 @@ LAYERED_AUTO_BLOCKS = InsertableDict(
         ("decode", QwenImageLayeredDecoderStep()),
     ]
 )
-
 
 class QwenImageLayeredAutoBlocks(SequentialPipelineBlocks):
     model_name = "qwenimage-layered"

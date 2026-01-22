@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import inspect
 from typing import Callable, List, Optional, Union
 
@@ -30,7 +16,6 @@ from ..stable_diffusion import StableDiffusionPipelineOutput
 from ..stable_diffusion.safety_checker import StableDiffusionSafetyChecker
 from .image_encoder import PaintByExampleImageEncoder
 
-
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
@@ -40,8 +25,7 @@ else:
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
-# Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img.retrieve_latents
+# Copied from diffusers.pipelines.stable_diffusion...
 def retrieve_latents(
     encoder_output: torch.Tensor, generator: Optional[torch.Generator] = None, sample_mode: str = "sample"
 ):
@@ -54,9 +38,7 @@ def retrieve_latents(
     else:
         raise AttributeError("Could not access latents of provided encoder_output")
 
-
 def prepare_mask_and_masked_image(image, mask):
-    """
     Prepares a pair (image, mask) to be consumed by the Paint by Example pipeline. This means that those inputs will be
     converted to ``torch.Tensor`` with shapes ``batch x channels x height x width`` where ``channels`` is ``3`` for the
     ``image`` and ``1`` for the ``mask``.
@@ -72,7 +54,6 @@ def prepare_mask_and_masked_image(image, mask):
             It can be a ``PIL.Image``, or a ``height x width`` ``np.array`` or a ``1 x height x width``
             ``torch.Tensor`` or a ``batch x 1 x height x width`` ``torch.Tensor``.
 
-
     Raises:
         ValueError: ``torch.Tensor`` images should be in the ``[-1, 1]`` range. ValueError: ``torch.Tensor`` mask
         should be in the ``[0, 1]`` range. ValueError: ``mask`` and ``image`` should have the same spatial dimensions.
@@ -82,7 +63,6 @@ def prepare_mask_and_masked_image(image, mask):
     Returns:
         tuple[torch.Tensor]: The pair (mask, masked_image) as ``torch.Tensor`` with 4
             dimensions: ``batch x channels x height x width``.
-    """
     if isinstance(image, torch.Tensor):
         if not isinstance(mask, torch.Tensor):
             raise TypeError(f"`image` is a torch.Tensor but `mask` (type: {type(mask)} is not")
@@ -154,10 +134,9 @@ def prepare_mask_and_masked_image(image, mask):
 
     return mask, masked_image
 
-
 class PaintByExamplePipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableDiffusionMixin):
     _last_supported_version = "0.33.1"
-    r"""
+
     > [!WARNING] > 🧪 This is an experimental feature!
 
     Pipeline for image-guided image inpainting using Stable Diffusion.
@@ -184,7 +163,6 @@ class PaintByExamplePipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableD
         feature_extractor ([`~transformers.CLIPImageProcessor`]):
             A `CLIPImageProcessor` to extract features from generated images; used as inputs to the `safety_checker`.
 
-    """
 
     # TODO: feature_extractor is required to encode initial images (if they are in PIL format),
     # we should give a descriptive message if the pipeline doesn't have one.
@@ -217,7 +195,7 @@ class PaintByExamplePipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableD
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
         self.register_to_config(requires_safety_checker=requires_safety_checker)
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.run_safety_checker
+    # Copied from diffusers.pipelines.stable_diffu...
     def run_safety_checker(self, image, device, dtype):
         if self.safety_checker is None:
             has_nsfw_concept = None
@@ -232,9 +210,9 @@ class PaintByExamplePipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableD
             )
         return image, has_nsfw_concept
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_extra_step_kwargs
+    # Copied from diffusers.pipelines.stable_diffu...
     def prepare_extra_step_kwargs(self, generator, eta):
-        # prepare extra kwargs for the scheduler step, since not all schedulers have the same signature
+        # prepare extra kwargs for the scheduler s...
         # eta (η) is only used with the DDIMScheduler, it will be ignored for other schedulers.
         # eta corresponds to η in DDIM paper: https://huggingface.co/papers/2010.02502
         # and should be between [0, 1]
@@ -250,7 +228,7 @@ class PaintByExamplePipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableD
             extra_step_kwargs["generator"] = generator
         return extra_step_kwargs
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.decode_latents
+    # Copied from diffusers.pipelines.stable_diffu...
     def decode_latents(self, latents):
         deprecation_message = "The decode_latents method is deprecated and will be removed in 1.0.0. Please use VaeImageProcessor.postprocess(...) instead"
         deprecate("decode_latents", "1.0.0", deprecation_message, standard_warn=False)
@@ -258,11 +236,11 @@ class PaintByExamplePipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableD
         latents = 1 / self.vae.config.scaling_factor * latents
         image = self.vae.decode(latents, return_dict=False)[0]
         image = (image / 2 + 0.5).clamp(0, 1)
-        # we always cast to float32 as this does not cause significant overhead and is compatible with bfloat16
+        # we always cast to float32 as this does n...
         image = image.cpu().permute(0, 2, 3, 1).float().numpy()
         return image
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_image_variation.StableDiffusionImageVariationPipeline.check_inputs
+    # Copied from diffusers.pipelines.stable_diffu...
     def check_inputs(self, image, height, width, callback_steps):
         if (
             not isinstance(image, torch.Tensor)
@@ -285,7 +263,7 @@ class PaintByExamplePipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableD
                 f" {type(callback_steps)}."
             )
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_latents
+    # Copied from diffusers.pipelines.stable_diffu...
     def prepare_latents(self, batch_size, num_channels_latents, height, width, dtype, device, generator, latents=None):
         shape = (
             batch_size,
@@ -308,7 +286,7 @@ class PaintByExamplePipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableD
         latents = latents * self.scheduler.init_noise_sigma
         return latents
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_inpaint.StableDiffusionInpaintPipeline.prepare_mask_latents
+    # Copied from diffusers.pipelines.stable_diffu...
     def prepare_mask_latents(
         self, mask, masked_image, batch_size, height, width, dtype, device, generator, do_classifier_free_guidance
     ):
@@ -327,7 +305,7 @@ class PaintByExamplePipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableD
         else:
             masked_image_latents = self._encode_vae_image(masked_image, generator=generator)
 
-        # duplicate mask and masked_image_latents for each generation per prompt, using mps friendly method
+        # duplicate mask and masked_image_latents...
         if mask.shape[0] < batch_size:
             if not batch_size % mask.shape[0] == 0:
                 raise ValueError(
@@ -354,7 +332,7 @@ class PaintByExamplePipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableD
         masked_image_latents = masked_image_latents.to(device=device, dtype=dtype)
         return mask, masked_image_latents
 
-    # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_inpaint.StableDiffusionInpaintPipeline._encode_vae_image
+    # Copied from diffusers.pipelines.stable_diffu...
     def _encode_vae_image(self, image: torch.Tensor, generator: torch.Generator):
         if isinstance(generator, list):
             image_latents = [
@@ -404,17 +382,17 @@ class PaintByExamplePipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableD
         width: Optional[int] = None,
         num_inference_steps: int = 50,
         guidance_scale: float = 5.0,
-        negative_prompt: Optional[Union[str, List[str]]] = None,
+        negative_prompt: Optional[str] = None,
         num_images_per_prompt: Optional[int] = 1,
         eta: float = 0.0,
-        generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+        generator: Optional[torch.Generator] = None,
         latents: Optional[torch.Tensor] = None,
         output_type: Optional[str] = "pil",
         return_dict: bool = True,
         callback: Optional[Callable[[int, int, torch.Tensor], None]] = None,
         callback_steps: int = 1,
     ):
-        r"""
+
         The call function to the pipeline for generation.
 
         Args:
@@ -465,42 +443,9 @@ class PaintByExamplePipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableD
                 The frequency at which the `callback` function is called. If not specified, the callback is called at
                 every step.
 
-        Example:
 
-        ```py
-        >>> import PIL
-        >>> import requests
-        >>> import torch
-        >>> from io import BytesIO
-        >>> from diffusers import PaintByExamplePipeline
+        使用示例见文档
 
-
-        >>> def download_image(url):
-        ...     response = requests.get(url)
-        ...     return PIL.Image.open(BytesIO(response.content)).convert("RGB")
-
-
-        >>> img_url = (
-        ...     "https://raw.githubusercontent.com/Fantasy-Studio/Paint-by-Example/main/examples/image/example_1.png"
-        ... )
-        >>> mask_url = (
-        ...     "https://raw.githubusercontent.com/Fantasy-Studio/Paint-by-Example/main/examples/mask/example_1.png"
-        ... )
-        >>> example_url = "https://raw.githubusercontent.com/Fantasy-Studio/Paint-by-Example/main/examples/reference/example_1.jpg"
-
-        >>> init_image = download_image(img_url).resize((512, 512))
-        >>> mask_image = download_image(mask_url).resize((512, 512))
-        >>> example_image = download_image(example_url).resize((512, 512))
-
-        >>> pipe = PaintByExamplePipeline.from_pretrained(
-        ...     "Fantasy-Studio/Paint-by-Example",
-        ...     torch_dtype=torch.float16,
-        ... )
-        >>> pipe = pipe.to("cuda")
-
-        >>> image = pipe(image=init_image, mask_image=mask_image, example_image=example_image).images[0]
-        >>> image
-        ```
 
         Returns:
             [`~pipelines.stable_diffusion.StableDiffusionPipelineOutput`] or `tuple`:
@@ -508,7 +453,6 @@ class PaintByExamplePipeline(DeprecatedPipelineMixin, DiffusionPipeline, StableD
                 otherwise a `tuple` is returned where the first element is a list with the generated images and the
                 second element is a list of `bool`s indicating whether the corresponding generated image contains
                 "not-safe-for-work" (nsfw) content.
-        """
         # 1. Define call parameters
         if isinstance(image, PIL.Image.Image):
             batch_size = 1

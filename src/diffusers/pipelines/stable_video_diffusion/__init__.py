@@ -10,7 +10,6 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
 
@@ -30,7 +29,6 @@ else:
             ],
         }
     )
-
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:

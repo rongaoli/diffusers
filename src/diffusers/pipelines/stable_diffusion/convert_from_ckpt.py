@@ -1,17 +1,4 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """Conversion script for the Stable Diffusion checkpoints."""
 
 import re
@@ -60,28 +47,21 @@ from ..pipeline_utils import DiffusionPipeline
 from .safety_checker import StableDiffusionSafetyChecker
 from .stable_unclip_image_normalizer import StableUnCLIPImageNormalizer
 
-
 if is_accelerate_available():
     from accelerate import init_empty_weights
     from accelerate.utils import set_module_tensor_to_device
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
 def shave_segments(path, n_shave_prefix_segments=1):
-    """
-    Removes segments. Positive values shave the first segments, negative shave the last segments.
-    """
+
     if n_shave_prefix_segments >= 0:
         return ".".join(path.split(".")[n_shave_prefix_segments:])
     else:
         return ".".join(path.split(".")[:n_shave_prefix_segments])
 
-
 def renew_resnet_paths(old_list, n_shave_prefix_segments=0):
-    """
-    Updates paths inside resnets to the new naming scheme (local renaming)
-    """
+
     mapping = []
     for old_item in old_list:
         new_item = old_item.replace("in_layers.0", "norm1")
@@ -99,11 +79,8 @@ def renew_resnet_paths(old_list, n_shave_prefix_segments=0):
 
     return mapping
 
-
 def renew_vae_resnet_paths(old_list, n_shave_prefix_segments=0):
-    """
-    Updates paths inside resnets to the new naming scheme (local renaming)
-    """
+
     mapping = []
     for old_item in old_list:
         new_item = old_item
@@ -115,11 +92,8 @@ def renew_vae_resnet_paths(old_list, n_shave_prefix_segments=0):
 
     return mapping
 
-
 def renew_attention_paths(old_list, n_shave_prefix_segments=0):
-    """
-    Updates paths inside attentions to the new naming scheme (local renaming)
-    """
+
     mapping = []
     for old_item in old_list:
         new_item = old_item
@@ -130,17 +104,14 @@ def renew_attention_paths(old_list, n_shave_prefix_segments=0):
         #         new_item = new_item.replace('proj_out.weight', 'proj_attn.weight')
         #         new_item = new_item.replace('proj_out.bias', 'proj_attn.bias')
 
-        #         new_item = shave_segments(new_item, n_shave_prefix_segments=n_shave_prefix_segments)
+        #         new_item = shave_segments(new_it...
 
         mapping.append({"old": old_item, "new": new_item})
 
     return mapping
 
-
 def renew_vae_attention_paths(old_list, n_shave_prefix_segments=0):
-    """
-    Updates paths inside attentions to the new naming scheme (local renaming)
-    """
+
     mapping = []
     for old_item in old_list:
         new_item = old_item
@@ -166,16 +137,10 @@ def renew_vae_attention_paths(old_list, n_shave_prefix_segments=0):
 
     return mapping
 
-
 def assign_to_checkpoint(
     paths, checkpoint, old_checkpoint, attention_paths_to_split=None, additional_replacements=None, config=None
 ):
-    """
-    This does the final conversion step: take locally converted weights and apply a global renaming to them. It splits
-    attention layers, and takes into account additional replacements that may arise.
 
-    Assigns the weights to the new checkpoint.
-    """
     assert isinstance(paths, list), "Paths should be a list of dicts containing 'old' and 'new' keys."
 
     # Splits the attention layers into three variables.
@@ -221,7 +186,6 @@ def assign_to_checkpoint(
         else:
             checkpoint[new_path] = old_checkpoint[path["old"]]
 
-
 def conv_attn_to_linear(checkpoint):
     keys = list(checkpoint.keys())
     attn_keys = ["query.weight", "key.weight", "value.weight"]
@@ -233,11 +197,8 @@ def conv_attn_to_linear(checkpoint):
             if checkpoint[key].ndim > 2:
                 checkpoint[key] = checkpoint[key][:, :, 0]
 
-
 def create_unet_diffusers_config(original_config, image_size: int, controlnet=False):
-    """
-    Creates a config for the diffusers based on the config of the LDM model.
-    """
+
     if controlnet:
         unet_params = original_config["model"]["params"]["control_stage_config"]["params"]
     else:
@@ -342,11 +303,8 @@ def create_unet_diffusers_config(original_config, image_size: int, controlnet=Fa
 
     return config
 
-
 def create_vae_diffusers_config(original_config, image_size: int):
-    """
-    Creates a config for the diffusers based on the config of the LDM model.
-    """
+
     vae_params = original_config["model"]["params"]["first_stage_config"]["params"]["ddconfig"]
     _ = original_config["model"]["params"]["first_stage_config"]["params"]["embed_dim"]
 
@@ -372,7 +330,6 @@ def create_vae_diffusers_config(original_config, image_size: int):
     }
     return config
 
-
 def create_diffusers_schedular(original_config):
     schedular = DDIMScheduler(
         num_train_timesteps=original_config["model"]["params"]["timesteps"],
@@ -381,7 +338,6 @@ def create_diffusers_schedular(original_config):
         beta_schedule="scaled_linear",
     )
     return schedular
-
 
 def create_ldm_bert_config(original_config):
     bert_params = original_config["model"]["params"]["cond_stage_config"]["params"]
@@ -392,13 +348,10 @@ def create_ldm_bert_config(original_config):
     )
     return config
 
-
 def convert_ldm_unet_checkpoint(
     checkpoint, config, path=None, extract_ema=False, controlnet=False, skip_extract_state_dict=False
 ):
-    """
-    Takes a state dict and a config, and returns a converted checkpoint.
-    """
+
 
     if skip_extract_state_dict:
         unet_state_dict = checkpoint
@@ -412,7 +365,7 @@ def convert_ldm_unet_checkpoint(
         else:
             unet_key = "model.diffusion_model."
 
-        # at least a 100 parameters have to start with `model_ema` in order for the checkpoint to be EMA
+        # at least a 100 parameters have to start...
         if sum(k.startswith("model_ema") for k in keys) > 100 and extract_ema:
             logger.warning(f"Checkpoint {path} has both EMA and non-EMA weights.")
             logger.warning(
@@ -640,7 +593,6 @@ def convert_ldm_unet_checkpoint(
 
     return new_checkpoint
 
-
 def convert_ldm_vae_checkpoint(checkpoint, config):
     # extract state dict for VAE
     vae_state_dict = {}
@@ -747,7 +699,6 @@ def convert_ldm_vae_checkpoint(checkpoint, config):
     conv_attn_to_linear(new_checkpoint)
     return new_checkpoint
 
-
 def convert_ldm_bert_checkpoint(checkpoint, config):
     def _copy_attn_layer(hf_attn_layer, pt_attn_layer):
         hf_attn_layer.q_proj.weight.data = pt_attn_layer.to_q.weight
@@ -797,7 +748,6 @@ def convert_ldm_bert_checkpoint(checkpoint, config):
 
     return hf_model
 
-
 def convert_ldm_clip_checkpoint(checkpoint, local_files_only=False, text_encoder=None):
     if text_encoder is None:
         config_name = "openai/clip-vit-large-patch14"
@@ -836,7 +786,6 @@ def convert_ldm_clip_checkpoint(checkpoint, local_files_only=False, text_encoder
 
     return text_model
 
-
 textenc_conversion_lst = [
     ("positional_embedding", "text_model.embeddings.position_embedding.weight"),
     ("token_embedding.weight", "text_model.embeddings.token_embedding.weight"),
@@ -860,7 +809,6 @@ textenc_transformer_conversion_lst = [
 ]
 protected = {re.escape(x[0]): x[1] for x in textenc_transformer_conversion_lst}
 textenc_pattern = re.compile("|".join(protected.keys()))
-
 
 def convert_paint_by_example_checkpoint(checkpoint, local_files_only=False):
     config = CLIPVisionConfig.from_pretrained("openai/clip-vit-large-patch14", local_files_only=local_files_only)
@@ -928,7 +876,6 @@ def convert_paint_by_example_checkpoint(checkpoint, local_files_only=False):
     model.uncond_vector.data = torch.nn.Parameter(checkpoint["learnable_vector"])
     return model
 
-
 def convert_open_clip_checkpoint(
     checkpoint,
     config_name,
@@ -937,7 +884,7 @@ def convert_open_clip_checkpoint(
     local_files_only=False,
     **config_kwargs,
 ):
-    # text_model = CLIPTextModel.from_pretrained("stabilityai/stable-diffusion-2", subfolder="text_encoder")
+    # text_model = CLIPTextModel.from_pretrained("...
     # text_model = CLIPTextModelWithProjection.from_pretrained(
     #    "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k", projection_dim=1280
     # )
@@ -1010,14 +957,8 @@ def convert_open_clip_checkpoint(
 
     return text_model
 
-
 def stable_unclip_image_encoder(original_config, local_files_only=False):
-    """
-    Returns the image processor and clip image encoder for the img2img unclip pipeline.
 
-    We currently know of two types of stable unclip models which separately use the clip and the openclip image
-    encoders.
-    """
 
     image_embedder_config = original_config["model"]["params"]["embedder_config"]
 
@@ -1047,19 +988,18 @@ def stable_unclip_image_encoder(original_config, local_files_only=False):
 
     return feature_extractor, image_encoder
 
+def stable_unclip_image_noising_components(
+    original_config, clip_stats_path: Optional[str] = None, device: Optional[str] = None
+):
+    class in stable diffusion checkpoint {sd_clip_image_embedder_class}"
+        )
+
+    return feature_extractor, image_encoder
 
 def stable_unclip_image_noising_components(
     original_config, clip_stats_path: Optional[str] = None, device: Optional[str] = None
 ):
-    """
-    Returns the noising components for the img2img and txt2img unclip pipelines.
 
-    Converts the stability noise augmentor into
-    1. a `StableUnCLIPImageNormalizer` for holding the CLIP stats
-    2. a `DDPMScheduler` for holding the noise schedule
-
-    If the noise augmentor config specifies a clip stats path, the `clip_stats_path` must be provided.
-    """
     noise_aug_config = original_config["model"]["params"]["noise_aug_config"]
     noise_aug_class = noise_aug_config["target"]
     noise_aug_class = noise_aug_class.split(".")[-1]
@@ -1091,7 +1031,6 @@ def stable_unclip_image_noising_components(
         raise NotImplementedError(f"Unknown noise augmentor class: {noise_aug_class}")
 
     return image_normalizer, image_noising_scheduler
-
 
 def convert_controlnet_checkpoint(
     checkpoint,
@@ -1142,7 +1081,6 @@ def convert_controlnet_checkpoint(
 
     return controlnet
 
-
 def download_from_original_stable_diffusion_ckpt(
     checkpoint_path_or_dict: Union[str, Dict[str, torch.Tensor]],
     original_config_file: str = None,
@@ -1173,79 +1111,7 @@ def download_from_original_stable_diffusion_ckpt(
     tokenizer_2=None,
     config_files=None,
 ) -> DiffusionPipeline:
-    """
-    Load a Stable Diffusion pipeline object from a CompVis-style `.ckpt`/`.safetensors` file and (ideally) a `.yaml`
-    config file.
 
-    Although many of the arguments can be automatically inferred, some of these rely on brittle checks against the
-    global step count, which will likely fail for models that have undergone further fine-tuning. Therefore, it is
-    recommended that you override the default values and/or supply an `original_config_file` wherever possible.
-
-    Args:
-        checkpoint_path_or_dict (`str` or `dict`): Path to `.ckpt` file, or the state dict.
-        original_config_file (`str`):
-            Path to `.yaml` config file corresponding to the original architecture. If `None`, will be automatically
-            inferred by looking for a key that only exists in SD2.0 models.
-        image_size (`int`, *optional*, defaults to 512):
-            The image size that the model was trained on. Use 512 for Stable Diffusion v1.X and Stable Diffusion v2
-            Base. Use 768 for Stable Diffusion v2.
-        prediction_type (`str`, *optional*):
-            The prediction type that the model was trained on. Use `'epsilon'` for Stable Diffusion v1.X and Stable
-            Diffusion v2 Base. Use `'v_prediction'` for Stable Diffusion v2.
-        num_in_channels (`int`, *optional*, defaults to None):
-            The number of input channels. If `None`, it will be automatically inferred.
-        scheduler_type (`str`, *optional*, defaults to 'pndm'):
-            Type of scheduler to use. Should be one of `["pndm", "lms", "heun", "euler", "euler-ancestral", "dpm",
-            "ddim"]`.
-        model_type (`str`, *optional*, defaults to `None`):
-            The pipeline type. `None` to automatically infer, or one of `["FrozenOpenCLIPEmbedder",
-            "FrozenCLIPEmbedder", "PaintByExample"]`.
-        is_img2img (`bool`, *optional*, defaults to `False`):
-            Whether the model should be loaded as an img2img pipeline.
-        extract_ema (`bool`, *optional*, defaults to `False`): Only relevant for
-            checkpoints that have both EMA and non-EMA weights. Whether to extract the EMA weights or not. Defaults to
-            `False`. Pass `True` to extract the EMA weights. EMA weights usually yield higher quality images for
-            inference. Non-EMA weights are usually better to continue fine-tuning.
-        upcast_attention (`bool`, *optional*, defaults to `None`):
-            Whether the attention computation should always be upcasted. This is necessary when running stable
-            diffusion 2.1.
-        device (`str`, *optional*, defaults to `None`):
-            The device to use. Pass `None` to determine automatically.
-        from_safetensors (`str`, *optional*, defaults to `False`):
-            If `checkpoint_path` is in `safetensors` format, load checkpoint with safetensors instead of PyTorch.
-        load_safety_checker (`bool`, *optional*, defaults to `True`):
-            Whether to load the safety checker or not. Defaults to `True`.
-        safety_checker (`StableDiffusionSafetyChecker`, *optional*, defaults to `None`):
-            Safety checker to use. If this parameter is `None`, the function will load a new instance of
-            [StableDiffusionSafetyChecker] by itself, if needed.
-        feature_extractor (`AutoFeatureExtractor`, *optional*, defaults to `None`):
-            Feature extractor to use. If this parameter is `None`, the function will load a new instance of
-            [AutoFeatureExtractor] by itself, if needed.
-        pipeline_class (`str`, *optional*, defaults to `None`):
-            The pipeline class to use. Pass `None` to determine automatically.
-        local_files_only (`bool`, *optional*, defaults to `False`):
-            Whether or not to only look at local files (i.e., do not try to download the model).
-        vae (`AutoencoderKL`, *optional*, defaults to `None`):
-            Variational Auto-Encoder (VAE) Model to encode and decode images to and from latent representations. If
-            this parameter is `None`, the function will load a new instance of [CLIP] by itself, if needed.
-        text_encoder (`CLIPTextModel`, *optional*, defaults to `None`):
-            An instance of [CLIP](https://huggingface.co/docs/transformers/model_doc/clip#transformers.CLIPTextModel)
-            to use, specifically the [clip-vit-large-patch14](https://huggingface.co/openai/clip-vit-large-patch14)
-            variant. If this parameter is `None`, the function will load a new instance of [CLIP] by itself, if needed.
-        tokenizer (`CLIPTokenizer`, *optional*, defaults to `None`):
-            An instance of
-            [CLIPTokenizer](https://huggingface.co/docs/transformers/v4.21.0/en/model_doc/clip#transformers.CLIPTokenizer)
-            to use. If this parameter is `None`, the function will load a new instance of [CLIPTokenizer] by itself, if
-            needed.
-        config_files (`Dict[str, str]`, *optional*, defaults to `None`):
-            A dictionary mapping from config file names to their contents. If this parameter is `None`, the function
-            will load the config files by itself, if needed. Valid keys are:
-                - `v1`: Config file for Stable Diffusion v1
-                - `v2`: Config file for Stable Diffusion v2
-                - `xl`: Config file for Stable Diffusion XL
-                - `xl_refiner`: Config file for Stable Diffusion XL Refiner
-        return: A StableDiffusionPipeline object representing the passed-in `.ckpt`/`.safetensors` file.
-    """
 
     # import pipelines here to avoid circular import error when using from_single_file method
     from diffusers import (
@@ -1820,7 +1686,6 @@ def download_from_original_stable_diffusion_ckpt(
         pipe = LDMTextToImagePipeline(vqvae=vae, bert=text_model, tokenizer=tokenizer, unet=unet, scheduler=scheduler)
 
     return pipe
-
 
 def download_controlnet_from_original_ckpt(
     checkpoint_path: str,

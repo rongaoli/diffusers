@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import Optional, Tuple
 
 import jax
@@ -21,12 +7,10 @@ from flax.core.frozen_dict import FrozenDict
 from transformers import CLIPConfig, FlaxPreTrainedModel
 from transformers.models.clip.modeling_flax_clip import FlaxCLIPVisionModule
 
-
 def jax_cosine_distance(emb_1, emb_2, eps=1e-12):
     norm_emb_1 = jnp.divide(emb_1.T, jnp.clip(jnp.linalg.norm(emb_1, axis=1), a_min=eps)).T
     norm_emb_2 = jnp.divide(emb_2.T, jnp.clip(jnp.linalg.norm(emb_2, axis=1), a_min=eps)).T
     return jnp.matmul(norm_emb_1, norm_emb_2.T)
-
 
 class FlaxStableDiffusionSafetyCheckerModule(nn.Module):
     config: CLIPConfig
@@ -66,7 +50,6 @@ class FlaxStableDiffusionSafetyCheckerModule(nn.Module):
         has_nsfw_concepts = jnp.any(concept_scores > 0, axis=1)
 
         return has_nsfw_concepts
-
 
 class FlaxStableDiffusionSafetyChecker(FlaxPreTrainedModel):
     config_class = CLIPConfig

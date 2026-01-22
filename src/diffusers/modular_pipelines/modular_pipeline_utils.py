@@ -1,17 +1,3 @@
-# Copyright 2023 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import inspect
 import re
 from collections import OrderedDict
@@ -24,12 +10,10 @@ from ..configuration_utils import ConfigMixin, FrozenDict
 from ..loaders.single_file_utils import _is_single_file_path_or_url
 from ..utils import is_torch_available, logging
 
-
 if is_torch_available():
     pass
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 class InsertableDict(OrderedDict):
     def insert(self, key, value, index):
@@ -64,42 +48,63 @@ class InsertableDict(OrderedDict):
 
         return "InsertableDict([\n  " + ",\n  ".join(items) + "\n])"
 
+# YiYi TODO:
+# 1. validate the dataclass fields
+# 2. improve the docstring and potentially add a v...
+@dataclass
+class ComponentSpec:
+    class InsertableDict(OrderedDict):
+    def insert(self, key, value, index):
+        items = list(self.items())
+
+        # Remove key if it already exists to avoid duplicates
+        items = [(k, v) for k, v in items if k != key]
+
+        # Insert at the specified index
+        items.insert(index, (key, value))
+
+        # Clear and update self
+        self.clear()
+        self.update(items)
+
+        # Return self for method chaining
+        return self
+
+    def __repr__(self):
+        if not self:
+            return "InsertableDict()"
+
+        items = []
+        for i, (key, value) in enumerate(self.items()):
+            if isinstance(value, type):
+                # For classes, show class name and <class ...>
+                obj_repr = f"<class '{value.__module__}.{value.__name__}'>"
+            else:
+                # For objects (instances) and other types, show class name and module
+                obj_repr = f"<obj '{value.__class__.__module__}.{value.__class__.__name__}'>"
+            items.append(f"{i}: ({repr(key)}, {obj_repr})")
+
+        return "InsertableDict([\n  " + ",\n  ".join(items) + "\n])"
 
 # YiYi TODO:
 # 1. validate the dataclass fields
-# 2. improve the docstring and potentially add a validator for load methods, make sure they are valid inputs to pass to from_pretrained()
+# 2. improve the docstring and potentially add a v...
 @dataclass
 class ComponentSpec:
-    """Specification for a pipeline component.
 
-    A component can be created in two ways:
-    1. From scratch using __init__ with a config dict
-    2. using `from_pretrained`
-
-    Attributes:
-        name: Name of the component
-        type_hint: Type of the component (e.g. UNet2DConditionModel)
-        description: Optional description of the component
-        config: Optional config dict for __init__ creation
-        pretrained_model_name_or_path: Optional pretrained_model_name_or_path path for from_pretrained creation
-        subfolder: Optional subfolder in pretrained_model_name_or_path
-        variant: Optional variant in pretrained_model_name_or_path
-        revision: Optional revision in pretrained_model_name_or_path
-        default_creation_method: Preferred creation method - "from_config" or "from_pretrained"
-    """
 
     name: Optional[str] = None
     type_hint: Optional[Type] = None
     description: Optional[str] = None
     config: Optional[FrozenDict] = None
-    pretrained_model_name_or_path: Optional[Union[str, List[str]]] = field(default=None, metadata={"loading": True})
+    pretrained_model_name_or_path: Optional[str] = field(default=None, metadata={"loading": True})
     subfolder: Optional[str] = field(default="", metadata={"loading": True})
     variant: Optional[str] = field(default=None, metadata={"loading": True})
     revision: Optional[str] = field(default=None, metadata={"loading": True})
     default_creation_method: Literal["from_config", "from_pretrained"] = "from_pretrained"
 
     # Deprecated
-    repo: Optional[Union[str, List[str]]] = field(default=None, metadata={"loading": False})
+    repo: Optional[str] = field(default=None, metadata={"loading": False})
 
     def __post_init__(self):
         repo_value = self.repo
@@ -107,11 +112,11 @@ class ComponentSpec:
             object.__setattr__(self, "pretrained_model_name_or_path", repo_value)
 
     def __hash__(self):
-        """Make ComponentSpec hashable, using load_id as the hash value."""
+
         return hash((self.name, self.load_id, self.default_creation_method))
 
     def __eq__(self, other):
-        """Compare ComponentSpec objects based on name and load_id."""
+
         if not isinstance(other, ComponentSpec):
             return False
         return (
@@ -122,22 +127,7 @@ class ComponentSpec:
 
     @classmethod
     def from_component(cls, name: str, component: Any) -> Any:
-        """Create a ComponentSpec from a Component.
 
-        Currently supports:
-        - Components created with `ComponentSpec.load()` method
-        - Components that are ConfigMixin subclasses but not nn.Modules (e.g. schedulers, guiders)
-
-        Args:
-            name: Name of the component
-            component: Component object to create spec from
-
-        Returns:
-            ComponentSpec object
-
-        Raises:
-            ValueError: If component is not supported (e.g. nn.Module without load_id, non-ConfigMixin)
-        """
 
         # Check if component was created with ComponentSpec.load()
         if hasattr(component, "_diffusers_load_id") and component._diffusers_load_id != "null":
@@ -149,7 +139,7 @@ class ComponentSpec:
                 raise ValueError(
                     "Cannot create ComponentSpec from a nn.Module that was not created with `ComponentSpec.load()` method."
                 )
-            # ConfigMixin objects without weights (e.g. scheduler & guider) can be recreated with from_config
+            # ConfigMixin objects without weights...
             elif isinstance(component, ConfigMixin):
                 # warn if component was not created with `ComponentSpec`
                 if not hasattr(component, "_diffusers_load_id"):
@@ -158,7 +148,7 @@ class ComponentSpec:
                     )
                 default_creation_method = "from_config"
             else:
-                # Not a ConfigMixin and not created with `ComponentSpec.load()` method -> throw error
+                # Not a ConfigMixin and not create...
                 raise ValueError(
                     f"Cannot create ComponentSpec from {name}({component.__class__.__name__}). Currently ComponentSpec.from_component() only supports: "
                     f" - components created with `ComponentSpec.load()` method"
@@ -182,17 +172,32 @@ class ComponentSpec:
 
     @classmethod
     def loading_fields(cls) -> List[str]:
-        """
-        Return the names of all loading‐related fields (i.e. those whose field.metadata["loading"] is True).
-        """
+        class of ConfigMixin but not a nn.Module (e.g. guider, scheduler)."
+                )
+
+        type_hint = component.__class__
+
+        if isinstance(component, ConfigMixin) and default_creation_method == "from_config":
+            config = component.config
+        else:
+            config = None
+        if hasattr(component, "_diffusers_load_id") and component._diffusers_load_id != "null":
+            load_spec = cls.decode_load_id(component._diffusers_load_id)
+        else:
+            load_spec = {}
+
+        return cls(
+            name=name, type_hint=type_hint, config=config, default_creation_method=default_creation_method, **load_spec
+        )
+
+    @classmethod
+    def loading_fields(cls) -> List[str]:
+
         return [f.name for f in fields(cls) if f.metadata.get("loading", False)]
 
     @property
     def load_id(self) -> str:
-        """
-        Unique identifier for this spec's pretrained load, composed of
-        pretrained_model_name_or_path|subfolder|variant|revision (no empty segments).
-        """
+
         if self.default_creation_method == "from_config":
             return "null"
         parts = [getattr(self, k) for k in self.loading_fields()]
@@ -201,20 +206,7 @@ class ComponentSpec:
 
     @classmethod
     def decode_load_id(cls, load_id: str) -> Dict[str, Optional[str]]:
-        """
-        Decode a load_id string back into a dictionary of loading fields and values.
 
-        Args:
-            load_id: The load_id string to decode, format: "pretrained_model_name_or_path|subfolder|variant|revision"
-                     where None values are represented as "null"
-
-        Returns:
-            Dict mapping loading field names to their values. e.g. {
-                "pretrained_model_name_or_path": "path/to/repo", "subfolder": "subfolder", "variant": "variant",
-                "revision": "revision"
-            } If a segment value is "null", it's replaced with None. Returns None if load_id is "null" (indicating
-            component not created with `load` method).
-        """
 
         # Get all loading fields in order
         loading_fields = cls.loading_fields()
@@ -235,11 +227,11 @@ class ComponentSpec:
         return result
 
     # YiYi TODO: I think we should only support ConfigMixin for this method (after we make guider and image_processors config mixin)
-    # otherwise we cannot do spec -> spec.create() -> component -> ComponentSpec.from_component(component)
+    # otherwise we cannot do spec -> spec.create()...
     # the config info is lost in the process
-    # remove error check in from_component spec and ModularPipeline.update_components() if we remove support for non configmixin in `create()` method
+    # remove error check in from_component spec an...
     def create(self, config: Optional[Union[FrozenDict, Dict[str, Any]]] = None, **kwargs) -> Any:
-        """Create component using from_config with config."""
+
 
         if self.type_hint is None or not isinstance(self.type_hint, type):
             raise ValueError("`type_hint` is required when using from_config creation method.")
@@ -267,8 +259,8 @@ class ComponentSpec:
 
     # YiYi TODO: add guard for type of model, if it is supported by from_pretrained
     def load(self, **kwargs) -> Any:
-        """Load component using from_pretrained."""
-        # select loading fields from kwargs passed from user: e.g. pretrained_model_name_or_path, subfolder, variant, revision, note the list could change
+
+        # select loading fields from kwargs passed...
         passed_loading_kwargs = {key: kwargs.pop(key) for key in self.loading_fields() if key in kwargs}
         # merge loading field value in the spec with user passed values to create load_kwargs
         load_kwargs = {key: passed_loading_kwargs.get(key, getattr(self, key)) for key in self.loading_fields()}
@@ -313,24 +305,22 @@ class ComponentSpec:
 
         return component
 
-
 @dataclass
 class ConfigSpec:
-    """Specification for a pipeline configuration parameter."""
+
 
     name: str
     default: Any
     description: Optional[str] = None
 
-
 # YiYi Notes: both inputs and intermediate_inputs are InputParam objects
 # however some fields are not relevant for intermediate_inputs
-# e.g. unlike inputs, required only used in docstring for intermediate_inputs, we do not check if a required intermediate inputs is passed
-# default is not used for intermediate_inputs, we only use default from inputs, so it is ignored if it is set for intermediate_inputs
+# e.g. unlike inputs, required only used in docstr...
+# default is not used for intermediate_inputs, we...
 # -> should we use different class for inputs and intermediate_inputs?
 @dataclass
 class InputParam:
-    """Specification for an input parameter."""
+
 
     name: str = None
     type_hint: Any = None
@@ -342,10 +332,9 @@ class InputParam:
     def __repr__(self):
         return f"<{self.name}: {'required' if self.required else 'optional'}, default={self.default}>"
 
-
 @dataclass
 class OutputParam:
-    """Specification for an output parameter."""
+
 
     name: str
     type_hint: Any = None
@@ -357,23 +346,8 @@ class OutputParam:
             f"<{self.name}: {self.type_hint.__name__ if hasattr(self.type_hint, '__name__') else str(self.type_hint)}>"
         )
 
-
 def format_inputs_short(inputs):
-    """
-    Format input parameters into a string representation, with required params first followed by optional ones.
 
-    Args:
-        inputs: List of input parameters with 'required' and 'name' attributes, and 'default' for optional params
-
-    Returns:
-        str: Formatted string of input parameters
-
-    Example:
-        >>> inputs = [ ... InputParam(name="prompt", required=True), ... InputParam(name="image", required=True), ...
-        InputParam(name="guidance_scale", required=False, default=7.5), ... InputParam(name="num_inference_steps",
-        required=False, default=50) ... ] >>> format_inputs_short(inputs) 'prompt, image, guidance_scale=7.5,
-        num_inference_steps=50'
-    """
     required_inputs = [param for param in inputs if param.required]
     optional_inputs = [param for param in inputs if not param.required]
 
@@ -386,23 +360,8 @@ def format_inputs_short(inputs):
 
     return inputs_str
 
-
 def format_intermediates_short(intermediate_inputs, required_intermediate_inputs, intermediate_outputs):
-    """
-    Formats intermediate inputs and outputs of a block into a string representation.
 
-    Args:
-        intermediate_inputs: List of intermediate input parameters
-        required_intermediate_inputs: List of required intermediate input names
-        intermediate_outputs: List of intermediate output parameters
-
-    Returns:
-        str: Formatted string like:
-            Intermediates:
-                - inputs: Required(latents), dtype
-                - modified: latents # variables that appear in both inputs and outputs
-                - outputs: images # new outputs only
-    """
     # Handle inputs
     input_parts = []
     for inp in intermediate_inputs:
@@ -436,19 +395,8 @@ def format_intermediates_short(intermediate_inputs, required_intermediate_inputs
 
     return "\n".join(result) if result else "    (none)"
 
-
 def format_params(params, header="Args", indent_level=4, max_line_length=115):
-    """Format a list of InputParam or OutputParam objects into a readable string representation.
 
-    Args:
-        params: List of InputParam or OutputParam objects to format
-        header: Header text to use (e.g. "Args" or "Returns")
-        indent_level: Number of spaces to indent each parameter line (default: 4)
-        max_line_length: Maximum length for each line before wrapping (default: 115)
-
-    Returns:
-        A formatted string representing all parameters
-    """
     if not params:
         return ""
 
@@ -464,7 +412,7 @@ def format_params(params, header="Args", indent_level=4, max_line_length=115):
         return type_hint.__name__ if hasattr(type_hint, "__name__") else str(type_hint)
 
     def wrap_text(text, indent, max_length):
-        """Wrap text while preserving markdown links and maintaining indentation."""
+
         words = text.split()
         lines = []
         current_line = []
@@ -514,47 +462,16 @@ def format_params(params, header="Args", indent_level=4, max_line_length=115):
 
     return "\n\n".join(formatted_params)
 
-
 def format_input_params(input_params, indent_level=4, max_line_length=115):
-    """Format a list of InputParam objects into a readable string representation.
 
-    Args:
-        input_params: List of InputParam objects to format
-        indent_level: Number of spaces to indent each parameter line (default: 4)
-        max_line_length: Maximum length for each line before wrapping (default: 115)
-
-    Returns:
-        A formatted string representing all input parameters
-    """
     return format_params(input_params, "Inputs", indent_level, max_line_length)
 
-
 def format_output_params(output_params, indent_level=4, max_line_length=115):
-    """Format a list of OutputParam objects into a readable string representation.
 
-    Args:
-        output_params: List of OutputParam objects to format
-        indent_level: Number of spaces to indent each parameter line (default: 4)
-        max_line_length: Maximum length for each line before wrapping (default: 115)
-
-    Returns:
-        A formatted string representing all output parameters
-    """
     return format_params(output_params, "Outputs", indent_level, max_line_length)
 
-
 def format_components(components, indent_level=4, max_line_length=115, add_empty_lines=True):
-    """Format a list of ComponentSpec objects into a readable string representation.
 
-    Args:
-        components: List of ComponentSpec objects to format
-        indent_level: Number of spaces to indent each component line (default: 4)
-        max_line_length: Maximum length for each line before wrapping (default: 115)
-        add_empty_lines: Whether to add empty lines between components (default: True)
-
-    Returns:
-        A formatted string representing all components
-    """
     if not components:
         return ""
 
@@ -597,19 +514,8 @@ def format_components(components, indent_level=4, max_line_length=115, add_empty
 
     return "\n".join(formatted_components)
 
-
 def format_configs(configs, indent_level=4, max_line_length=115, add_empty_lines=True):
-    """Format a list of ConfigSpec objects into a readable string representation.
 
-    Args:
-        configs: List of ConfigSpec objects to format
-        indent_level: Number of spaces to indent each config line (default: 4)
-        max_line_length: Maximum length for each line before wrapping (default: 115)
-        add_empty_lines: Whether to add empty lines between configs (default: True)
-
-    Returns:
-        A formatted string representing all configs
-    """
     if not configs:
         return ""
 
@@ -635,7 +541,6 @@ def format_configs(configs, indent_level=4, max_line_length=115, add_empty_lines
 
     return "\n".join(formatted_configs)
 
-
 def make_doc_string(
     inputs,
     outputs,
@@ -644,22 +549,7 @@ def make_doc_string(
     expected_components=None,
     expected_configs=None,
 ):
-    """
-    Generates a formatted documentation string describing the pipeline block's parameters and structure.
 
-    Args:
-        inputs: List of input parameters
-        intermediate_inputs: List of intermediate input parameters
-        outputs: List of output parameters
-        description (str, *optional*): Description of the block
-        class_name (str, *optional*): Name of the class to include in the documentation
-        expected_components (List[ComponentSpec], *optional*): List of expected components
-        expected_configs (List[ConfigSpec], *optional*): List of expected configurations
-
-    Returns:
-        str: A formatted string containing information about components, configs, call parameters,
-            intermediate inputs/outputs, and final outputs.
-    """
     output = ""
 
     # Add class name if provided

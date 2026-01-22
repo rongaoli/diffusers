@@ -1,17 +1,3 @@
-# Copyright 2025 Zhejiang University Team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import math
 from typing import List, Optional, Tuple, Union
 
@@ -21,20 +7,10 @@ import torch
 from ..configuration_utils import ConfigMixin, register_to_config
 from .scheduling_utils import SchedulerMixin, SchedulerOutput
 
-
 class IPNDMScheduler(SchedulerMixin, ConfigMixin):
-    """
-    A fourth-order Improved Pseudo Linear Multistep scheduler.
+    
+    class IPNDMScheduler(SchedulerMixin, ConfigMixin):
 
-    This model inherits from [`SchedulerMixin`] and [`ConfigMixin`]. Check the superclass documentation for the generic
-    methods the library implements for all schedulers such as loading and saving.
-
-    Args:
-        num_train_timesteps (`int`, defaults to 1000):
-            The number of diffusion steps to train the model.
-        trained_betas (`np.ndarray`, *optional*):
-            Pass an array of betas directly to the constructor to bypass `beta_start` and `beta_end`.
-    """
 
     order = 1
 
@@ -49,7 +25,7 @@ class IPNDMScheduler(SchedulerMixin, ConfigMixin):
         self.init_noise_sigma = 1.0
 
         # For now we only support F-PNDM, i.e. the runge-kutta method
-        # For more information on the algorithm please take a look at the paper: https://huggingface.co/papers/2202.09778
+        # For more information on the algorithm pl...
         # mainly at formula (9), (12), (13) and the Algorithm 2.
         self.pndm_order = 4
 
@@ -60,39 +36,21 @@ class IPNDMScheduler(SchedulerMixin, ConfigMixin):
 
     @property
     def step_index(self):
-        """
-        The index counter for current timestep. It will increase 1 after each scheduler step.
-        """
+
         return self._step_index
 
     @property
     def begin_index(self):
-        """
-        The index for the first timestep. It should be set from pipeline with `set_begin_index` method.
-        """
+
         return self._begin_index
 
-    # Copied from diffusers.schedulers.scheduling_dpmsolver_multistep.DPMSolverMultistepScheduler.set_begin_index
+    # Copied from diffusers.schedulers.scheduling_...
     def set_begin_index(self, begin_index: int = 0):
-        """
-        Sets the begin index for the scheduler. This function should be run from pipeline before the inference.
 
-        Args:
-            begin_index (`int`, defaults to `0`):
-                The begin index for the scheduler.
-        """
         self._begin_index = begin_index
 
     def set_timesteps(self, num_inference_steps: int, device: Union[str, torch.device] = None):
-        """
-        Sets the discrete timesteps used for the diffusion chain (to be run before inference).
 
-        Args:
-            num_inference_steps (`int`):
-                The number of diffusion steps used when generating samples with a pre-trained model.
-            device (`str` or `torch.device`, *optional*):
-                The device to which the timesteps should be moved to. If `None`, the timesteps are not moved.
-        """
         self.num_inference_steps = num_inference_steps
         steps = torch.linspace(1, 0, num_inference_steps + 1)[:-1]
         steps = torch.cat([steps, torch.tensor([0.0])])
@@ -111,24 +69,11 @@ class IPNDMScheduler(SchedulerMixin, ConfigMixin):
         self._step_index = None
         self._begin_index = None
 
-    # Copied from diffusers.schedulers.scheduling_euler_discrete.EulerDiscreteScheduler.index_for_timestep
+    # Copied from diffusers.schedulers.scheduling_...
     def index_for_timestep(
         self, timestep: Union[float, torch.Tensor], schedule_timesteps: Optional[torch.Tensor] = None
     ) -> int:
-        """
-        Find the index of a given timestep in the timestep schedule.
 
-        Args:
-            timestep (`float` or `torch.Tensor`):
-                The timestep value to find in the schedule.
-            schedule_timesteps (`torch.Tensor`, *optional*):
-                The timestep schedule to search in. If `None`, uses `self.timesteps`.
-
-        Returns:
-            `int`:
-                The index of the timestep in the schedule. For the very first step, returns the second index if
-                multiple matches exist to avoid skipping a sigma when starting mid-schedule (e.g., for image-to-image).
-        """
         if schedule_timesteps is None:
             schedule_timesteps = self.timesteps
 
@@ -142,15 +87,9 @@ class IPNDMScheduler(SchedulerMixin, ConfigMixin):
 
         return indices[pos].item()
 
-    # Copied from diffusers.schedulers.scheduling_euler_discrete.EulerDiscreteScheduler._init_step_index
+    # Copied from diffusers.schedulers.scheduling_...
     def _init_step_index(self, timestep: Union[float, torch.Tensor]) -> None:
-        """
-        Initialize the step index for the scheduler based on the given timestep.
 
-        Args:
-            timestep (`float` or `torch.Tensor`):
-                The current timestep to initialize the step index from.
-        """
         if self.begin_index is None:
             if isinstance(timestep, torch.Tensor):
                 timestep = timestep.to(self.timesteps.device)
@@ -165,25 +104,7 @@ class IPNDMScheduler(SchedulerMixin, ConfigMixin):
         sample: torch.Tensor,
         return_dict: bool = True,
     ) -> Union[SchedulerOutput, Tuple]:
-        """
-        Predict the sample from the previous timestep by reversing the SDE. This function propagates the sample with
-        the linear multistep method. It performs one forward pass multiple times to approximate the solution.
 
-        Args:
-            model_output (`torch.Tensor`):
-                The direct output from learned diffusion model.
-            timestep (`int`):
-                The current discrete timestep in the diffusion chain.
-            sample (`torch.Tensor`):
-                A current instance of a sample created by the diffusion process.
-            return_dict (`bool`):
-                Whether or not to return a [`~schedulers.scheduling_utils.SchedulerOutput`] or tuple.
-
-        Returns:
-            [`~schedulers.scheduling_utils.SchedulerOutput`] or `tuple`:
-                If return_dict is `True`, [`~schedulers.scheduling_utils.SchedulerOutput`] is returned, otherwise a
-                tuple is returned where the first element is the sample tensor.
-        """
         if self.num_inference_steps is None:
             raise ValueError(
                 "Number of inference steps is 'None', you need to run 'set_timesteps' after creating the scheduler"
@@ -217,18 +138,7 @@ class IPNDMScheduler(SchedulerMixin, ConfigMixin):
         return SchedulerOutput(prev_sample=prev_sample)
 
     def scale_model_input(self, sample: torch.Tensor, *args, **kwargs) -> torch.Tensor:
-        """
-        Ensures interchangeability with schedulers that need to scale the denoising model input depending on the
-        current timestep.
 
-        Args:
-            sample (`torch.Tensor`):
-                The input sample.
-
-        Returns:
-            `torch.Tensor`:
-                A scaled input sample.
-        """
         return sample
 
     def _get_prev_sample(self, sample, timestep_index, prev_timestep_index, ets):

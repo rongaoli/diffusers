@@ -1,19 +1,3 @@
-# Copyright 2025 TSAIL Team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# DISCLAIMER: This file is strongly influenced by https://github.com/LuChengTHU/dpm-solver
-
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -29,7 +13,6 @@ from .scheduling_utils_flax import (
     FlaxSchedulerOutput,
     add_noise_common,
 )
-
 
 @flax.struct.dataclass
 class DPMSolverMultistepSchedulerState:
@@ -68,81 +51,136 @@ class DPMSolverMultistepSchedulerState:
             timesteps=timesteps,
         )
 
+@dataclass
+class FlaxDPMSolverMultistepSchedulerOutput(FlaxSchedulerOutput):
+    state: DPMSolverMultistepSchedulerState
+
+class FlaxDPMSolverMultistepScheduler(FlaxSchedulerMixin, ConfigMixin):
+    class DPMSolverMultistepSchedulerState:
+    common: CommonSchedulerState
+    alpha_t: jnp.ndarray
+    sigma_t: jnp.ndarray
+    lambda_t: jnp.ndarray
+
+    # setable values
+    init_noise_sigma: jnp.ndarray
+    timesteps: jnp.ndarray
+    num_inference_steps: Optional[int] = None
+
+    # running values
+    model_outputs: Optional[jnp.ndarray] = None
+    lower_order_nums: Optional[jnp.int32] = None
+    prev_timestep: Optional[jnp.int32] = None
+    cur_sample: Optional[jnp.ndarray] = None
+
+    @classmethod
+    def create(
+        cls,
+        common: CommonSchedulerState,
+        alpha_t: jnp.ndarray,
+        sigma_t: jnp.ndarray,
+        lambda_t: jnp.ndarray,
+        init_noise_sigma: jnp.ndarray,
+        timesteps: jnp.ndarray,
+    ):
+        return cls(
+            common=common,
+            alpha_t=alpha_t,
+            sigma_t=sigma_t,
+            lambda_t=lambda_t,
+            init_noise_sigma=init_noise_sigma,
+            timesteps=timesteps,
+        )
 
 @dataclass
 class FlaxDPMSolverMultistepSchedulerOutput(FlaxSchedulerOutput):
     state: DPMSolverMultistepSchedulerState
 
+class FlaxDPMSolverMultistepScheduler(FlaxSchedulerMixin, ConfigMixin):
+    
+    class DPMSolverMultistepSchedulerState:
+    common: CommonSchedulerState
+    alpha_t: jnp.ndarray
+    sigma_t: jnp.ndarray
+    lambda_t: jnp.ndarray
+
+    # setable values
+    init_noise_sigma: jnp.ndarray
+    timesteps: jnp.ndarray
+    num_inference_steps: Optional[int] = None
+
+    # running values
+    model_outputs: Optional[jnp.ndarray] = None
+    lower_order_nums: Optional[jnp.int32] = None
+    prev_timestep: Optional[jnp.int32] = None
+    cur_sample: Optional[jnp.ndarray] = None
+
+    @classmethod
+    def create(
+        cls,
+        common: CommonSchedulerState,
+        alpha_t: jnp.ndarray,
+        sigma_t: jnp.ndarray,
+        lambda_t: jnp.ndarray,
+        init_noise_sigma: jnp.ndarray,
+        timesteps: jnp.ndarray,
+    ):
+        return cls(
+            common=common,
+            alpha_t=alpha_t,
+            sigma_t=sigma_t,
+            lambda_t=lambda_t,
+            init_noise_sigma=init_noise_sigma,
+            timesteps=timesteps,
+        )
+
+@dataclass
+class FlaxDPMSolverMultistepSchedulerOutput(FlaxSchedulerOutput):
+    state: DPMSolverMultistepSchedulerState
 
 class FlaxDPMSolverMultistepScheduler(FlaxSchedulerMixin, ConfigMixin):
-    """
-    DPM-Solver (and the improved version DPM-Solver++) is a fast dedicated high-order solver for diffusion ODEs with
-    the convergence order guarantee. Empirically, sampling by DPM-Solver with only 20 steps can generate high-quality
-    samples, and it can generate quite good samples even in only 10 steps.
+    class DPMSolverMultistepSchedulerState:
+    common: CommonSchedulerState
+    alpha_t: jnp.ndarray
+    sigma_t: jnp.ndarray
+    lambda_t: jnp.ndarray
 
-    For more details, see the original paper: https://huggingface.co/papers/2206.00927 and
-    https://huggingface.co/papers/2211.01095
+    # setable values
+    init_noise_sigma: jnp.ndarray
+    timesteps: jnp.ndarray
+    num_inference_steps: Optional[int] = None
 
-    Currently, we support the multistep DPM-Solver for both noise prediction models and data prediction models. We
-    recommend to use `solver_order=2` for guided sampling, and `solver_order=3` for unconditional sampling.
+    # running values
+    model_outputs: Optional[jnp.ndarray] = None
+    lower_order_nums: Optional[jnp.int32] = None
+    prev_timestep: Optional[jnp.int32] = None
+    cur_sample: Optional[jnp.ndarray] = None
 
-    We also support the "dynamic thresholding" method in Imagen (https://huggingface.co/papers/2205.11487). For
-    pixel-space diffusion models, you can set both `algorithm_type="dpmsolver++"` and `thresholding=True` to use the
-    dynamic thresholding. Note that the thresholding method is unsuitable for latent-space diffusion models (such as
-    stable-diffusion).
+    @classmethod
+    def create(
+        cls,
+        common: CommonSchedulerState,
+        alpha_t: jnp.ndarray,
+        sigma_t: jnp.ndarray,
+        lambda_t: jnp.ndarray,
+        init_noise_sigma: jnp.ndarray,
+        timesteps: jnp.ndarray,
+    ):
+        return cls(
+            common=common,
+            alpha_t=alpha_t,
+            sigma_t=sigma_t,
+            lambda_t=lambda_t,
+            init_noise_sigma=init_noise_sigma,
+            timesteps=timesteps,
+        )
 
-    [`~ConfigMixin`] takes care of storing all config attributes that are passed in the scheduler's `__init__`
-    function, such as `num_train_timesteps`. They can be accessed via `scheduler.config.num_train_timesteps`.
-    [`SchedulerMixin`] provides general loading and saving functionality via the [`SchedulerMixin.save_pretrained`] and
-    [`~SchedulerMixin.from_pretrained`] functions.
+@dataclass
+class FlaxDPMSolverMultistepSchedulerOutput(FlaxSchedulerOutput):
+    state: DPMSolverMultistepSchedulerState
 
-    For more details, see the original paper: https://huggingface.co/papers/2206.00927 and
-    https://huggingface.co/papers/2211.01095
+class FlaxDPMSolverMultistepScheduler(FlaxSchedulerMixin, ConfigMixin):
 
-    Args:
-        num_train_timesteps (`int`): number of diffusion steps used to train the model.
-        beta_start (`float`): the starting `beta` value of inference.
-        beta_end (`float`): the final `beta` value.
-        beta_schedule (`str`):
-            the beta schedule, a mapping from a beta range to a sequence of betas for stepping the model. Choose from
-            `linear`, `scaled_linear`, or `squaredcos_cap_v2`.
-        trained_betas (`np.ndarray`, optional):
-            option to pass an array of betas directly to the constructor to bypass `beta_start`, `beta_end` etc.
-        solver_order (`int`, default `2`):
-            the order of DPM-Solver; can be `1` or `2` or `3`. We recommend to use `solver_order=2` for guided
-            sampling, and `solver_order=3` for unconditional sampling.
-        prediction_type (`str`, default `epsilon`):
-            indicates whether the model predicts the noise (epsilon), or the data / `x0`. One of `epsilon`, `sample`,
-            or `v-prediction`.
-        thresholding (`bool`, default `False`):
-            whether to use the "dynamic thresholding" method (introduced by Imagen,
-            https://huggingface.co/papers/2205.11487). For pixel-space diffusion models, you can set both
-            `algorithm_type=dpmsolver++` and `thresholding=True` to use the dynamic thresholding. Note that the
-            thresholding method is unsuitable for latent-space diffusion models (such as stable-diffusion).
-        dynamic_thresholding_ratio (`float`, default `0.995`):
-            the ratio for the dynamic thresholding method. Default is `0.995`, the same as Imagen
-            (https://huggingface.co/papers/2205.11487).
-        sample_max_value (`float`, default `1.0`):
-            the threshold value for dynamic thresholding. Valid only when `thresholding=True` and
-            `algorithm_type="dpmsolver++`.
-        algorithm_type (`str`, default `dpmsolver++`):
-            the algorithm type for the solver. Either `dpmsolver` or `dpmsolver++`. The `dpmsolver` type implements the
-            algorithms in https://huggingface.co/papers/2206.00927, and the `dpmsolver++` type implements the
-            algorithms in https://huggingface.co/papers/2211.01095. We recommend to use `dpmsolver++` with
-            `solver_order=2` for guided sampling (e.g. stable-diffusion).
-        solver_type (`str`, default `midpoint`):
-            the solver type for the second-order solver. Either `midpoint` or `heun`. The solver type slightly affects
-            the sample quality, especially for small number of steps. We empirically find that `midpoint` solvers are
-            slightly better, so we recommend to use the `midpoint` type.
-        lower_order_final (`bool`, default `True`):
-            whether to use lower-order solvers in the final steps. Only valid for < 15 inference steps. We empirically
-            find this trick can stabilize the sampling of DPM-Solver for steps < 15, especially for steps <= 10.
-        timestep_spacing (`str`, defaults to `"linspace"`):
-            The way the timesteps should be scaled. Refer to Table 2 of the [Common Diffusion Noise Schedules and
-            Sample Steps are Flawed](https://huggingface.co/papers/2305.08891) for more information.
-        dtype (`jnp.dtype`, *optional*, defaults to `jnp.float32`):
-            the `dtype` used for params and computation.
-    """
 
     _compatibles = [e.name for e in FlaxKarrasDiffusionSchedulers]
 
@@ -205,17 +243,7 @@ class FlaxDPMSolverMultistepScheduler(FlaxSchedulerMixin, ConfigMixin):
     def set_timesteps(
         self, state: DPMSolverMultistepSchedulerState, num_inference_steps: int, shape: Tuple
     ) -> DPMSolverMultistepSchedulerState:
-        """
-        Sets the discrete timesteps used for the diffusion chain. Supporting function to be run before inference.
 
-        Args:
-            state (`DPMSolverMultistepSchedulerState`):
-                the `FlaxDPMSolverMultistepScheduler` state data class instance.
-            num_inference_steps (`int`):
-                the number of diffusion steps used when generating samples with a pre-trained model.
-            shape (`Tuple`):
-                the shape of the samples to be generated.
-        """
         last_timestep = self.config.num_train_timesteps
         if self.config.timestep_spacing == "linspace":
             timesteps = (
@@ -263,25 +291,7 @@ class FlaxDPMSolverMultistepScheduler(FlaxSchedulerMixin, ConfigMixin):
         timestep: int,
         sample: jnp.ndarray,
     ) -> jnp.ndarray:
-        """
-        Convert the model output to the corresponding type that the algorithm (DPM-Solver / DPM-Solver++) needs.
 
-        DPM-Solver is designed to discretize an integral of the noise prediction model, and DPM-Solver++ is designed to
-        discretize an integral of the data prediction model. So we need to first convert the model output to the
-        corresponding type to match the algorithm.
-
-        Note that the algorithm type and the model type is decoupled. That is to say, we can use either DPM-Solver or
-        DPM-Solver++ for both noise prediction model and data prediction model.
-
-        Args:
-            model_output (`jnp.ndarray`): direct output from learned diffusion model.
-            timestep (`int`): current discrete timestep in the diffusion chain.
-            sample (`jnp.ndarray`):
-                current instance of sample being created by diffusion process.
-
-        Returns:
-            `jnp.ndarray`: the converted model output.
-        """
         # DPM-Solver++ needs to solve an integral of the data prediction model.
         if self.config.algorithm_type == "dpmsolver++":
             if self.config.prediction_type == "epsilon":
@@ -334,21 +344,7 @@ class FlaxDPMSolverMultistepScheduler(FlaxSchedulerMixin, ConfigMixin):
         prev_timestep: int,
         sample: jnp.ndarray,
     ) -> jnp.ndarray:
-        """
-        One step for the first-order DPM-Solver (equivalent to DDIM).
 
-        See https://huggingface.co/papers/2206.00927 for the detailed derivation.
-
-        Args:
-            model_output (`jnp.ndarray`): direct output from learned diffusion model.
-            timestep (`int`): current discrete timestep in the diffusion chain.
-            prev_timestep (`int`): previous discrete timestep in the diffusion chain.
-            sample (`jnp.ndarray`):
-                current instance of sample being created by diffusion process.
-
-        Returns:
-            `jnp.ndarray`: the sample tensor at the previous timestep.
-        """
         t, s0 = prev_timestep, timestep
         m0 = model_output
         lambda_t, lambda_s = state.lambda_t[t], state.lambda_t[s0]
@@ -369,20 +365,7 @@ class FlaxDPMSolverMultistepScheduler(FlaxSchedulerMixin, ConfigMixin):
         prev_timestep: int,
         sample: jnp.ndarray,
     ) -> jnp.ndarray:
-        """
-        One step for the second-order multistep DPM-Solver.
 
-        Args:
-            model_output_list (`List[jnp.ndarray]`):
-                direct outputs from learned diffusion model at current and latter timesteps.
-            timestep (`int`): current and latter discrete timestep in the diffusion chain.
-            prev_timestep (`int`): previous discrete timestep in the diffusion chain.
-            sample (`jnp.ndarray`):
-                current instance of sample being created by diffusion process.
-
-        Returns:
-            `jnp.ndarray`: the sample tensor at the previous timestep.
-        """
         t, s0, s1 = prev_timestep, timestep_list[-1], timestep_list[-2]
         m0, m1 = model_output_list[-1], model_output_list[-2]
         lambda_t, lambda_s0, lambda_s1 = state.lambda_t[t], state.lambda_t[s0], state.lambda_t[s1]
@@ -429,20 +412,7 @@ class FlaxDPMSolverMultistepScheduler(FlaxSchedulerMixin, ConfigMixin):
         prev_timestep: int,
         sample: jnp.ndarray,
     ) -> jnp.ndarray:
-        """
-        One step for the third-order multistep DPM-Solver.
 
-        Args:
-            model_output_list (`List[jnp.ndarray]`):
-                direct outputs from learned diffusion model at current and latter timesteps.
-            timestep (`int`): current and latter discrete timestep in the diffusion chain.
-            prev_timestep (`int`): previous discrete timestep in the diffusion chain.
-            sample (`jnp.ndarray`):
-                current instance of sample being created by diffusion process.
-
-        Returns:
-            `jnp.ndarray`: the sample tensor at the previous timestep.
-        """
         t, s0, s1, s2 = prev_timestep, timestep_list[-1], timestep_list[-2], timestep_list[-3]
         m0, m1, m2 = model_output_list[-1], model_output_list[-2], model_output_list[-3]
         lambda_t, lambda_s0, lambda_s1, lambda_s2 = (
@@ -485,24 +455,7 @@ class FlaxDPMSolverMultistepScheduler(FlaxSchedulerMixin, ConfigMixin):
         sample: jnp.ndarray,
         return_dict: bool = True,
     ) -> Union[FlaxDPMSolverMultistepSchedulerOutput, Tuple]:
-        """
-        Predict the sample at the previous timestep by DPM-Solver. Core function to propagate the diffusion process
-        from the learned model outputs (most often the predicted noise).
 
-        Args:
-            state (`DPMSolverMultistepSchedulerState`):
-                the `FlaxDPMSolverMultistepScheduler` state data class instance.
-            model_output (`jnp.ndarray`): direct output from learned diffusion model.
-            timestep (`int`): current discrete timestep in the diffusion chain.
-            sample (`jnp.ndarray`):
-                current instance of sample being created by diffusion process.
-            return_dict (`bool`): option for returning tuple rather than FlaxDPMSolverMultistepSchedulerOutput class
-
-        Returns:
-            [`FlaxDPMSolverMultistepSchedulerOutput`] or `tuple`: [`FlaxDPMSolverMultistepSchedulerOutput`] if
-            `return_dict` is True, otherwise a `tuple`. When returning a tuple, the first element is the sample tensor.
-
-        """
         if state.num_inference_steps is None:
             raise ValueError(
                 "Number of inference steps is 'None', you need to run 'set_timesteps' after creating the scheduler"
@@ -617,19 +570,7 @@ class FlaxDPMSolverMultistepScheduler(FlaxSchedulerMixin, ConfigMixin):
     def scale_model_input(
         self, state: DPMSolverMultistepSchedulerState, sample: jnp.ndarray, timestep: Optional[int] = None
     ) -> jnp.ndarray:
-        """
-        Ensures interchangeability with schedulers that need to scale the denoising model input depending on the
-        current timestep.
 
-        Args:
-            state (`DPMSolverMultistepSchedulerState`):
-                the `FlaxDPMSolverMultistepScheduler` state data class instance.
-            sample (`jnp.ndarray`): input sample
-            timestep (`int`, optional): current timestep
-
-        Returns:
-            `jnp.ndarray`: scaled input sample
-        """
         return sample
 
     def add_noise(

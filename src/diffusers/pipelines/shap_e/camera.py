@@ -1,29 +1,12 @@
-# Copyright 2025 Open AI and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from dataclasses import dataclass
 from typing import Tuple
 
 import numpy as np
 import torch
 
-
 @dataclass
 class DifferentiableProjectiveCamera:
-    """
-    Implements a batch, differentiable, standard pinhole camera
-    """
+
 
     origin: torch.Tensor  # [batch_size x 3]
     x: torch.Tensor  # [batch_size x 3]
@@ -47,9 +30,7 @@ class DifferentiableProjectiveCamera:
         return torch.from_numpy(np.array([self.x_fov, self.y_fov], dtype=np.float32))
 
     def get_image_coords(self) -> torch.Tensor:
-        """
-        :return: coords of shape (width * height, 2)
-        """
+
         pixel_indices = torch.arange(self.height * self.width)
         coords = torch.stack(
             [
@@ -103,9 +84,7 @@ class DifferentiableProjectiveCamera:
         return rays.view(batch_size, *shape, 2, 3)
 
     def resize_image(self, width: int, height: int) -> "DifferentiableProjectiveCamera":
-        """
-        Creates a new camera for the resized view assuming the aspect ratio does not change.
-        """
+
         assert width * self.height == height * self.width, "The aspect ratio should not change."
         return DifferentiableProjectiveCamera(
             origin=self.origin,
@@ -117,7 +96,6 @@ class DifferentiableProjectiveCamera:
             x_fov=self.x_fov,
             y_fov=self.y_fov,
         )
-
 
 def create_pan_cameras(size: int) -> DifferentiableProjectiveCamera:
     origins = []

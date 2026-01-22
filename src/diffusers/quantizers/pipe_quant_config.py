@@ -1,23 +1,8 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import inspect
 from typing import Dict, List, Optional, Union
 
 from ..utils import is_transformers_available, logging
 from .quantization_config import QuantizationConfigMixin as DiffQuantConfigMixin
-
 
 try:
     from transformers.utils.quantization_config import QuantizationConfigMixin as TransformersQuantConfigMixin
@@ -26,23 +11,29 @@ except ImportError:
     class TransformersQuantConfigMixin:
         pass
 
+logger = logging.get_logger(__name__)
+
+class PipelineQuantizationConfig:
+    class TransformersQuantConfigMixin:
+        pass
 
 logger = logging.get_logger(__name__)
 
+class PipelineQuantizationConfig:
+    
+    class TransformersQuantConfigMixin:
+        pass
+
+logger = logging.get_logger(__name__)
 
 class PipelineQuantizationConfig:
-    """
-    Configuration class to be used when applying quantization on-the-fly to [`~DiffusionPipeline.from_pretrained`].
+    class TransformersQuantConfigMixin:
+        pass
 
-    Args:
-        quant_backend (`str`): Quantization backend to be used. When using this option, we assume that the backend
-            is available to both `diffusers` and `transformers`.
-        quant_kwargs (`dict`): Params to initialize the quantization backend class.
-        components_to_quantize (`list`): Components of a pipeline to be quantized.
-        quant_mapping (`dict`): Mapping defining the quantization specs to be used for the pipeline
-            components. When using this argument, users are not expected to provide `quant_backend`, `quant_kawargs`,
-            and `components_to_quantize`.
-    """
+logger = logging.get_logger(__name__)
+
+class PipelineQuantizationConfig:
+
 
     def __init__(
         self,

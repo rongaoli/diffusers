@@ -1,18 +1,3 @@
-# Copyright 2025 AuraFlow Authors, The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-
 from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
@@ -34,16 +19,13 @@ from ..modeling_outputs import Transformer2DModelOutput
 from ..modeling_utils import ModelMixin
 from ..normalization import AdaLayerNormZero, FP32LayerNorm
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 # Taken from the original aura flow inference code.
 def find_multiple(n: int, k: int) -> int:
     if n % k == 0:
         return n
     return n + k - (n % k)
-
 
 # Aura Flow patch embed doesn't use convs for projections.
 # Additionally, it uses learned positional embeddings.
@@ -107,6 +89,100 @@ class AuraFlowPatchEmbed(nn.Module):
         pe_index = self.pe_selection_index_based_on_dim(height, width)
         return latent + self.pos_embed[:, pe_index]
 
+# Taken from the original Aura flow inference code.
+# Our feedforward only has GELU but Aura uses SiLU.
+class AuraFlowFeedForward(nn.Module):
+    def __init__(self, dim, hidden_dim=None) -> None:
+        super().__init__()
+        if hidden_dim is None:
+            hidden_dim = 4 * dim
+
+        final_hidden_dim = int(2 * hidden_dim / 3)
+        final_hidden_dim = find_multiple(final_hidden_dim, 256)
+
+        self.linear_1 = nn.Linear(dim, final_hidden_dim, bias=False)
+        self.linear_2 = nn.Linear(dim, final_hidden_dim, bias=False)
+        self.out_projection = nn.Linear(final_hidden_dim, dim, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = F.silu(self.linear_1(x)) * self.linear_2(x)
+        x = self.out_projection(x)
+        return x
+
+class AuraFlowPreFinalBlock(nn.Module):
+    def __init__(self, embedding_dim: int, conditioning_embedding_dim: int):
+        super().__init__()
+
+        self.silu = nn.SiLU()
+        self.linear = nn.Linear(conditioning_embedding_dim, embedding_dim * 2, bias=False)
+
+    def forward(self, x: torch.Tensor, conditioning_embedding: torch.Tensor) -> torch.Tensor:
+        emb = self.linear(self.silu(conditioning_embedding).to(x.dtype))
+        scale, shift = torch.chunk(emb, 2, dim=1)
+        x = x * (1 + scale)[:, None, :] + shift[:, None, :]
+        return x
+
+@maybe_allow_in_graph
+class AuraFlowSingleTransformerBlock(nn.Module):
+    class AuraFlowPatchEmbed(nn.Module):
+    def __init__(
+        self,
+        height=224,
+        width=224,
+        patch_size=16,
+        in_channels=3,
+        embed_dim=768,
+        pos_embed_max_size=None,
+    ):
+        super().__init__()
+
+        self.num_patches = (height // patch_size) * (width // patch_size)
+        self.pos_embed_max_size = pos_embed_max_size
+
+        self.proj = nn.Linear(patch_size * patch_size * in_channels, embed_dim)
+        self.pos_embed = nn.Parameter(torch.randn(1, pos_embed_max_size, embed_dim) * 0.1)
+
+        self.patch_size = patch_size
+        self.height, self.width = height // patch_size, width // patch_size
+        self.base_size = height // patch_size
+
+    def pe_selection_index_based_on_dim(self, h, w):
+        # select subset of positional embedding based on H, W, where H, W is size of latent
+        # PE will be viewed as 2d-grid, and H/p x W/p of the PE will be selected
+        # because original input are in flattened format, we have to flatten this 2d grid as well.
+        h_p, w_p = h // self.patch_size, w // self.patch_size
+        h_max, w_max = int(self.pos_embed_max_size**0.5), int(self.pos_embed_max_size**0.5)
+
+        # Calculate the top-left corner indices for the centered patch grid
+        starth = h_max // 2 - h_p // 2
+        startw = w_max // 2 - w_p // 2
+
+        # Generate the row and column indices for the desired patch grid
+        rows = torch.arange(starth, starth + h_p, device=self.pos_embed.device)
+        cols = torch.arange(startw, startw + w_p, device=self.pos_embed.device)
+
+        # Create a 2D grid of indices
+        row_indices, col_indices = torch.meshgrid(rows, cols, indexing="ij")
+
+        # Convert the 2D grid indices to flattened 1D indices
+        selected_indices = (row_indices * w_max + col_indices).flatten()
+
+        return selected_indices
+
+    def forward(self, latent) -> torch.Tensor:
+        batch_size, num_channels, height, width = latent.size()
+        latent = latent.view(
+            batch_size,
+            num_channels,
+            height // self.patch_size,
+            self.patch_size,
+            width // self.patch_size,
+            self.patch_size,
+        )
+        latent = latent.permute(0, 2, 4, 1, 3, 5).flatten(-3).flatten(1, 2)
+        latent = self.proj(latent)
+        pe_index = self.pe_selection_index_based_on_dim(height, width)
+        return latent + self.pos_embed[:, pe_index]
 
 # Taken from the original Aura flow inference code.
 # Our feedforward only has GELU but Aura uses SiLU.
@@ -128,7 +204,6 @@ class AuraFlowFeedForward(nn.Module):
         x = self.out_projection(x)
         return x
 
-
 class AuraFlowPreFinalBlock(nn.Module):
     def __init__(self, embedding_dim: int, conditioning_embedding_dim: int):
         super().__init__()
@@ -142,10 +217,9 @@ class AuraFlowPreFinalBlock(nn.Module):
         x = x * (1 + scale)[:, None, :] + shift[:, None, :]
         return x
 
-
 @maybe_allow_in_graph
 class AuraFlowSingleTransformerBlock(nn.Module):
-    """Similar to `AuraFlowJointTransformerBlock` with a single DiT instead of an MMDiT."""
+
 
     def __init__(self, dim, num_attention_heads, attention_head_dim):
         super().__init__()
@@ -192,22 +266,9 @@ class AuraFlowSingleTransformerBlock(nn.Module):
 
         return hidden_states
 
-
 @maybe_allow_in_graph
 class AuraFlowJointTransformerBlock(nn.Module):
-    r"""
-    Transformer block for Aura Flow. Similar to SD3 MMDiT. Differences (non-exhaustive):
 
-        * QK Norm in the attention blocks
-        * No bias in the attention blocks
-        * Most LayerNorms are in FP32
-
-    Parameters:
-        dim (`int`): The number of channels in the input and output.
-        num_attention_heads (`int`): The number of heads to use for multi-head attention.
-        attention_head_dim (`int`): The number of channels in each head.
-        is_last (`bool`): Boolean to determine if this is the last block in the model.
-    """
 
     def __init__(self, dim, num_attention_heads, attention_head_dim):
         super().__init__()
@@ -274,27 +335,8 @@ class AuraFlowJointTransformerBlock(nn.Module):
 
         return encoder_hidden_states, hidden_states
 
-
 class AuraFlowTransformer2DModel(ModelMixin, AttentionMixin, ConfigMixin, PeftAdapterMixin, FromOriginalModelMixin):
-    r"""
-    A 2D Transformer model as introduced in AuraFlow (https://blog.fal.ai/auraflow/).
 
-    Parameters:
-        sample_size (`int`): The width of the latent images. This is fixed during training since
-            it is used to learn a number of position embeddings.
-        patch_size (`int`): Patch size to turn the input data into small patches.
-        in_channels (`int`, *optional*, defaults to 4): The number of channels in the input.
-        num_mmdit_layers (`int`, *optional*, defaults to 4): The number of layers of MMDiT Transformer blocks to use.
-        num_single_dit_layers (`int`, *optional*, defaults to 32):
-            The number of layers of Transformer blocks to use. These blocks use concatenated image and text
-            representations.
-        attention_head_dim (`int`, *optional*, defaults to 256): The number of channels in each head.
-        num_attention_heads (`int`, *optional*, defaults to 12): The number of heads to use for multi-head attention.
-        joint_attention_dim (`int`, *optional*): The number of `encoder_hidden_states` dimensions to use.
-        caption_projection_dim (`int`): Number of dimensions to use when projecting the `encoder_hidden_states`.
-        out_channels (`int`, defaults to 4): Number of output channels.
-        pos_embed_max_size (`int`, defaults to 1024): Maximum positions to embed from the image latents.
-    """
 
     _no_split_modules = ["AuraFlowJointTransformerBlock", "AuraFlowSingleTransformerBlock", "AuraFlowPatchEmbed"]
     _skip_layerwise_casting_patterns = ["pos_embed", "norm"]
@@ -365,14 +407,9 @@ class AuraFlowTransformer2DModel(ModelMixin, AttentionMixin, ConfigMixin, PeftAd
 
         self.gradient_checkpointing = False
 
-    # Copied from diffusers.models.unets.unet_2d_condition.UNet2DConditionModel.fuse_qkv_projections with FusedAttnProcessor2_0->FusedAuraFlowAttnProcessor2_0
+    # Copied from diffusers.models.unets.unet_2d_c...
     def fuse_qkv_projections(self):
-        """
-        Enables fused QKV projections. For self-attention modules, all projection matrices (i.e., query, key, value)
-        are fused. For cross-attention modules, key and value projection matrices are fused.
 
-        > [!WARNING] > This API is 🧪 experimental.
-        """
         self.original_attn_processors = None
 
         for _, attn_processor in self.attn_processors.items():
@@ -387,13 +424,9 @@ class AuraFlowTransformer2DModel(ModelMixin, AttentionMixin, ConfigMixin, PeftAd
 
         self.set_attn_processor(FusedAuraFlowAttnProcessor2_0())
 
-    # Copied from diffusers.models.unets.unet_2d_condition.UNet2DConditionModel.unfuse_qkv_projections
+    # Copied from diffusers.models.unets.unet_2d_c...
     def unfuse_qkv_projections(self):
-        """Disables the fused QKV projection if enabled.
 
-        > [!WARNING] > This API is 🧪 experimental.
-
-        """
         if self.original_attn_processors is not None:
             self.set_attn_processor(self.original_attn_processors)
 
@@ -449,7 +482,7 @@ class AuraFlowTransformer2DModel(ModelMixin, AttentionMixin, ConfigMixin, PeftAd
                     attention_kwargs=attention_kwargs,
                 )
 
-        # Single DiT blocks that combine the `hidden_states` (image) and `encoder_hidden_states` (text)
+        # Single DiT blocks that combine the `hidd...
         if len(self.single_transformer_blocks) > 0:
             encoder_seq_len = encoder_hidden_states.size(1)
             combined_hidden_states = torch.cat([encoder_hidden_states, hidden_states], dim=1)

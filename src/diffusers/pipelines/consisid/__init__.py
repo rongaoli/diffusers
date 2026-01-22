@@ -10,10 +10,8 @@ from ...utils import (
     is_transformers_available,
 )
 
-
 _dummy_objects = {}
 _import_structure = {}
-
 
 try:
     if not (is_transformers_available() and is_torch_available() and is_opencv_available()):

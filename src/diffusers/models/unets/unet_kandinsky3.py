@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from dataclasses import dataclass
 from typing import Tuple, Union
 
@@ -25,14 +11,11 @@ from ..attention_processor import Attention, AttnProcessor
 from ..embeddings import TimestepEmbedding, Timesteps
 from ..modeling_utils import ModelMixin
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 @dataclass
 class Kandinsky3UNetOutput(BaseOutput):
     sample: torch.Tensor = None
-
 
 class Kandinsky3EncoderProj(nn.Module):
     def __init__(self, encoder_hid_dim, cross_attention_dim):
@@ -44,7 +27,6 @@ class Kandinsky3EncoderProj(nn.Module):
         x = self.projection_linear(x)
         x = self.projection_norm(x)
         return x
-
 
 class Kandinsky3UNet(ModelMixin, AttentionMixin, ConfigMixin):
     @register_to_config
@@ -142,9 +124,117 @@ class Kandinsky3UNet(ModelMixin, AttentionMixin, ConfigMixin):
         self.conv_out = nn.Conv2d(init_channels, out_channels, kernel_size=3, padding=1)
 
     def set_default_attn_processor(self):
-        """
-        Disables custom attention processors and sets the default attention implementation.
-        """
+        class Kandinsky3UNetOutput(BaseOutput):
+    sample: torch.Tensor = None
+
+class Kandinsky3EncoderProj(nn.Module):
+    def __init__(self, encoder_hid_dim, cross_attention_dim):
+        super().__init__()
+        self.projection_linear = nn.Linear(encoder_hid_dim, cross_attention_dim, bias=False)
+        self.projection_norm = nn.LayerNorm(cross_attention_dim)
+
+    def forward(self, x):
+        x = self.projection_linear(x)
+        x = self.projection_norm(x)
+        return x
+
+class Kandinsky3UNet(ModelMixin, AttentionMixin, ConfigMixin):
+    @register_to_config
+    def __init__(
+        self,
+        in_channels: int = 4,
+        time_embedding_dim: int = 1536,
+        groups: int = 32,
+        attention_head_dim: int = 64,
+        layers_per_block: Union[int, Tuple[int]] = 3,
+        block_out_channels: Tuple[int, ...] = (384, 768, 1536, 3072),
+        cross_attention_dim: Union[int, Tuple[int]] = 4096,
+        encoder_hid_dim: int = 4096,
+    ):
+        super().__init__()
+
+        # TODO(Yiyi): Give better name and put into config for the following 4 parameters
+        expansion_ratio = 4
+        compression_ratio = 2
+        add_cross_attention = (False, True, True, True)
+        add_self_attention = (False, True, True, True)
+
+        out_channels = in_channels
+        init_channels = block_out_channels[0] // 2
+        self.time_proj = Timesteps(init_channels, flip_sin_to_cos=False, downscale_freq_shift=1)
+
+        self.time_embedding = TimestepEmbedding(
+            init_channels,
+            time_embedding_dim,
+        )
+
+        self.add_time_condition = Kandinsky3AttentionPooling(
+            time_embedding_dim, cross_attention_dim, attention_head_dim
+        )
+
+        self.conv_in = nn.Conv2d(in_channels, init_channels, kernel_size=3, padding=1)
+
+        self.encoder_hid_proj = Kandinsky3EncoderProj(encoder_hid_dim, cross_attention_dim)
+
+        hidden_dims = [init_channels] + list(block_out_channels)
+        in_out_dims = list(zip(hidden_dims[:-1], hidden_dims[1:]))
+        text_dims = [cross_attention_dim if is_exist else None for is_exist in add_cross_attention]
+        num_blocks = len(block_out_channels) * [layers_per_block]
+        layer_params = [num_blocks, text_dims, add_self_attention]
+        rev_layer_params = map(reversed, layer_params)
+
+        cat_dims = []
+        self.num_levels = len(in_out_dims)
+        self.down_blocks = nn.ModuleList([])
+        for level, ((in_dim, out_dim), res_block_num, text_dim, self_attention) in enumerate(
+            zip(in_out_dims, *layer_params)
+        ):
+            down_sample = level != (self.num_levels - 1)
+            cat_dims.append(out_dim if level != (self.num_levels - 1) else 0)
+            self.down_blocks.append(
+                Kandinsky3DownSampleBlock(
+                    in_dim,
+                    out_dim,
+                    time_embedding_dim,
+                    text_dim,
+                    res_block_num,
+                    groups,
+                    attention_head_dim,
+                    expansion_ratio,
+                    compression_ratio,
+                    down_sample,
+                    self_attention,
+                )
+            )
+
+        self.up_blocks = nn.ModuleList([])
+        for level, ((out_dim, in_dim), res_block_num, text_dim, self_attention) in enumerate(
+            zip(reversed(in_out_dims), *rev_layer_params)
+        ):
+            up_sample = level != 0
+            self.up_blocks.append(
+                Kandinsky3UpSampleBlock(
+                    in_dim,
+                    cat_dims.pop(),
+                    out_dim,
+                    time_embedding_dim,
+                    text_dim,
+                    res_block_num,
+                    groups,
+                    attention_head_dim,
+                    expansion_ratio,
+                    compression_ratio,
+                    up_sample,
+                    self_attention,
+                )
+            )
+
+        self.conv_norm_out = nn.GroupNorm(groups, init_channels)
+        self.conv_act_out = nn.SiLU()
+        self.conv_out = nn.Conv2d(init_channels, out_channels, kernel_size=3, padding=1)
+
+    def set_default_attn_processor(self):
+
         self.set_attn_processor(AttnProcessor())
 
     def forward(self, sample, timestep, encoder_hidden_states=None, encoder_attention_mask=None, return_dict=True):
@@ -187,7 +277,6 @@ class Kandinsky3UNet(ModelMixin, AttentionMixin, ConfigMixin):
         if not return_dict:
             return (sample,)
         return Kandinsky3UNetOutput(sample=sample)
-
 
 class Kandinsky3UpSampleBlock(nn.Module):
     def __init__(
@@ -259,7 +348,6 @@ class Kandinsky3UpSampleBlock(nn.Module):
             x = self.attentions[0](x, time_embed, image_mask=image_mask)
         return x
 
-
 class Kandinsky3DownSampleBlock(nn.Module):
     def __init__(
         self,
@@ -327,7 +415,6 @@ class Kandinsky3DownSampleBlock(nn.Module):
             x = resnet_out(x, time_embed)
         return x
 
-
 class Kandinsky3ConditionalGroupNorm(nn.Module):
     def __init__(self, groups, normalized_shape, context_dim):
         super().__init__()
@@ -345,7 +432,6 @@ class Kandinsky3ConditionalGroupNorm(nn.Module):
         scale, shift = context.chunk(2, dim=1)
         x = self.norm(x) * (scale + 1.0) + shift
         return x
-
 
 class Kandinsky3Block(nn.Module):
     def __init__(self, in_channels, out_channels, time_embed_dim, kernel_size=3, norm_groups=32, up_resolution=None):
@@ -372,7 +458,6 @@ class Kandinsky3Block(nn.Module):
         x = self.projection(x)
         x = self.down_sample(x)
         return x
-
 
 class Kandinsky3ResNetBlock(nn.Module):
     def __init__(
@@ -417,7 +502,6 @@ class Kandinsky3ResNetBlock(nn.Module):
         x = x + out
         return x
 
-
 class Kandinsky3AttentionPooling(nn.Module):
     def __init__(self, num_channels, context_dim, head_dim=64):
         super().__init__()
@@ -433,7 +517,6 @@ class Kandinsky3AttentionPooling(nn.Module):
         context_mask = context_mask.to(dtype=context.dtype)
         context = self.attention(context.mean(dim=1, keepdim=True), context, context_mask)
         return x + context.squeeze(1)
-
 
 class Kandinsky3AttentionBlock(nn.Module):
     def __init__(self, num_channels, time_embed_dim, context_dim=None, norm_groups=32, head_dim=64, expansion_ratio=4):

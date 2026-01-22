@@ -1,17 +1,3 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -26,15 +12,13 @@ from ...utils import logging
 from ..modular_pipeline import ModularPipeline
 from ..modular_pipeline_utils import InputParam, OutputParam
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-
 
 # YiYi TODO: move to a different file? stable_diffusion_xl_module should have its own folder?
 # YiYi Notes: model specific components:
 ## (1) it should inherit from ModularPipeline
 ## (2) acts like a container that holds components and configs
-## (3) define default config (related to components), e.g. default_sample_size, vae_scale_factor, num_channels_unet, num_channels_latents
+## (3) define default config (related to component...
 ## (4) inherit from model-specic loader class (e.g. StableDiffusionXLLoraLoaderMixin)
 ## (5) how to use together with Components_manager?
 class StableDiffusionXLModularPipeline(
@@ -44,11 +28,7 @@ class StableDiffusionXLModularPipeline(
     StableDiffusionXLLoraLoaderMixin,
     ModularIPAdapterMixin,
 ):
-    """
-    A ModularPipeline for Stable Diffusion XL.
 
-    > [!WARNING] > This is an experimental feature and is likely to change in the future.
-    """
 
     default_blocks_name = "StableDiffusionXLAutoBlocks"
 
@@ -88,7 +68,6 @@ class StableDiffusionXLModularPipeline(
         if hasattr(self, "vae") and self.vae is not None:
             num_channels_latents = self.vae.config.latent_channels
         return num_channels_latents
-
 
 # YiYi/Sayak TODO: not used yet, maintain a list of schema that can be used across all pipeline blocks
 # auto_docstring
@@ -133,7 +112,7 @@ SDXL_INPUTS_SCHEMA = {
     ),
     "generator": InputParam(
         "generator",
-        type_hint=Optional[Union[torch.Generator, List[torch.Generator]]],
+        type_hint=Optional[torch.Generator],
         description="Generator(s) for deterministic generation",
     ),
     "height": InputParam("height", type_hint=Optional[int], description="Height in pixels of the generated image"),
@@ -301,7 +280,6 @@ SDXL_INPUTS_SCHEMA = {
     ),
 }
 
-
 SDXL_INTERMEDIATE_OUTPUTS_SCHEMA = {
     "prompt_embeds": OutputParam(
         "prompt_embeds", type_hint=torch.Tensor, description="Text embeddings used to guide image generation"
@@ -351,7 +329,6 @@ SDXL_INTERMEDIATE_OUTPUTS_SCHEMA = {
         description="Generated images",
     ),
 }
-
 
 SDXL_OUTPUTS_SCHEMA = {
     "images": OutputParam(

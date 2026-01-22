@@ -1,17 +1,3 @@
-# Copyright 2025 Qwen-Image Team and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from typing import List
 
 import PIL.Image
@@ -44,17 +30,14 @@ from .inputs import (
     QwenImageTextInputsStep,
 )
 
-
 logger = logging.get_logger(__name__)
-
 
 # ====================
 # 1. TEXT ENCODER
 # ====================
 
-
 class QwenImageEditPlusVLEncoderStep(SequentialPipelineBlocks):
-    """VL encoder that takes both image and text prompts. Uses 384x384 target area."""
+
 
     model_name = "qwenimage-edit-plus"
     block_classes = [
@@ -67,14 +50,12 @@ class QwenImageEditPlusVLEncoderStep(SequentialPipelineBlocks):
     def description(self) -> str:
         return "QwenImage-Edit Plus VL encoder step that encodes the image and text prompts together."
 
-
 # ====================
 # 2. VAE ENCODER
 # ====================
 
-
 class QwenImageEditPlusVaeEncoderStep(SequentialPipelineBlocks):
-    """VAE encoder that handles multiple images with different sizes. Uses 1024x1024 target area."""
+
 
     model_name = "qwenimage-edit-plus"
     block_classes = [
@@ -91,11 +72,9 @@ class QwenImageEditPlusVaeEncoderStep(SequentialPipelineBlocks):
             "Each image is resized independently based on its own aspect ratio to 1024x1024 target area."
         )
 
-
 # ====================
-# 3. DENOISE (input -> prepare_latents -> set_timesteps -> prepare_rope_inputs -> denoise -> after_denoise)
+# 3. DENOISE (input -> prepare_latents -> set_time...
 # ====================
-
 
 # assemble input steps
 class QwenImageEditPlusInputStep(SequentialPipelineBlocks):
@@ -115,7 +94,6 @@ class QwenImageEditPlusInputStep(SequentialPipelineBlocks):
             " - Outputs lists of image_height/image_width for RoPE calculation.\n"
             " - Defaults height/width from last image in the list."
         )
-
 
 # Qwen Image Edit Plus (image2image) core denoise step
 class QwenImageEditPlusCoreDenoiseStep(SequentialPipelineBlocks):
@@ -149,11 +127,9 @@ class QwenImageEditPlusCoreDenoiseStep(SequentialPipelineBlocks):
             ),
         ]
 
-
 # ====================
 # 4. DECODE
 # ====================
-
 
 class QwenImageEditPlusDecodeStep(SequentialPipelineBlocks):
     model_name = "qwenimage-edit-plus"
@@ -163,7 +139,6 @@ class QwenImageEditPlusDecodeStep(SequentialPipelineBlocks):
     @property
     def description(self):
         return "Decode step that decodes the latents to images and postprocesses the generated image."
-
 
 # ====================
 # 5. AUTO BLOCKS & PRESETS
@@ -177,7 +152,6 @@ EDIT_PLUS_AUTO_BLOCKS = InsertableDict(
         ("decode", QwenImageEditPlusDecodeStep()),
     ]
 )
-
 
 class QwenImageEditPlusAutoBlocks(SequentialPipelineBlocks):
     model_name = "qwenimage-edit-plus"
